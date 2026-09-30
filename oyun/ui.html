@@ -320,6 +320,19 @@ input.qty{width:74px;background:var(--bg);border:1px solid var(--line);border-ra
 .bigbtn{justify-self:center;border:0;border-radius:999px;background:var(--gold);color:#23190a;font-weight:800;font-size:19px;padding:10px 34px;cursor:pointer;box-shadow:0 4px 0 #9c7426}
 .bigbtn:active{transform:translateY(2px);box-shadow:0 2px 0 #9c7426}
 .star-row{display:flex;justify-content:center;color:var(--gold)}
+.seg.two{grid-template-columns:1fr 1fr}
+.mpbox{display:grid;gap:10px}
+.mprow{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center}
+.mprow input{min-width:0;text-transform:uppercase;letter-spacing:.2em;font-weight:800;text-align:center}
+.wlist{display:grid;gap:6px}
+.wlist button{display:grid;grid-template-columns:1fr auto;align-items:center;gap:8px;text-align:left;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:8px 10px;color:var(--text);cursor:pointer}
+.wlist button span.code{font-weight:800;letter-spacing:.15em;color:var(--gold)}
+.mperr{color:var(--red);font-weight:700;font-size:14px;text-align:center}
+.bigcode{font-family:var(--display);font-size:34px;font-weight:800;letter-spacing:.25em;color:var(--gold);text-align:center;user-select:all;-webkit-user-select:all}
+.netdot{position:absolute;top:3px;right:3px;width:8px;height:8px;border-radius:50%;background:var(--green)}
+.netdot.sync{background:var(--gold)} .netdot.off{background:var(--red)}
+.icon-btn{position:relative}
+.loadbox{display:grid;place-items:center;gap:10px;text-align:center;padding-top:30vh;color:var(--muted);font-weight:700}
 .star-row svg{width:64px;height:64px}
 
 /* toasts */
@@ -334,7 +347,7 @@ input.qty{width:74px;background:var(--bg);border:1px solid var(--line);border-ra
     <div class="bar1">
       <button class="vbtn" id="vilBtn" aria-label="Köy değiştir"><span class="vname" id="vName">.</span><span class="vco num" id="vCo"></span><span class="car">▼</span></button>
       <div class="ptsb num"><b id="vPts">0</b> puan</div>
-      <button class="icon-btn" id="setBtn" aria-label="Ayarlar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg></button>
+      <button class="icon-btn" id="setBtn" aria-label="Ayarlar"><span class="netdot" id="netDot" hidden></span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg></button>
     </div>
     <div class="resbar" id="resbar"></div>
     <button class="alert" id="alert" hidden></button>
@@ -346,6 +359,9 @@ input.qty{width:74px;background:var(--bg);border:1px solid var(--line);border-ra
 
 <script>
 /*CORE*/
+</script>
+<script>
+/*NET*/
 </script>
 <script>
 (() => {
@@ -414,7 +430,8 @@ let S = null, tab = 'koy', sig = '', lastSave = 0, catching = false, awayLog = [
 const drafts = {};
 const map = { ox: null, oy: null, T: 46, sel: null, drag: null };
 
-C.onNotify((kind, msg) => { if (catching) { awayLog.push([kind, msg]); return; } if (kind !== 'build' || S.speed < 50) toast(msg, kind); });
+let quiet = false;
+C.onNotify((kind, msg) => { if (quiet) return; if (catching) { awayLog.push([kind, msg]); return; } if (kind !== 'build' || S.speed < 50) toast(msg, kind); });
 
 function toast(msg, kind = 'info') {
   const box = $('toasts'); if (box.children.length > 2) box.firstChild.remove();
@@ -424,10 +441,121 @@ function toast(msg, kind = 'info') {
 const cur = () => S.vil[S.cur];
 const myVillages = () => S.vil.filter(v => v.owner === 'P');
 
-function save() { if (!S) return; S.lastT = now(); store.set(JSON.stringify(S)); lastSave = now(); }
+const LS = { get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }, del(k) { try { localStorage.removeItem(k); } catch (e) {} } };
+function save() {
+  if (!S) return; S.lastT = now(); lastSave = now();
+  if (MPX) { LS.set('ub-mp-cache-' + MPX.id, { S, ver: MPX.ver }); return; }
+  store.set(JSON.stringify(S));
+}
+
+// ---------- çok oyunculu ----------
+// MPX: açık dünya { id, code, hid, name, ver, pending: [hamle fonksiyonları], pushing, polling }
+let MPX = null;
+// Bir hamleyi uygular; çok oyunculuda sunucuya gönderilmek üzere sıraya koyar.
+// Başkası araya girerse hamle yeni dünya durumuna yeniden uygulanır, bu yüzden fn her seferinde cur()/C.vil(id) ile köyü yeniden bulmalı.
+function act(fn) {
+  const r = fn();
+  if (MPX && (r === undefined || r === 'ok')) { MPX.pending.push(fn); setTimeout(pushNow, 150); }
+  return r;
+}
+function setNet(st) { const d = $('netDot'); if (!d) return; d.hidden = !MPX; d.className = 'netdot' + (st && st !== 'ok' ? ' ' + st : ''); if (MPX) MPX.net = st; }
+const repKey = r => r.t + ':' + r.from + ':' + r.to + ':' + r.type;
+function adopt(W, ver) {
+  const had = !!S, keepCur = had ? S.cur : null;
+  const seen = (had && S.chatSeen) || LS.get('ub-seen-' + MPX.id) || { genel: 0, klan: 0 };
+  const known = new Set(had ? S.reports.map(repKey) : []), readK = new Set(had ? S.reports.filter(r => r.read).map(repKey) : []);
+  const L = Net.localize(W, MPX.hid); if (!L) throw new Error('Bu dünyada beyliğin bulunamadı');
+  if (keepCur != null && L.vil[keepCur] && L.vil[keepCur].owner === 'P') L.cur = keepCur;
+  L.chatSeen = seen;
+  C.S = S = L; MPX.ver = ver;
+  quiet = true; try { C.processUntil(now()); } finally { quiet = false; }
+  for (const r of S.reports) {
+    if (readK.has(repKey(r))) r.read = true;
+    else if (had && !known.has(repKey(r)) && !r.read) {
+      if (r.defOwner === 'P' && r.attOwner !== 'P') toast(r.defName + (r.win ? ' yağmalandı' : ' saldırıyı püskürttü'), r.win ? 'bad' : 'good');
+      else if (r.attOwner === 'P') toast((r.type === 'spy' ? 'Keşif: ' : 'Saldırı: ') + r.defName + (r.win ? ' — başarılı' : ' — başarısız'), r.win ? 'good' : 'bad');
+    }
+  }
+  if (had && !$('start')) { sig = ''; render(); }
+}
+async function pushNow() {
+  if (!MPX || MPX.pushing) return;
+  const M = MPX; M.pushing = true; setNet('sync');
+  try {
+    for (let tries = 0; tries < 8; tries++) {
+      const n = M.pending.length;
+      C.processUntil(now());
+      const v = await Net.save(M.id, Net.delocalize(S), M.ver);
+      if (MPX !== M) return;
+      if (v != null) { M.ver = v; M.pending.splice(0, n); M.lastPush = now(); M.pushedT = S.lastT; save(); if (!M.pending.length) break; continue; }
+      // başka bir oyuncu önce kaydetti: yeni durumu al, bekleyen hamleleri üstüne yeniden uygula
+      const R = await Net.load(M.id); if (MPX !== M) return;
+      const fns = M.pending.slice();
+      adopt(R.W, R.version);
+      for (const fn of fns) { try { fn(); } catch (e) {} }
+      save();
+    }
+    setNet('ok'); M.fails = 0;
+  } catch (e) { M.fails = (M.fails || 0) + 1; M.retryAt = now() + Math.min(30000, 3000 * M.fails); setNet('off'); }
+  finally { M.pushing = false; }
+}
+async function poll() {
+  const M = MPX;
+  if (!M || M.pushing || M.polling || document.hidden || !S) return;
+  if (M.pending.length) { if (now() >= (M.retryAt || 0)) pushNow(); return; }
+  M.polling = true;
+  try {
+    const v = await Net.version(M.id);
+    if (MPX === M && v != null && v > M.ver) {
+      const R = await Net.load(M.id);
+      if (MPX === M && !M.pending.length && !M.pushing) { adopt(R.W, R.version); save(); }
+    } else if (MPX === M && now() - (M.lastPush || 0) > 180000 && S.lastT - (M.pushedT || 0) > 60000) { M.polling = false; pushNow(); }
+    if (MPX === M && M.net !== 'sync') setNet('ok');
+  } catch (e) { setNet('off'); }
+  finally { M.polling = false; }
+}
+setInterval(poll, 4000);
+function loading(msg) {
+  $('top').hidden = true; $('tabs').hidden = true; closeSheet();
+  const old = $('start'); if (old) old.remove();
+  $('view').innerHTML = `<div class="loadbox"><div class="star-row">${STAR}</div><div>${esc(msg)}</div></div>`;
+}
+// dünyaya gir (gerekirse haritaya yeni köy ekleyerek)
+async function mpOpen(info, me) {
+  loading('Dünyaya bağlanılıyor…');
+  S = null; C.S = null;
+  MPX = { id: info.id, code: info.code, hid: info.hid, name: info.name || '', ver: 0, pending: [], pushing: false };
+  const M = MPX;
+  try {
+    let R = await Net.load(info.id);
+    M.code = R.code; M.name = R.name;
+    for (let i = 0; i < 8 && !R.W.beys.some(b => b.id === info.hid); i++) {
+      Net.addHuman(R.W, info.hid, Net.uid, (me && me.name) || 'Bey', (me && me.village) || '', now());
+      const v = await Net.save(info.id, R.W, R.version);
+      if (v != null) { R.version = v; break; }
+      R = await Net.load(info.id);
+    }
+    if (MPX !== M) return;
+    adopt(R.W, R.version);
+    M.lastPush = now(); M.pushedT = S.lastT;
+  } catch (e) {
+    const c = LS.get('ub-mp-cache-' + info.id);
+    if (MPX !== M) return;
+    if (!c || !c.S) { MPX = null; showStart(e.message || 'Bağlanılamadı'); return; }
+    C.S = S = c.S; M.ver = c.ver; C.processUntil(now());
+    toast('İnternet yok: son kayıttan devam ediliyor', 'bad');
+  }
+  LS.set('ub-mode', { mp: { id: M.id, code: M.code, hid: M.hid, name: M.name } });
+  save(); tab = 'koy'; map.ox = null; overShown = false; showGame(); setNet(M.net || 'ok');
+}
+function leaveToMenu() {
+  save(); MPX = null; S = null; C.S = null; LS.set('ub-mode', { sp: true }); closeSheet(); setNet(); showStart();
+}
 
 // ---------- boot ----------
 function boot() {
+  const mode = LS.get('ub-mode');
+  if (mode && mode.mp) { mpOpen(mode.mp); return; }
   const raw = store.get();
   if (raw) {
     try {
@@ -447,42 +575,113 @@ function boot() {
   showStart();
 }
 
-function showStart() {
-  $('top').hidden = true; $('tabs').hidden = true; $('view').innerHTML = '';
+function showStart(err) {
+  $('top').hidden = true; $('tabs').hidden = true; $('view').innerHTML = ''; setNet();
+  const old = $('start'); if (old) old.remove();
   const el = document.createElement('div'); el.className = 'start'; el.id = 'start';
+  const hasSp = !!store.get();
   el.innerHTML = `<div class="box">
     <div class="star-row">${STAR}</div>
     <div class="kicker">Anadolu · XIII. yüzyıl</div>
     <h1>Uç Beyleri</h1>
-    <p>Uç boylarında küçük bir köyün beyisin. Kaynak topla, ordunu kur, terk edilmiş köyleri yağmala ve yedi komşu beylikle Anadolu'nun hâkimiyeti için yarış.</p>
-    <label class="field">Beyliğinin adı<input id="stName" maxlength="28" value="Kızılırmak Beyliği" autocomplete="off"></label>
-    <label class="field">İlk köyünün adı<input id="stVil" maxlength="22" value="Kızılcahamam" autocomplete="off"></label>
-    <div class="field">Dünya hızı
+    <p>Uç boylarında küçük bir köyün beyisin. Kaynak topla, ordunu kur, terk edilmiş köyleri yağmala ve Anadolu'nun hâkimiyeti için yarış.</p>
+    <div class="seg two"><button data-mode="sp">Tek başına</button><button data-mode="mp">Arkadaşlarla</button></div>
+    ${err ? `<div class="mperr">${esc(err)}</div>` : ''}
+    <label class="field">Beyliğinin adı<input id="stName" maxlength="28" value="${esc(LS.get('ub-name') || 'Kızılırmak Beyliği')}" autocomplete="off"></label>
+    <label class="field">İlk köyünün adı<input id="stVil" maxlength="22" value="${esc(LS.get('ub-vil') || 'Kızılcahamam')}" autocomplete="off"></label>
+    <div class="field" id="spdField">Dünya hızı
       <div class="speeds">
         <label><input type="radio" name="spd" value="1"><b>Gerçek zaman (1×)</b><span>Binalar saatler, fetih haftalar sürer.</span></label>
         <label><input type="radio" name="spd" value="10" checked><b>Hızlı dünya (10×)</b><span>Her şey 10 kat hızlı. Birkaç günde fetih.</span></label>
         <label><input type="radio" name="spd" value="100"><b>Deneme (100×)</b><span>Oyunu hızlıca denemek için.</span></label>
       </div>
     </div>
-    <div class="field">Oyun modu
-      <div class="speeds">
-        <label><input type="radio" name="tst" value="" checked><b>Normal</b><span>Sıfırdan başla.</span></label>
-        <label><input type="radio" name="tst" value="res"><b>Test: kaynaklar dolu</b><span>Ambar dolu başlar, istediğin an tek dokunuşla yeniden doldurursun.</span></label>
-        <label><input type="radio" name="tst" value="full"><b>Test: bütün madenler en üst seviye</b><span>Kereste, Taş, Demir ve Ambar 30. seviye, kaynaklar dolu.</span></label>
-        <label><input type="radio" name="tst" value="max"><b>Test: bütün binalar son seviye</b><span>Köydeki her bina en üst seviyede, kaynaklar dolu.</span></label>
+    <div id="spPane" class="mpbox">
+      ${hasSp ? '<button class="btn firuze" id="stCont">Kayıtlı oyununa devam et</button>' : ''}
+      <div class="field">Oyun modu
+        <div class="speeds">
+          <label><input type="radio" name="tst" value="" checked><b>Normal</b><span>Sıfırdan başla.</span></label>
+          <label><input type="radio" name="tst" value="res"><b>Test: kaynaklar dolu</b><span>Ambar dolu başlar, istediğin an tek dokunuşla yeniden doldurursun.</span></label>
+          <label><input type="radio" name="tst" value="full"><b>Test: bütün madenler en üst seviye</b><span>Kereste, Taş, Demir ve Ambar 30. seviye, kaynaklar dolu.</span></label>
+          <label><input type="radio" name="tst" value="max"><b>Test: bütün binalar son seviye</b><span>Köydeki her bina en üst seviyede, kaynaklar dolu.</span></label>
+        </div>
       </div>
+      ${hasSp ? '<div class="muted small" style="text-align:center">Yeni oyun kurarsan kayıtlı tek kişilik oyunun silinir.</div>' : ''}
+      <button class="bigbtn" id="stGo">${hasSp ? 'Yeni oyun kur' : 'Beyliği kur'}</button>
     </div>
-    <button class="bigbtn" id="stGo">Beyliği kur</button>
+    <div id="mpPane" class="mpbox" hidden>
+      <section class="card mpbox"><b>Yeni dünya kur</b><div class="muted small">Seçtiğin hızda bir dünya kurulur. Sana 6 harfli bir kod verilir; arkadaşların bu kodla aynı dünyaya katılır.</div>
+        <button class="bigbtn" id="mpNew">Dünya kur</button></section>
+      <section class="card mpbox"><b>Koda katıl</b><div class="mprow"><input id="mpCode" maxlength="6" placeholder="KOD" autocomplete="off" aria-label="Dünya kodu"><button class="btn" id="mpJoin">Katıl</button></div></section>
+      <section class="card mpbox"><b>Dünyaların</b><div class="wlist" id="mpList"><div class="muted small">Yükleniyor…</div></div></section>
+      <div class="muted small" style="text-align:center">Hesabın bu cihaza bağlıdır. Uygulamanın verilerini silersen dünyalarına bu cihazdan giremezsin.</div>
+    </div>
   </div>`;
   $('app').appendChild(el);
+  let mode = LS.get('ub-startmode') || (hasSp ? 'sp' : 'mp');
+  const setMode = m => {
+    mode = m; LS.set('ub-startmode', m);
+    el.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('on', b.dataset.mode === m));
+    $('spPane').hidden = m !== 'sp'; $('mpPane').hidden = m !== 'mp';
+    if (m === 'mp') loadList();
+  };
+  el.querySelector('.seg').onclick = e => { const b = e.target.closest('[data-mode]'); if (b) setMode(b.dataset.mode); };
+  const names = () => { const name = $('stName').value.trim() || 'Kızılırmak Beyliği', village = $('stVil').value.trim() || 'Kızılcahamam'; LS.set('ub-name', name); LS.set('ub-vil', village); return { name, village }; };
+  const speedV = () => +document.querySelector('input[name=spd]:checked').value;
+  const busy = (on, msg) => { el.querySelectorAll('button').forEach(b => b.disabled = on); if (msg) { const l = $('mpList'); if (l) l.innerHTML = `<div class="muted small">${esc(msg)}</div>`; } };
+  const fail = e => { busy(false); showStart(netErr(e)); setTimeout(() => { const b = document.querySelector('[data-mode=mp]'); if (b) b.click(); }, 0); };
+  async function loadList() {
+    const box = $('mpList'); if (!box) return;
+    try {
+      const ws = await Net.myWorlds(); if (!$('mpList')) return;
+      box.innerHTML = ws.length ? ws.map(w => `<button data-world="${w.id}" data-hid="${esc(w.hid)}" data-code="${esc(w.code)}"><span><b>${esc(w.name)}</b><div class="muted small">${esc(w.pname)} · ${w.speed}× · ${w.updated ? clock(Date.parse(w.updated)) : ''}</div></span><span class="code">${esc(w.code)}</span></button>`).join('')
+        : '<div class="muted small">Henüz bir dünyan yok. Kur ya da arkadaşının kodunu yaz.</div>';
+    } catch (e) { if ($('mpList')) box.innerHTML = `<div class="mperr">${esc(netErr(e))}</div>`; }
+  }
+  $('mpList').onclick = e => { const b = e.target.closest('[data-world]'); if (!b) return; el.remove(); mpOpen({ id: b.dataset.world, hid: b.dataset.hid, code: b.dataset.code }); };
+  $('mpNew').onclick = async () => {
+    const { name, village } = names(); busy(true, 'Dünya kuruluyor…');
+    try {
+      await Net.session();
+      const S0 = C.newGame({ now: now(), speed: speedV(), name, village, mp: true });
+      S0._me = { hid: 'H1', idx: S0.beys.length, uid: Net.uid }; S0.clanChat = {};
+      const r = await Net.createWorld(Net.delocalize(S0), name.replace(/ Beyliği$/, '') + ' Dünyası', name);
+      el.remove(); await mpOpen({ id: r.id, hid: r.hid, code: r.code });
+      if (MPX) showCode(true);
+    } catch (e) { fail(e); }
+  };
+  $('mpJoin').onclick = async () => {
+    const code = Net.normCode($('mpCode').value); if (code.length !== 6) { toast('Kod 6 karakter olmalı', 'bad'); return; }
+    const me = names(); busy(true, 'Dünya aranıyor…');
+    try { const r = await Net.joinWorld(code, me.name); el.remove(); await mpOpen(r, me); if (MPX) toast('Dünyaya katıldın! Köyün haritada hazır.', 'good'); }
+    catch (e) { fail(e); }
+  };
+  const cont = $('stCont'); if (cont) cont.onclick = () => { el.remove(); LS.set('ub-mode', { sp: true }); boot(); };
   $('stGo').onclick = () => {
-    const name = $('stName').value.trim() || 'Kızılırmak Beyliği', village = $('stVil').value.trim() || 'Kızılcahamam';
-    const speed = +document.querySelector('input[name=spd]:checked').value;
+    const { name, village } = names();
+    const speed = speedV();
     const test = document.querySelector('input[name=tst]:checked').value || null;
     C.S = S = C.newGame({ now: now(), speed, name, village, test });
-    el.remove(); save(); tab = 'koy'; map.ox = null; showGame();
+    LS.set('ub-mode', { sp: true });
+    el.remove(); save(); tab = 'koy'; map.ox = null; overShown = false; showGame();
     toast('Beyliğin kuruldu. İlk görev seni bekliyor.', 'good');
   };
+  setMode(mode);
+}
+function netErr(e) {
+  const m = (e && e.message) || '';
+  if (/Failed to fetch|NetworkError|Load failed/i.test(m)) return 'Sunucuya ulaşılamadı. İnternet bağlantını kontrol et.';
+  if (/anonymous/i.test(m)) return 'Supabase\'de anonim giriş kapalı görünüyor.';
+  if (/relation|function .* does not exist|schema cache/i.test(m)) return 'Sunucu henüz hazır değil (SQL kurulumu eksik).';
+  return m || 'Bir şeyler ters gitti';
+}
+function showCode(first) {
+  sheet(`<div class="shead"><h3>${first ? 'Dünyan kuruldu' : 'Dünya kodu'}</h3><button class="x" data-close aria-label="Kapat">×</button></div>
+    <div class="muted">Arkadaşların uygulamayı açıp <b>Arkadaşlarla → Koda katıl</b> bölümüne bu kodu yazsın:</div>
+    <div class="bigcode" id="bigCode">${esc(MPX.code)}</div>
+    <button class="btn firuze" id="cpCode">Kodu kopyala</button>`, () => {
+    $('cpCode').onclick = async () => { try { await navigator.clipboard.writeText(MPX.code); toast('Kod kopyalandı', 'good'); } catch (e) { const r = document.createRange(); r.selectNodeContents($('bigCode')); const sl = getSelection(); sl.removeAllRanges(); sl.addRange(r); toast('Kodu seçtim, uzun basıp kopyala', 'info'); } };
+  });
 }
 
 function showGame() {
@@ -571,10 +770,27 @@ $('setBtn').onclick = () => {
     <div class="card small"><div><b>Beylik:</b> ${esc(S.player.name)}</div><div><b>Dünya hızı:</b> ${S.speed}×</div>
     <div><b>Başlangıç:</b> ${clock(S.created)}</div>
     <div><b>Acemi koruması:</b> ${now() < S.protectUntil ? dur(S.protectUntil - now()) + ' kaldı' : 'bitti'}</div></div>
+    ${MPX ? `<section class="card"><b>Çok oyunculu dünya</b><div class="bigcode" style="font-size:26px">${esc(MPX.code)}</div>
+      <div class="small">${S.beys.filter(b => b.human).length + 1} oyuncu: <b style="color:${S.player.color}">${esc(S.player.name)}</b>${S.beys.filter(b => b.human).map(b => `, <b style="color:${b.color}">${esc(b.name)}</b>`).join('')}</div>
+      <div class="small muted">Bağlantı: ${{ ok: 'senkron', sync: 'kaydediliyor…', off: 'internet yok, tekrar deneniyor' }[MPX.net || 'ok']}</div>
+      <div class="chips"><button class="btn firuze" id="mpShare">Kodu paylaş</button><button class="btn sec" id="mpMenu">Ana menü</button></div></section>
+      <button class="btn red" id="mpLeave">Bu dünyadan ayrıl</button>` : `
     <div class="muted small">Oyun bu cihazda kaydedilir. Uygulamayı kapatsan da dünya işlemeye devam eder; geri döndüğünde aradaki her şey hesaplanır.</div>
+    <button class="btn firuze" id="spMenu">Ana menü · Arkadaşlarla oyna</button>
     <section class="card"><b>Test araçları</b><div class="muted small">Oyunu denerken kullanman için. ${S.test ? 'Bu oyun test modunda.' : ''}</div>
       <div class="chips"><button class="btn firuze" id="tFill">Kaynakları doldur</button><button class="btn sec" id="tMines">Madenleri en üst seviyeye çıkar</button><button class="btn" id="tMax">Bütün binaları son seviyeye çıkar</button></div></section>
-    <button class="btn red" id="resetBtn">Yeni oyun başlat</button>`, box => {
+    <button class="btn red" id="resetBtn">Yeni oyun başlat</button>`}`, box => {
+    if (MPX) {
+      $('mpShare').onclick = () => showCode(false);
+      $('mpMenu').onclick = leaveToMenu;
+      let armedL = false;
+      $('mpLeave').onclick = async () => {
+        if (!armedL) { armedL = true; $('mpLeave').textContent = 'Emin misin? Dünya listenden çıkar, geri dönemezsin'; return; }
+        const id = MPX.id; try { await Net.leaveWorld(id); LS.del('ub-mp-cache-' + id); leaveToMenu(); } catch (e) { toast(netErr(e), 'bad'); }
+      };
+      return;
+    }
+    $('spMenu').onclick = leaveToMenu;
     $('tFill').onclick = () => { C.fillRes(cur(), now()); S.test = S.test || 'res'; save(); renderTop(); toast('Ambar dolduruldu', 'good'); };
     $('tMax').onclick = () => { C.maxAll(cur(), now()); S.test = 'max'; save(); closeSheet(); sig = ''; render(); toast('Bütün binalar son seviyede, ambar dolu', 'good'); };
     $('tMines').onclick = () => { const v = cur(); C.syncRes(v, now()); for (const m of C.MINES) v.b[m] = C.B[m].max; v.b.ambar = C.B.ambar.max; v.b.ciftlik = Math.max(v.b.ciftlik, 20); S.test = 'full'; C.fillRes(v, now()); save(); sig = ''; render(); toast('Madenler ve Ambar 30. seviyede, kaynaklar dolu', 'good'); };
@@ -644,18 +860,20 @@ function liveKoy() {
 $('view').addEventListener('click', e => {
   if (tab !== 'koy') return;
   if (e.target.closest('[data-claim]')) {
-    const v = cur(), q = activeQuest(); if (!q || !q.ok()) return;
-    C.syncRes(v, now()); const c = C.cap(v);
-    for (let i = 0; i < 3; i++) v.res[i] = Math.min(Math.max(c, v.res[i]), v.res[i] + q.r[i]);
-    S.quests.claimed.push(q.id); toast('Ödül ambara eklendi', 'good'); save(); liveKoy(); renderTop(); return;
+    const r = act(() => { const v = cur(), q = activeQuest(); if (!q || !q.ok()) return 'no';
+      C.syncRes(v, now()); const c = C.cap(v);
+      for (let i = 0; i < 3; i++) v.res[i] = Math.min(Math.max(c, v.res[i]), v.res[i] + q.r[i]);
+      S.quests.claimed.push(q.id); return 'ok'; });
+    if (r !== 'ok') return;
+    toast('Ödül ambara eklendi', 'good'); save(); liveKoy(); renderTop(); return;
   }
   const qb = e.target.closest('[data-qb]'); if (qb) { selectBuilding(qb.dataset.qb); return; }
   const pop = e.target.closest('#pop'); if (!pop) return;
   if (e.target.closest('[data-popclose]')) { selectBuilding(null); return; }
   if (e.target.closest('[data-pmore]')) { const b = SC.sel; openBuilding(b); return; }
-  if (e.target.closest('[data-pcancel]')) { C.cancelLast(cur(), now()); save(); liveKoy(); renderTop(); return; }
+  if (e.target.closest('[data-pcancel]')) { act(() => C.cancelLast(cur(), now())); save(); liveKoy(); renderTop(); return; }
   if (e.target.closest('[data-pup]')) {
-    const b = SC.sel, r = C.upgrade(cur(), b, now());
+    const b = SC.sel, r = act(() => C.upgrade(cur(), b, now()));
     if (r === 'ok') { toast(C.B[b].n + ' inşaatı başladı', 'info'); save(); liveKoy(); renderTop(); }
   }
 });
@@ -831,27 +1049,27 @@ function openBuilding(b) {
     const ov = box.parentNode; ov.dataset.b = b; ov.dataset.sig = bSheetSig(b);
     box.addEventListener('click', e => {
       const up = e.target.closest('[data-up]');
-      if (up) { const r = C.upgrade(cur(), b, now()); if (r === 'ok') { toast(C.B[b].n + ' inşaatı başladı', 'info'); save(); sig = ''; render(); } return; }
+      if (up) { const r = act(() => C.upgrade(cur(), b, now())); if (r === 'ok') { toast(C.B[b].n + ' inşaatı başladı', 'info'); save(); sig = ''; render(); } return; }
       const cv0 = cur();
       const rsel = e.target.closest('.rsels[data-side] .rsel');
       if (rsel) { const side = rsel.parentNode.dataset.side, i = +rsel.dataset.i; if (side === 'g') mkDraft.gi = i; else mkDraft.wi = i; rsel.parentNode.querySelectorAll('.rsel').forEach(x => x.classList.toggle('on', x === rsel)); liveMarket(box.parentNode, cv0); return; }
       const mf = e.target.closest('[data-mkf]'); if (mf) { mkFilter = +mf.dataset.mkf; liveBSheet(); return; }
       if (e.target.closest('[data-mkcreate]')) {
-        const r = C.createOffer(cv0, mkDraft.gi, +$('mkGn').value, mkDraft.wi, +$('mkWn').value, now());
+        const gi = mkDraft.gi, gn = +$('mkGn').value, wi = mkDraft.wi, wn = +$('mkWn').value, r = act(() => C.createOffer(cur(), gi, gn, wi, wn, now()));
         if (r === 'ok') { toast('Teklif pazara kondu', 'good'); mkDraft.gn = ''; mkDraft.wn = ''; save(); liveBSheet(); renderTop(); }
         else toast({ same: 'Farklı iki kaynak seç', empty: 'Miktarları yaz', ratio: 'Oran en fazla 1:3 olabilir', res: 'Ambarda yeterli kaynak yok', merchants: 'Yeterli tüccar yok', limit: 'En fazla 6 teklif koyabilirsin', nobuild: 'Önce Kervansaray kur' }[r] || 'Teklif konamadı', 'bad');
         return;
       }
-      const mc = e.target.closest('[data-mkcancel]'); if (mc) { C.cancelOffer(+mc.dataset.mkcancel, now()); toast('Teklif geri çekildi', 'info'); save(); liveBSheet(); renderTop(); return; }
+      const mc = e.target.closest('[data-mkcancel]'); if (mc) { const id = +mc.dataset.mkcancel; act(() => C.cancelOffer(id, now())); toast('Teklif geri çekildi', 'info'); save(); liveBSheet(); renderTop(); return; }
       const ma = e.target.closest('[data-mkaccept]');
-      if (ma) { const r = C.acceptOffer(cv0, +ma.dataset.mkaccept, now()); toast(r === 'ok' ? 'Takas yapıldı, kervanlar yolda' : { res: 'Ambarda yeterli kaynak yok', merchants: 'Yeterli tüccar yok', gone: 'Teklif artık yok' }[r] || 'Takas yapılamadı', r === 'ok' ? 'good' : 'bad'); save(); liveBSheet(); renderTop(); return; }
+      if (ma) { const id = +ma.dataset.mkaccept, r = act(() => C.acceptOffer(cur(), id, now())); toast(r === 'ok' ? 'Takas yapıldı, kervanlar yolda' : { res: 'Ambarda yeterli kaynak yok', merchants: 'Yeterli tüccar yok', gone: 'Teklif artık yok' }[r] || 'Takas yapılamadı', r === 'ok' ? 'good' : 'bad'); save(); liveBSheet(); renderTop(); return; }
       const rs = e.target.closest('[data-research]');
-      if (rs) { const id = rs.dataset.research, r = C.research(cur(), id, now()); if (r === 'ok') { toast(C.TECH[id].n + ' araştırması başladı', 'info'); save(); liveBSheet(); renderTop(); } else toast({ busy: 'Aynı anda tek araştırma yapılabilir', res: 'Kaynaklar yetmiyor', cap: 'Ambar bu maliyeti alamıyor', req: 'Önce gereksinimleri tamamla' }[r] || 'Araştırma başlatılamadı', 'bad'); return; }
+      if (rs) { const id = rs.dataset.research, r = act(() => C.research(cur(), id, now())); if (r === 'ok') { toast(C.TECH[id].n + ' araştırması başladı', 'info'); save(); liveBSheet(); renderTop(); } else toast({ busy: 'Aynı anda tek araştırma yapılabilir', res: 'Kaynaklar yetmiyor', cap: 'Ambar bu maliyeti alamıyor', req: 'Önce gereksinimleri tamamla' }[r] || 'Araştırma başlatılamadı', 'bad'); return; }
       const mx = e.target.closest('[data-smax]');
       if (mx) { const u = mx.dataset.smax, inp = $('sq-' + u); inp.value = C.maxTrain(cur(), u) || ''; drafts[u] = inp.value; liveBSheet(); return; }
       const tb = e.target.closest('[data-strain]');
       if (tb) {
-        const u = tb.dataset.strain, inp = $('sq-' + u), n = +inp.value, r = C.train(cur(), u, n, now());
+        const u = tb.dataset.strain, inp = $('sq-' + u), n = +inp.value, r = act(() => C.train(cur(), u, n, now()));
         if (r === 'ok') { toast(`${n} ${C.U[u].n} eğitime alındı`, 'info'); inp.value = ''; drafts[u] = ''; save(); liveBSheet(); renderTop(); }
         else toast(r === 'pop' ? 'Nüfus yetmiyor, Çiftliği yükselt' : r === 'res' ? 'Kaynaklar yetmiyor' : 'Eğitim başlatılamadı', 'bad');
       }
@@ -976,7 +1194,7 @@ $('view').addEventListener('click', e => {
   const tb = e.target.closest('[data-train]');
   if (tb) {
     const u = tb.dataset.train, inp = $('q-' + u), n = +inp.value;
-    const r = C.train(cur(), u, n, now());
+    const r = act(() => C.train(cur(), u, n, now()));
     if (r === 'ok') { toast(`${n} ${C.U[u].n} eğitime alındı`, 'info'); inp.value = ''; drafts[u] = ''; save(); liveOrdu(); renderTop(); }
     else toast(r === 'pop' ? 'Nüfus yetmiyor, Çiftliği yükselt' : r === 'res' ? 'Kaynaklar yetmiyor' : 'Eğitim başlatılamadı', 'bad');
   }
@@ -1102,7 +1320,7 @@ function resSheet(target) {
       if (e.target.closest('[data-rsplit]')) { const cap = C.merchantsFree(v) * C.CARRY; let left = cap; const per = Math.floor(cap / 3); [0, 1, 2].forEach(i => { const x = Math.min(Math.floor(v.res[i]), per, left); $('r-' + i).value = x; left -= x; }); upd(); }
     });
     $('rGo').onclick = () => {
-      const r = C.sendRes(v, target, read(), now());
+      const vid = v.id, tid = target.id, res = read(), r = act(() => C.sendRes(C.vil(vid), C.vil(tid), res, now()));
       if (r === 'ok') { toast('Kervan ' + target.name + ' köyüne yola çıktı', 'info'); closeSheet(); save(); renderTop(); }
       else toast({ merchants: 'Yeterli tüccar yok', res: 'Ambarda yeterli kaynak yok', empty: 'Gönderilecek miktarı yaz', self: 'Aynı köye gönderemezsin' }[r] || 'Gönderilemedi', 'bad');
     };
@@ -1133,7 +1351,7 @@ function sendSheet(target, type) {
     });
     const go = $('sendGo');
     if (go) go.onclick = () => {
-      const r = C.send(v, target, read(), type, now());
+      const vid = v.id, tid = target.id, us = read(), r = act(() => C.send(C.vil(vid), C.vil(tid), us, type, now()));
       if (r === 'ok') { toast(title + ' yola çıktı', 'info'); closeSheet(); save(); drawMap(); renderTop(); }
       else toast({ own: 'Kendi köyüne saldıramazsın', notown: 'Destek sadece kendi köylerine', empty: 'Birlik seçmedin' }[r] || 'Gönderilemedi', 'bad');
     };
@@ -1152,7 +1370,7 @@ function renderRapor() {
     return `<div class="rep${r.read ? '' : ' unread'}"><button data-rep="${r.id}"><span class="st" style="background:${col}"></span><span class="tt">${esc(title)}</span><span class="tm num">${clock(r.t)}</span><span class="sub">${esc(sub)}${r.loy ? ` · bağlılık ${r.loy[0]} → ${r.loy[1]}` : ''}</span></button>${openRep === r.id ? repDetail(r) : ''}</div>`;
   }).join('');
   $('view').innerHTML = `<div class="pad"><div class="qrow"><h2 class="sec">Raporlar</h2><button class="linkbtn" id="readAll">Hepsini okundu say</button></div>${items}</div>`;
-  $('readAll').onclick = () => { S.reports.forEach(r => r.read = true); save(); sig = ''; render(); };
+  $('readAll').onclick = () => { act(() => { S.reports.forEach(r => r.read = true); }); save(); sig = ''; render(); };
 }
 function unitTable(r) {
   const us = C.U_ORDER.filter(u => (r.aUnits[u] || 0) || (r.dUnits && r.dUnits[u]));
@@ -1178,7 +1396,7 @@ function repDetail(r) {
 $('view').addEventListener('click', e => {
   if (tab !== 'rapor') return;
   const b = e.target.closest('[data-rep]');
-  if (b) { const id = +b.dataset.rep, r = S.reports.find(x => x.id === id); if (r) r.read = true; openRep = openRep === id ? null : id; save(); render(); return; }
+  if (b) { const id = +b.dataset.rep, r0 = S.reports.find(x => x.id === id), k = r0 && repKey(r0); act(() => { const r = S.reports.find(x => repKey(x) === k); if (r) r.read = true; }); openRep = openRep === id ? null : id; save(); render(); return; }
   const a = e.target.closest('[data-again]');
   if (a) { map.sel = +a.dataset.again; tab = 'harita'; renderTabs(); sig = ''; map.ox = null; render(); setTimeout(() => { centerOn(S.vil[map.sel]); drawMap(); }, 0); }
 });
@@ -1193,12 +1411,12 @@ function renderKlan() {
   if (klanSub === 'bilgi') { view.innerHTML = seg + `<div style="flex:1;overflow-y:auto">${klanInfoHTML()}</div>`; chatRendered = { ch: null, last: 0 }; return; }
   const ch = klanSub;
   if (ch === 'klan' && !S.clan) { view.innerHTML = seg + `<div class="pad"><div class="card muted">Klan sohbeti için önce bir klana katıl ya da kendi klanını kur.</div></div>`; return; }
-  view.innerHTML = seg + `<div class="chatwrap"><div class="note small" style="margin:8px 12px 0">Bu sürümde sohbetteki beyler bilgisayar tarafından yönetiliyor. Sunucu kurulunca burada gerçek oyuncular olacak.</div>
+  view.innerHTML = seg + `<div class="chatwrap"><div class="note small" style="margin:8px 12px 0">${MPX ? (ch === 'klan' ? 'Klanındaki gerçek oyuncular burada yazışır.' : 'Dünyadaki gerçek oyuncular ve bilgisayar beyleri burada konuşur.') : 'Bu modda sohbetteki beyler bilgisayar tarafından yönetiliyor. Arkadaşlarla oynarken burada gerçek oyuncular olur.'}</div>
     <div class="chatlog" id="chatlog"></div>
     <form class="chatin" id="chatForm"><input id="chatIn" maxlength="200" autocomplete="off" placeholder="${ch === 'klan' ? '[' + esc(S.clan.tag) + '] klanına yaz' : 'Herkese yaz'}" aria-label="Mesaj"><button class="btn" type="submit">Gönder</button></form></div>`;
   chatRendered = { ch, last: 0 };
   $('chatForm').addEventListener('submit', e => {
-    e.preventDefault(); const inp = $('chatIn'), r = C.playerSay(ch, inp.value, now());
+    e.preventDefault(); const inp = $('chatIn'), txt = inp.value, r = act(() => C.playerSay(ch, txt, now()));
     if (r === 'ok') { inp.value = ''; save(); liveChat(); }
   });
   liveChat();
@@ -1214,13 +1432,13 @@ function liveChat() {
   if (lastId === chatRendered.last) return;
   const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 60 || !chatRendered.last;
   log.innerHTML = msgs.length ? msgs.map(msgHTML).join('') : '<div class="msg sys">Henüz mesaj yok. İlk selamı sen ver.</div>';
-  chatRendered.last = lastId; S.chatSeen[ch] = lastId;
+  chatRendered.last = lastId; S.chatSeen[ch] = lastId; if (MPX) LS.set('ub-seen-' + MPX.id, S.chatSeen);
   if (atBottom) log.scrollTop = log.scrollHeight;
 }
 function klanInfoHTML() {
-  const t = now(), clans = C.clanList(), free = S.beys.filter(b => !b.clan && S.vil.some(v => v.owner === b.id));
+  const t = now(), clans = C.clanList(), free = S.beys.filter(b => !b.human && !b.clan && S.vil.some(v => v.owner === b.id));
   const pts = o => fmt(C.ownerPts(o));
-  const memberRows = ids => ids.map(o => `<div class="mrow"><i class="sw" style="background:${C.ownerColor(o)}"></i><span><b>${esc(o === 'P' ? S.player.name : C.ownerName(o))}</b>${o === 'P' ? ' <span class="muted small">(sen)</span>' : ''}</span><span class="num muted small">${pts(o)} puan</span></div>`).join('');
+  const memberRows = ids => ids.map(o => `<div class="mrow"><i class="sw" style="background:${C.ownerColor(o)}"></i><span><b>${esc(o === 'P' ? S.player.name : C.ownerName(o))}</b>${o === 'P' ? ' <span class="muted small">(sen)</span>' : C.isHuman(o) ? ' <span class="ctag">OYUNCU</span>' : ''}</span><span class="num muted small">${pts(o)} puan</span></div>`).join('');
   let h = '<div class="pad">';
   if (S.clan) {
     const mine = clans.find(c => c.mine);
@@ -1243,26 +1461,27 @@ $('view').addEventListener('click', e => {
   if (tab !== 'klan') return;
   const sb = e.target.closest('[data-sub]'); if (sb) { klanSub = sb.dataset.sub; sig = ''; render(); return; }
   const inv = e.target.closest('[data-invite]');
-  if (inv) { const b = S.beys.find(x => x.id === inv.dataset.invite), r = C.inviteBey(inv.dataset.invite, now());
+  if (inv) { const b = S.beys.find(x => x.id === inv.dataset.invite);
+    const iid = inv.dataset.invite, r = act(() => C.inviteBey(iid, now()));
     toast(r === 'ok' ? b.name + ' klana katıldı!' : r === 'refused' ? b.name + ' davetini şimdilik reddetti. Güçlendikçe tekrar dene.' : r === 'full' ? 'Klan dolu' : 'Davet gönderilemedi', r === 'ok' ? 'good' : 'bad'); save(); sig = ''; render(); return; }
   const j = e.target.closest('[data-join]');
-  if (j) { const r = C.joinClan(j.dataset.join, now()); toast(r === 'ok' ? 'Klana katıldın!' : r === 'weak' ? 'Klan üyeleri seni henüz yeterince güçlü bulmuyor. Puanını artır.' : r === 'full' ? 'Klan dolu' : 'Katılamadın', r === 'ok' ? 'good' : 'bad'); save(); sig = ''; render(); return; }
+  if (j) { const tg = j.dataset.join, r = act(() => C.joinClan(tg, now())); toast(r === 'ok' ? 'Klana katıldın!' : r === 'weak' ? 'Klan üyeleri seni henüz yeterince güçlü bulmuyor. Puanını artır.' : r === 'full' ? 'Klan dolu' : 'Katılamadın', r === 'ok' ? 'good' : 'bad'); save(); sig = ''; render(); return; }
   if (e.target.id === 'leaveClan') {
     if (e.target.dataset.armed !== '1') { e.target.dataset.armed = '1'; e.target.textContent = 'Emin misin? Tekrar dokun'; return; }
-    C.leaveClan(now()); toast('Klandan ayrıldın', 'info'); save(); sig = ''; render();
+    act(() => C.leaveClan(now())); toast('Klandan ayrıldın', 'info'); save(); sig = ''; render();
   }
 });
 $('view').addEventListener('submit', e => {
   if (e.target.id !== 'clanForm') return;
   e.preventDefault();
-  const r = C.createClan($('clanName').value, $('clanTag').value, now());
+  const cn = $('clanName').value, ct = $('clanTag').value, r = act(() => C.createClan(cn, ct, now()));
   toast({ ok: 'Klan kuruldu!', name: 'Klan adı en az 3 harf olmalı', tag: 'Kısaltma 2–4 harf olmalı', taken: 'Bu kısaltma kullanılıyor' }[r] || 'Klan kurulamadı', r === 'ok' ? 'good' : 'bad');
   if (r === 'ok') { save(); sig = ''; render(); }
 });
 
 // ---------- SIRALAMA ----------
 function renderSira() {
-  const rows = C.ranking().map((r, i) => `<tr class="${r.id === 'P' ? 'me' : ''}"><td>${i + 1}</td><td style="text-align:left"><i class="sw" style="background:${r.color}"></i> ${esc(r.name)}${C.clanOf(r.id) ? ` <span class="ctag">${esc(C.clanOf(r.id))}</span>` : ''}</td><td>${r.n}</td><td>${fmt(r.pts)}</td></tr>`).join('');
+  const rows = C.ranking().map((r, i) => `<tr class="${r.id === 'P' ? 'me' : ''}"><td>${i + 1}</td><td style="text-align:left"><i class="sw" style="background:${r.color}"></i> ${esc(r.name)}${r.human ? ' <span class="muted small">(oyuncu)</span>' : ''}${C.clanOf(r.id) ? ` <span class="ctag">${esc(C.clanOf(r.id))}</span>` : ''}</td><td>${r.n}</td><td>${fmt(r.pts)}</td></tr>`).join('');
   const barb = S.vil.filter(v => v.owner === null).length;
   $('view').innerHTML = `<div class="pad"><h2 class="sec">Beylikler sıralaması</h2>
     <section class="card"><div class="tblwrap"><table class="tbl rank num"><thead><tr><th>#</th><th style="text-align:left">Beylik</th><th>Köy</th><th>Puan</th></tr></thead><tbody>${rows}</tbody></table></div></section>
@@ -1284,7 +1503,7 @@ function showOver() {
   if (overShown) return; overShown = true;
   const r = C.ranking();
   sheet(`<h3>Beyliğin düştü</h3><div>Son köyün de el değiştirdi. ${esc(r[0].name)} şu an Anadolu'nun en güçlü beyliği.</div>
-    <button class="btn" id="overNew">Yeni beylik kur</button>`, () => { $('overNew').onclick = () => { store.del(); S = null; C.S = null; overShown = false; closeSheet(); showStart(); }; });
+    <button class="btn" id="overNew">Yeni beylik kur</button>`, () => { $('overNew').onclick = () => { if (MPX) { leaveToMenu(); overShown = false; return; } store.del(); S = null; C.S = null; overShown = false; closeSheet(); showStart(); }; });
   $('ov').classList.add('center');
 }
 
@@ -1304,7 +1523,7 @@ setInterval(() => {
   render();
   if (now() - lastSave > 5000) save();
 }, 1000);
-document.addEventListener('visibilitychange', () => { if (document.hidden) save(); else if (S) { catching = true; awayLog = []; const t0 = S.lastT; C.processUntil(now()); catching = false; sig = ''; render(); if (now() - t0 > 60000 && awayLog.length) showAway(now() - t0); } });
+document.addEventListener('visibilitychange', () => { if (document.hidden) save(); else if (S) { catching = true; awayLog = []; const t0 = S.lastT; C.processUntil(now()); catching = false; sig = ''; render(); if (now() - t0 > 60000 && awayLog.length) showAway(now() - t0); if (MPX) poll(); } });
 addEventListener('pagehide', save);
 addEventListener('resize', () => { if (tab === 'harita') { sig = ''; render(); } });
 

@@ -4,6 +4,7 @@ const fs = require('fs'), path = require('path');
 const root = path.join(__dirname, '..'), src = f => fs.readFileSync(path.join(root, 'oyun', f), 'utf8');
 const page = src('ui.html')
   .replace('/*CORE*/', () => src('core.js'))
+  .replace('/*NET*/', () => src('net.js'))
   .replace('/*SCENE*/', () => src('scene.js'))
   .replace('/*MAPCASTLE*/', () => src('mapcastle.js'))
   .replace('/*MAPMOVES*/', () => src('mapmoves.js'));

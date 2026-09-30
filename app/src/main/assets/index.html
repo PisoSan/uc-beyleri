@@ -326,6 +326,19 @@ input.qty{width:74px;background:var(--bg);border:1px solid var(--line);border-ra
 .bigbtn{justify-self:center;border:0;border-radius:999px;background:var(--gold);color:#23190a;font-weight:800;font-size:19px;padding:10px 34px;cursor:pointer;box-shadow:0 4px 0 #9c7426}
 .bigbtn:active{transform:translateY(2px);box-shadow:0 2px 0 #9c7426}
 .star-row{display:flex;justify-content:center;color:var(--gold)}
+.seg.two{grid-template-columns:1fr 1fr}
+.mpbox{display:grid;gap:10px}
+.mprow{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center}
+.mprow input{min-width:0;text-transform:uppercase;letter-spacing:.2em;font-weight:800;text-align:center}
+.wlist{display:grid;gap:6px}
+.wlist button{display:grid;grid-template-columns:1fr auto;align-items:center;gap:8px;text-align:left;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:8px 10px;color:var(--text);cursor:pointer}
+.wlist button span.code{font-weight:800;letter-spacing:.15em;color:var(--gold)}
+.mperr{color:var(--red);font-weight:700;font-size:14px;text-align:center}
+.bigcode{font-family:var(--display);font-size:34px;font-weight:800;letter-spacing:.25em;color:var(--gold);text-align:center;user-select:all;-webkit-user-select:all}
+.netdot{position:absolute;top:3px;right:3px;width:8px;height:8px;border-radius:50%;background:var(--green)}
+.netdot.sync{background:var(--gold)} .netdot.off{background:var(--red)}
+.icon-btn{position:relative}
+.loadbox{display:grid;place-items:center;gap:10px;text-align:center;padding-top:30vh;color:var(--muted);font-weight:700}
 .star-row svg{width:64px;height:64px}
 
 /* toasts */
@@ -342,7 +355,7 @@ input.qty{width:74px;background:var(--bg);border:1px solid var(--line);border-ra
     <div class="bar1">
       <button class="vbtn" id="vilBtn" aria-label="Köy değiştir"><span class="vname" id="vName">.</span><span class="vco num" id="vCo"></span><span class="car">▼</span></button>
       <div class="ptsb num"><b id="vPts">0</b> puan</div>
-      <button class="icon-btn" id="setBtn" aria-label="Ayarlar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg></button>
+      <button class="icon-btn" id="setBtn" aria-label="Ayarlar"><span class="netdot" id="netDot" hidden></span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg></button>
     </div>
     <div class="resbar" id="resbar"></div>
     <button class="alert" id="alert" hidden></button>
@@ -437,7 +450,7 @@ function reqFor(b, lvl) {
 // Online sürümde aynı veri yapısı sunucudan gelen gerçek oyuncu mesajlarıyla dolacak.
 const CHAT_MAX = 150, CLAN_MAX = 5;
 const AI_CLANS = [{ tag: 'KRM', name: 'Konya Divanı', m: ['B0', 'B5'] }, { tag: 'EGE', name: 'Ege Uçları', m: ['B2', 'B3', 'B4'] }];
-function clanOf(o) { if (!o) return null; if (o === 'P') return S.clan ? S.clan.tag : null; const b = S.beys.find(x => x.id === o); return b ? b.clan || null : null; }
+function clanOf(o) { if (!o) return null; if (o === 'P') return S.clan ? S.clan.tag : null; const b = beyOf(o); return b ? b.clan || null : null; }
 function sameClan(a, b) { const ca = clanOf(a), cb = clanOf(b); return !!ca && ca === cb; }
 function clanList() {
   const tags = {};
@@ -450,13 +463,22 @@ function say(ch, from, text, t) {
   const a = S.chat[ch]; a.push({ id: ++S.uid, t, from, text });
   if (a.length > CHAT_MAX) a.splice(0, a.length - CHAT_MAX);
 }
-const pick = a => a[Math.floor(Math.random() * a.length)];
+const pick = a => a[Math.floor(R() * a.length)];
+// tohumlu rastgelelik: aynı durumdan başlayan her cihaz aynı sonucu bulur (çok oyunculu için şart)
+function R() { let a = (S.rs = (S.rs + 0x6D2B79F5) | 0); let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }
+// gerçek oyuncular: yerel oyuncu her zaman 'P'; diğer insanlar beys içinde human:true
+const beyOf = o => (o && o !== 'P' ? S.beys.find(x => x.id === o) : null);
+const isHuman = o => o === 'P' || !!(beyOf(o) || {}).human;
+const protectOf = o => (o === 'P' ? S.protectUntil : ((beyOf(o) || {}).human ? beyOf(o).protectUntil || 0 : 0));
+function statsOf(o) { if (o === 'P') return S.stats; const b = beyOf(o); if (!b || !b.human) return null; return b.stats || (b.stats = { trained: {}, barbWins: 0, spies: 0 }); }
+const lastVillage = o => S.vil.filter(v => v.owner === o).length < 2;
 const beyShort = o => (o === 'P' ? S.player.name : ownerName(o).replace('oğulları', ''));
 function createClan(name, tag, t) {
   name = String(name || '').trim().slice(0, 24); tag = String(tag || '').trim().toUpperCase().replace(/[^A-ZÇĞİÖŞÜ0-9]/g, '').slice(0, 4);
   if (S.clan) return 'already'; if (name.length < 3) return 'name'; if (tag.length < 2) return 'tag';
   if (S.beys.some(b => b.clan === tag)) return 'taken';
   S.clan = { name, tag, created: t }; S.clanJoinedAi = false;
+  if (S.clanChat) S.chat.klan = S.clanChat[tag] = S.clanChat[tag] || [];
   say('genel', 'SYS', S.player.name + ' [' + tag + '] ' + name + ' klanını kurdu.', t);
   say('klan', 'SYS', 'Klan kuruldu. Bağımsız beylere davet göndererek klanını büyüt.', t);
   return 'ok';
@@ -465,9 +487,10 @@ function inviteBey(id, t) {
   const b = S.beys.find(x => x.id === id);
   if (!S.clan) return 'noclan'; if (!b || b.clan) return 'taken';
   if (1 + S.beys.filter(x => x.clan === S.clan.tag).length >= CLAN_MAX) return 'full';
+  if (b.human) return 'human';
   if (b.refusedUntil && t < b.refusedUntil) return 'wait';
   const ratio = (ownerPts('P') + 1) / (ownerPts(b.id) + 1);
-  if (ratio >= .55 && Math.random() < .35 + ratio * .4) {
+  if (ratio >= .55 && R() < .35 + ratio * .4) {
     b.clan = S.clan.tag; b.clanName = S.clan.name;
     say('klan', b.id, pick(['Davetin için sağ ol beyim, sancağımız bir olsun.', 'Kabul ediyorum. Düşmanımız ortak, ganimetimiz ortak!', 'Bu ittifak iki beyliğe de hayırlı olsun.']), t);
     say('genel', 'SYS', b.name + ', [' + S.clan.tag + '] klanına katıldı.', t);
@@ -481,9 +504,11 @@ function joinClan(tag, t) {
   const mem = S.beys.filter(b => b.clan === tag); if (!mem.length) return 'none';
   if (mem.length + 1 > CLAN_MAX) return 'full';
   const avg = mem.reduce((a, b) => a + ownerPts(b.id), 0) / mem.length;
-  if (ownerPts('P') < avg * .5) return 'weak';
+  if (!mem.some(b => b.human) && ownerPts('P') < avg * .5) return 'weak';
   S.clan = { name: mem[0].clanName, tag, created: t }; S.clanJoinedAi = true;
-  say('klan', mem[0].id, 'Hoş geldin ' + S.player.name + '! Kışlanı büyüt, sınırlarımızı birlikte koruyalım.', t);
+  if (S.clanChat) S.chat.klan = S.clanChat[tag] = S.clanChat[tag] || [];
+  const greet = mem.find(b => !b.human);
+  if (greet) say('klan', greet.id, 'Hoş geldin ' + S.player.name + '! Kışlanı büyüt, sınırlarımızı birlikte koruyalım.', t);
   say('genel', 'SYS', S.player.name + ', [' + tag + '] klanına katıldı.', t);
   return 'ok';
 }
@@ -491,7 +516,7 @@ function leaveClan(t) {
   if (!S.clan) return 'none';
   const tag = S.clan.tag, mine = S.beys.filter(b => b.clan === tag);
   const own = !S.clanJoinedAi;
-  if (own) for (const b of mine) { b.clan = null; b.clanName = null; }
+  if (own) for (const b of mine) if (!b.human) { b.clan = null; b.clanName = null; }
   say('genel', 'SYS', S.player.name + ', [' + tag + '] klanından ayrıldı.', t);
   S.clan = null; S.chat.klan = []; return 'ok';
 }
@@ -509,33 +534,35 @@ const CHAT_KLAN = [
   'Birimiz saldırıya uğrarsa hemen destek yollayalım.', 'Medresemde Zırh Yapımı bitmek üzere.',
   'Bu hafta sıralamada ilk üçe gireriz inşallah.', 'Yeni Divan kuruldu, Sancakbeyi yetiştiriyorum.',
 ];
-function aiChat(t) {
-  if (Math.random() < .55) { const b = pick(S.beys); const vv = pick(S.vil.filter(v => v.owner === null)) || S.vil[0]; say('genel', b.id, pick(CHAT_GENEL).replace('{v}', vv.name), t); }
-  const allies = S.clan ? S.beys.filter(b => b.clan === S.clan.tag) : [];
-  if (allies.length && Math.random() < .45) say('klan', pick(allies).id, pick(CHAT_KLAN), t);
+const aiBeys = () => S.beys.filter(b => !b.human);
+function aiChat(t, fresh) {
+  if (R() < .55) { const b = pick(aiBeys()); const vv = pick(S.vil.filter(v => v.owner === null)) || S.vil[0]; const txt = pick(CHAT_GENEL).replace('{v}', vv.name); if (fresh) say('genel', b.id, txt, t); }
+  const allies = S.clan ? S.beys.filter(b => !b.human && b.clan === S.clan.tag) : [];
+  if (allies.length && R() < .45) { const b = pick(allies), txt = pick(CHAT_KLAN); if (fresh && !S.mp) say('klan', b.id, txt, t); }
 }
 function allySupport(target, attacker, t) {
-  if (!S.clan || target.owner !== 'P') return;
-  for (const b of S.beys.filter(x => x.clan === S.clan.tag)) {
-    if (Math.random() > .6) continue;
+  const tag = clanOf(target.owner); if (!tag || !isHuman(target.owner)) return;
+  const myClan = S.clan && S.clan.tag === tag && !S.mp;
+  for (const b of S.beys.filter(x => !x.human && x.clan === tag)) {
+    if (R() > .6) continue;
     const src = S.vil.filter(v => v.owner === b.id).sort((a, c) => dist(a, target) - dist(c, target))[0]; if (!src) continue;
     const units = {}; let n = 0;
     for (const u of ['mizrakli', 'okcu']) { const k = Math.floor((src.units[u] || 0) * .3); if (k > 0) { units[u] = k; src.units[u] -= k; n += k; } }
     if (!n) continue;
     const dur = travelTime(src, target, units);
     S.moves.push({ id: ++S.uid, type: 'support', owner: b.id, from: src.id, to: target.id, units, loot: [0, 0, 0], depart: t, arrive: t + dur });
-    say('klan', b.id, target.name + ' köyüne ' + n + ' asker destek gönderdim, yolda.', t);
+    if (myClan) say('klan', b.id, target.name + ' köyüne ' + n + ' asker destek gönderdim, yolda.', t);
   }
-  const al = S.beys.filter(x => x.clan === S.clan.tag);
-  if (al.length) say('klan', pick(al).id, 'Dikkat! ' + ownerName(attacker) + ' ' + target.name + ' köyüne ordu gönderdi.', t);
+  const al = S.beys.filter(x => !x.human && x.clan === tag);
+  if (al.length && myClan) say('klan', pick(al).id, 'Dikkat! ' + ownerName(attacker) + ' ' + target.name + ' köyüne ordu gönderdi.', t);
 }
 const fmtN = n => Math.floor(n).toLocaleString('tr-TR');
 function allyResources(t) {
-  const al = S.clan ? S.beys.filter(b => b.clan === S.clan.tag) : []; if (!al.length) return;
+  const al = S.clan ? S.beys.filter(b => !b.human && b.clan === S.clan.tag) : []; if (!al.length) return;
   const b = pick(al), src = S.vil.filter(v => v.owner === b.id)[0], dst = S.vil.find(v => v.id === S.cur && v.owner === 'P') || S.vil.find(v => v.owner === 'P');
   if (!src || !dst) return;
   syncRes(src, t);
-  const res = src.res.map(x => Math.floor(Math.min(x * .25, 800 + Math.random() * 700)));
+  const res = src.res.map(x => Math.floor(Math.min(x * .25, 800 + R() * 700)));
   if (res.every(x => x < 50)) { say('klan', b.id, 'Ambarım boş beyim, şu an gönderemem.', t); return; }
   for (let i = 0; i < 3; i++) src.res[i] -= res[i];
   S.moves.push({ id: ++S.uid, type: 'trade', owner: b.id, from: src.id, to: dst.id, units: {}, res, merchants: Math.ceil((res[0] + res[1] + res[2]) / CARRY), loot: [0, 0, 0], depart: t, arrive: t + tradeTime(src, dst) });
@@ -546,15 +573,15 @@ function playerSay(ch, text, t) {
   if (ch === 'klan' && !S.clan) return 'noclan';
   say(ch, 'P', text, t);
   const low = text.toLocaleLowerCase('tr');
-  const pool = ch === 'klan' ? S.beys.filter(b => S.clan && b.clan === S.clan.tag) : S.beys;
-  if (!pool.length) return 'ok';
-  const who = pick(pool), delay = (4 + Math.random() * 10) * 1000;
+  const pool = ch === 'klan' ? S.beys.filter(b => !b.human && S.clan && b.clan === S.clan.tag) : aiBeys();
+  if (!pool.length || (S.mp && ch === 'klan')) return 'ok';
+  const who = pick(pool), delay = (4 + R() * 10) * 1000;
   let reply = null;
   if (/selam|merhaba|sa\b|slm/.test(low)) reply = pick(['Aleykümselam ' + S.player.name + '!', 'Selam beyim, hoş geldin.', 'Aleykümselam, bereketli günler.']);
-  else if (ch === 'klan' && /kaynak|kereste|taş|demir|maden|kervan|erzak/.test(low)) { reply = 'Ambarıma bakıp kervan hazırlıyorum.'; S.pendingRes = true; }
-  else if (ch === 'klan' && /yardım|destek|imdat|saldır/.test(low)) { reply = 'Hemen asker yolluyorum beyim, dayan!'; S.pendingSupport = true; }
+  else if (ch === 'klan' && /kaynak|kereste|taş|demir|maden|kervan|erzak/.test(low)) { reply = 'Ambarıma bakıp kervan hazırlıyorum.'; S.pendingRes = !S.mp; }
+  else if (ch === 'klan' && /yardım|destek|imdat|saldır/.test(low)) { reply = 'Hemen asker yolluyorum beyim, dayan!'; S.pendingSupport = !S.mp; }
   else if (/ittifak|klan/.test(low) && ch === 'genel') reply = 'Klanın güçlüyse konuşuruz, sıralamaya bakarız.';
-  else if (Math.random() < (ch === 'klan' ? .8 : .35)) reply = pick(['Doğru söylersin.', 'Anlaşıldı beyim.', 'Hele bir bakalım.', 'Ben de öyle düşünüyorum.', 'Bunu Divan’da konuşalım.', 'İyi fikir, hazırlanalım.']);
+  else if (R() < (ch === 'klan' ? .8 : .35)) reply = pick(['Doğru söylersin.', 'Anlaşıldı beyim.', 'Hele bir bakalım.', 'Ben de öyle düşünüyorum.', 'Bunu Divan’da konuşalım.', 'İyi fikir, hazırlanalım.']);
   if (reply) S.chatq.push({ t: t + delay, ch, from: who.id, text: reply });
   return 'ok';
 }
@@ -576,7 +603,7 @@ const TECH = {
 const TECH_ORDER = ['ocak', 'mimari', 'depo', 'talim', 'nal', 'kervan', 'demirci', 'zirh', 'burc', 'sancak'];
 const techCost = (id, l) => TECH[id].c.map(x => Math.round(x * Math.pow(1.45, l - 1)));
 const techTime = (id, l, med) => TECH[id].t * 1000 * Math.pow(1.35, l - 1) * Math.pow(.95, Math.max(0, med - 1)) / S.speed;
-const TL = (o, id) => (o === 'P' && S.tech ? (S.tech[id] || 0) : 0);
+const TL = (o, id) => { if (o === 'P') return S.tech ? (S.tech[id] || 0) : 0; if (!o) return 0; const b = beyOf(o); return b && b.human && b.tech ? (b.tech[id] || 0) : 0; };
 const TX = (o, id) => TL(o, id) * TECH[id].e;
 
 // ---------- formüller ----------
@@ -611,7 +638,7 @@ function newGame(opts) {
   const seed = opts.seed != null ? opts.seed : Math.floor(Math.random() * 1e9);
   const rnd = mulberry32(seed);
   const ri = (a, b) => a + Math.floor(rnd() * (b - a + 1));
-  S = { ver: 1, market: [], tech: {}, techq: null, clan: null, chat: { genel: [], klan: [] }, chatq: [], chatSeen: { genel: 0, klan: 0 }, nextChat: t + 30000, seed, speed: opts.speed, created: t, lastT: t, protectUntil: t + 3 * 24 * HOUR / opts.speed,
+  S = { ver: 1, rs: seed ^ 0x5bd1e995, mp: !!opts.mp, market: [], tech: {}, techq: null, clan: null, chat: { genel: [], klan: [] }, chatq: [], chatSeen: { genel: 0, klan: 0 }, nextChat: t + 30000, seed, speed: opts.speed, created: t, lastT: t, protectUntil: t + 3 * 24 * HOUR / opts.speed,
     nextAi: t + HOUR / opts.speed, uid: 100, player: { name: opts.name || 'Kızılırmak Beyliği', color: '#e3b341' },
     beys: [], vil: [], moves: [], reports: [], quests: { claimed: [] },
     stats: { trained: {}, barbWins: 0, spies: 0 }, cur: 0, over: false };
@@ -713,6 +740,7 @@ function migrate(st) {
   if (!st.chat) { st.chat = { genel: [], klan: [] }; st.chatq = []; st.chatSeen = { genel: 0, klan: 0 }; st.nextChat = st.lastT + 30000; st.clan = null;
     st.beys.forEach((b, i) => { const ac = AI_CLANS.find(c => c.m.includes('B' + i)); b.clan = ac ? ac.tag : null; b.clanName = ac ? ac.name : null; }); }
   if (st.techq === undefined) st.techq = null;
+  if (st.rs == null) st.rs = (st.seed || 1) ^ 0x5bd1e995;
   for (const v of st.vil) { if (v.b.medrese == null) v.b.medrese = 0; if (v.b.kervansaray == null) v.b.kervansaray = 0; }
   return st;
 }
@@ -774,11 +802,11 @@ function send(from, to, units, type, t) {
   if (type === 'support' && to.owner !== from.owner) return 'notown';
   if (type === 'attack' && to.owner === from.owner) return 'own';
   if (type === 'attack' && sameClan(to.owner, from.owner)) return 'ally';
-  if (to.owner === 'P' && from.owner !== 'P' && t < S.protectUntil) return 'protected';
+  if (isHuman(to.owner) && from.owner !== to.owner && t < protectOf(to.owner)) return 'protected';
   for (const [u, k] of Object.entries(clean)) from.units[u] -= k;
   const dur = travelTime(from, to, clean);
   S.moves.push({ id: ++S.uid, type, owner: from.owner, from: from.id, to: to.id, units: clean, loot: [0, 0, 0], depart: t, arrive: t + dur });
-  if (type === 'spy' && from.owner === 'P') S.stats.spies++;
+  if (type === 'spy' && statsOf(from.owner)) statsOf(from.owner).spies++;
   return 'ok';
 }
 
@@ -816,7 +844,7 @@ function battle(m, t) {
   if (dv.guest && unitSum(dv.guest)) rep.guest = Object.assign({}, dv.guest);
   const Dmix = A0 > 0 ? (Di * Ai + Dc * Ac) / A0 : Di;
   const D = (Dmix * (1 + TX(dv.owner, 'zirh')) + 20 + 40 * wallEff) * Math.pow(1.037, wallEff * (1 + TX(dv.owner, 'burc')));
-  const luck = Math.random() * 0.3 - 0.15; rep.luck = luck;
+  const luck = R() * 0.3 - 0.15; rep.luck = luck;
   const A = A0 * (1 + luck) * (1 + TX(m.owner, 'demirci'));
 
   if (A0 > 0 && A > D) {
@@ -837,12 +865,13 @@ function battle(m, t) {
     }
     for (let i = 0; i < 3; i++) { loot[i] = Math.floor(loot[i]); dv.res[i] -= loot[i]; }
     rep.loot = loot; m.loot = loot;
-    if (dv.owner === null && m.owner === 'P') S.stats.barbWins++;
+    if (dv.owner === null && statsOf(m.owner)) statsOf(m.owner).barbWins++;
     // fetih
     if ((att.sancakbeyi || 0) > 0 && dv.owner !== m.owner) {
       const before = dv.loy; let drop = 0;
-      for (let i = 0; i < att.sancakbeyi; i++) drop += 20 + Math.random() * 15 + TX(m.owner, 'sancak');
+      for (let i = 0; i < att.sancakbeyi; i++) drop += 20 + R() * 15 + TX(m.owner, 'sancak');
       dv.loy = Math.max(0, dv.loy - drop); rep.loy = [Math.floor(before), Math.floor(dv.loy)];
+      if (dv.loy <= 0 && isHuman(dv.owner) && lastVillage(dv.owner)) { dv.loy = 1; rep.loy[1] = 1; }   // oyuncunun son köyü fethedilmez
       if (dv.loy <= 0) {
         const prev = dv.owner;
         att.sancakbeyi--;
@@ -853,7 +882,7 @@ function battle(m, t) {
         say('genel', 'SYS', ownerName(m.owner) + ', ' + dv.name + ' köyünü fethetti.', t);
         hooks.notify(m.owner === 'P' ? 'good' : (prev === 'P' ? 'bad' : 'info'),
           m.owner === 'P' ? dv.name + ' artık senin!' : (prev === 'P' ? dv.name + ' düştü!' : ownerName(m.owner) + ', ' + dv.name + ' köyünü fethetti'));
-        if (prev === 'P') { if (S.cur === dv.id) { const mine = S.vil.find(x => x.owner === 'P'); if (mine) S.cur = mine.id; } if (!S.vil.some(x => x.owner === 'P')) S.over = true; }
+        if (prev === 'P' && !S.mp) { if (S.cur === dv.id) { const mine = S.vil.find(x => x.owner === 'P'); if (mine) S.cur = mine.id; } if (!S.vil.some(x => x.owner === 'P')) S.over = true; }
         pushReport(rep);
         return;
       }
@@ -865,7 +894,7 @@ function battle(m, t) {
     for (const [u, n] of Object.entries(dv.units)) { if (u === 'casus' || !n) continue; const lost = Math.round(n * r); if (lost) { rep.dLost[u] = lost; dv.units[u] = n - lost; } }
     if (dv.guest) for (const u in dv.guest) dv.guest[u] -= Math.round(dv.guest[u] * r);
     const survivors = unitSum(att);
-    if (!survivors && m.owner === 'P' && !spyOk) rep.dUnits = null;   // kimse dönmedi, rakibi göremedik
+    if (!survivors && isHuman(m.owner) && !spyOk) rep.dUnits = null;   // kimse dönmedi, rakibi göremedik
   }
   finishBattle(m, rep, att, dv, t);
 }
@@ -878,9 +907,14 @@ function finishBattle(m, rep, att, dv, t) {
   pushReport(rep);
 }
 function pushReport(rep) {
+  const lim = S.mp ? 40 : 80;
+  for (const o of new Set([rep.attOwner, rep.defOwner])) {
+    const b = beyOf(o); if (!b || !b.human) continue;
+    b.reports = b.reports || []; b.reports.unshift(JSON.parse(JSON.stringify(rep))); if (b.reports.length > lim) b.reports.length = lim;
+  }
   if (rep.attOwner !== 'P' && rep.defOwner !== 'P') return;
   S.reports.unshift(rep);
-  if (S.reports.length > 80) S.reports.length = 80;
+  if (S.reports.length > lim) S.reports.length = lim;
   if (rep.defOwner === 'P' && rep.attOwner !== 'P') hooks.notify(rep.win ? 'bad' : 'good', rep.defName + (rep.win ? ' yağmalandı' : ' saldırıyı püskürttü'));
   else if (rep.attOwner === 'P') hooks.notify(rep.win ? 'good' : 'bad', (rep.type === 'spy' ? 'Keşif: ' : 'Saldırı: ') + rep.defName + (rep.win ? ' — başarılı' : ' — başarısız'));
 }
@@ -945,27 +979,27 @@ function acceptOffer(v, id, t) {
 }
 function aiMarket(t) {
   S.market = S.market.filter(o => { if (t < o.exp) return true; const v = vil(o.vil); if (v.owner === o.owner) v.res[o.give[0]] += o.give[1]; if (o.owner === 'P') hooks.notify('info', 'Pazardaki teklifinin süresi doldu, kaynaklar geri döndü'); return false; });
-  for (const b of S.beys) {
+  for (const b of aiBeys()) {
     const v = S.vil.find(x => x.owner === b.id); if (!v) continue;
     syncRes(v, t);
     const r = v.res, hi = r.indexOf(Math.max(...r)), lo = r.indexOf(Math.min(...r));
     // oyuncunun tekliflerini değerlendir
-    for (const o of S.market.filter(x => x.owner === 'P')) {
+    for (const o of S.market.filter(x => isHuman(x.owner))) {
       const [wi, wn] = o.want, [gi, gn] = o.give, fair = wn / gn;
-      if (r[wi] > wn * 1.5 && r[wi] > r[gi] && fair <= 1.25 && Math.random() < (fair <= 1 ? .55 : .3)) {
+      if (r[wi] > wn * 1.5 && r[wi] > r[gi] && fair <= 1.25 && R() < (fair <= 1 ? .55 : .3)) {
         r[wi] -= wn; const pv = vil(o.vil);
         S.market.splice(S.market.indexOf(o), 1);
-        tradeMove(pv, v, resArr(gi, gn), 'P', t, o.merchants, true);
+        tradeMove(pv, v, resArr(gi, gn), o.owner, t, o.merchants, true);
         tradeMove(v, pv, resArr(wi, wn), b.id, t, null, true);
-        hooks.notify('good', b.name + ' takas teklifini kabul etti');
+        if (o.owner === 'P') hooks.notify('good', b.name + ' takas teklifini kabul etti');
         say('genel', b.id, pick(['Pazardaki teklifini aldım, kervan yolda.', 'Adil bir takas, anlaştık.', 'Tam ihtiyacım olan şey, kabul!']), t);
         break;
       }
     }
     // kendi teklifini koy
-    if (hi !== lo && r[hi] > 500 && r[hi] > r[lo] * 1.08 && S.market.filter(o => o.owner === b.id).length < 2 && Math.random() < .6) {
-      const gn = Math.max(200, Math.round(Math.min(r[hi] * .4, 400 + Math.random() * 2500) / 100) * 100);
-      const wn = Math.round(gn * (.8 + Math.random() * .45) / 100) * 100;
+    if (hi !== lo && r[hi] > 500 && r[hi] > r[lo] * 1.08 && S.market.filter(o => o.owner === b.id).length < 2 && R() < .6) {
+      const gn = Math.max(200, Math.round(Math.min(r[hi] * .4, 400 + R() * 2500) / 100) * 100);
+      const wn = Math.round(gn * (.8 + R() * .45) / 100) * 100;
       if (gn >= 200 && wn >= 100) { r[hi] -= gn; S.market.push({ id: ++S.uid, owner: b.id, vil: v.id, give: [hi, gn], want: [lo, wn], t, exp: t + 36 * HOUR / S.speed, merchants: Math.ceil(gn / CARRY) }); }
     }
   }
@@ -983,7 +1017,7 @@ function arrive(m, t) {
       hooks.notify('good', 'Kervan ' + to.name + ' köyüne ulaştı: ' + txt + (lost > 0 ? ' (ambar doluydu, ' + fmtN(lost) + ' kaybedildi)' : ''));
       if (to.owner && to.owner !== 'P') {
         const b = S.beys.find(x => x.id === to.owner);
-        if (b) { b.gifts = (b.gifts || 0) + m.res[0] + m.res[1] + m.res[2]; b.refusedUntil = 0;
+        if (b && !b.human) { b.gifts = (b.gifts || 0) + m.res[0] + m.res[1] + m.res[2]; b.refusedUntil = 0;
           say(sameClan('P', b.id) ? 'klan' : 'genel', b.id, pick(['Gönderdiğin kervan ulaştı, cömertliğin unutulmayacak ' + S.player.name + '.', 'Kaynaklar için sağ ol beyim, ambarlarımız doldu.', 'Bu hediye dostluğumuzu pekiştirdi.']), t); }
       }
     } else if (to.owner === 'P') hooks.notify('good', ownerName(m.owner) + ' kervanı ' + to.name + ' köyüne ulaştı: ' + txt);
@@ -1019,13 +1053,14 @@ function nextEvent() {
   for (const m of S.moves) if (m.arrive < best.t) best = { t: m.arrive, k: 'm', m };
   if (S.nextAi < best.t) best = { t: S.nextAi, k: 'ai' };
   if (S.techq && S.techq.done < best.t) best = { t: S.techq.done, k: 'tech' };
+  for (const b of S.beys) if (b.techq && b.techq.done < best.t) best = { t: b.techq.done, k: 'htech', b };
   if (S.nextChat < best.t) best = { t: S.nextChat, k: 'chat' };
   for (const c of S.chatq) if (c.t < best.t) best = { t: c.t, k: 'chatq', c };
   return best;
 }
 function processUntil(now) {
   let n = 0;
-  if (S.over) return 0;
+  if (S.over && !S.mp) return 0;
   for (let guard = 0; guard < 500000; guard++) {
     const e = nextEvent(); if (e.t > now) break;
     n++;
@@ -1035,13 +1070,13 @@ function processUntil(now) {
     } else if (e.k === 'u') {
       const v = e.v, q = v.rq[e.b], it = q[0];
       v.units[it.u] = (v.units[it.u] || 0) + 1; it.n--;
-      if (v.owner === 'P') S.stats.trained[it.u] = (S.stats.trained[it.u] || 0) + 1;
+      const st = statsOf(v.owner); if (st) st.trained[it.u] = (st.trained[it.u] || 0) + 1;
       if (it.n <= 0) { q.shift(); if (q.length) q[0].next = e.t + q[0].each; } else it.next += it.each;
     } else if (e.k === 'm') {
       S.moves.splice(S.moves.indexOf(e.m), 1); arrive(e.m, e.t);
     } else if (e.k === 'chat') {
-      S.nextChat = e.t + (45 + Math.random() * 100) * 1000;
-      if (now - e.t < 15 * 60000) aiChat(e.t);
+      S.nextChat = e.t + (45 + R() * 100) * 1000;
+      aiChat(e.t, now - e.t < 15 * 60000);
     } else if (e.k === 'chatq') {
       S.chatq.splice(S.chatq.indexOf(e.c), 1); say(e.c.ch, e.c.from, e.c.text, e.t);
       if (S.pendingRes) { S.pendingRes = false; allyResources(e.t); }
@@ -1049,19 +1084,21 @@ function processUntil(now) {
     } else if (e.k === 'tech') {
       const q = S.techq; S.techq = null; S.tech[q.id] = q.lvl;
       hooks.notify('good', 'Araştırma bitti: ' + TECH[q.id].n + ' ' + q.lvl + '. seviye');
+    } else if (e.k === 'htech') {
+      const b = e.b, q = b.techq; b.techq = null; b.tech = b.tech || {}; b.tech[q.id] = q.lvl;
     } else if (e.k === 'ai') {
       AI.tick(e.t); aiMarket(e.t); S.nextAi = e.t + HOUR / S.speed;
     }
-    if (S.over) break;
+    if (S.over && !S.mp) break;
   }
   S.lastT = now;
   return n;
 }
 
-function ownerName(o) { if (o === 'P') return S.player.name; if (o === null) return 'Terk edilmiş'; const b = S.beys.find(x => x.id === o); return b ? b.name : '?'; }
-function ownerColor(o) { if (o === 'P') return S.player.color; if (o === null) return '#8d8a80'; const b = S.beys.find(x => x.id === o); return b ? b.color : '#888'; }
+function ownerName(o) { if (o === 'P') return S.player.name; if (o === null) return 'Terk edilmiş'; const b = beyOf(o); return b ? b.name : '?'; }
+function ownerColor(o) { if (o === 'P') return S.player.color; if (o === null) return '#8d8a80'; const b = beyOf(o); return b ? b.color : '#888'; }
 function ranking() {
-  const rows = [{ id: 'P', name: S.player.name, color: S.player.color, pts: 0, n: 0 }, ...S.beys.map(b => ({ id: b.id, name: b.name, color: b.color, pts: 0, n: 0 }))];
+  const rows = [{ id: 'P', name: S.player.name, color: S.player.color, pts: 0, n: 0 }, ...S.beys.map(b => ({ id: b.id, name: b.name, color: b.color, pts: 0, n: 0, human: !!b.human }))];
   for (const v of S.vil) { const r = rows.find(x => x.id === v.owner); if (r) { r.pts += vPoints(v); r.n++; } }
   return rows.filter(r => r.n > 0 || r.id === 'P').sort((a, b) => b.pts - a.pts);
 }
@@ -1104,7 +1141,7 @@ const AI = (() => {
       else if (b === 'medrese') s = K * 0.3 - l;
       else if (b === 'kervansaray') s = K * 0.2 - l;
       s += boost[b] || 0;
-      s += Math.random() * 1.5;
+      s += R() * 1.5;
       const cc = bCost(b, l + 1);
       if (cc.some(x => x > c)) { if (b !== 'ambar') continue; }
       if (B[b].pop > pm - used && b !== 'ciftlik') continue;
@@ -1123,7 +1160,7 @@ const AI = (() => {
     if (unitUnlocked(v, 'casus') && (v.units.casus || 0) < 10) w.push(['casus', 0.3]);
     return w;
   }
-  function pickW(w) { const tot = w.reduce((a, x) => a + x[1], 0); let r = Math.random() * tot; for (const [k, x] of w) { r -= x; if (r <= 0) return k; } return w.length ? w[w.length - 1][0] : null; }
+  function pickW(w) { const tot = w.reduce((a, x) => a + x[1], 0); let r = R() * tot; for (const [k, x] of w) { r -= x; if (r <= 0) return k; } return w.length ? w[w.length - 1][0] : null; }
 
   function village(v, t, bey) {
     let reserve = [0, 0, 0];
@@ -1152,48 +1189,48 @@ const AI = (() => {
   }
   function barbarian(v) {
     for (const [u, n] of Object.entries(v.base)) { const h = v.units[u] || 0; if (h < n) v.units[u] = Math.min(n, h + Math.max(1, Math.round(n * .05))); }
-    if (Math.random() < .015) { const m = MINES[Math.floor(Math.random() * 3)]; if (v.b[m] < 14) v.b[m]++; }
+    if (R() < .015) { const m = MINES[Math.floor(R() * 3)]; if (v.b[m] < 14) v.b[m]++; }
   }
   function attack(bey, t) {
-    if (Math.random() > 0.35 * bey.aggr) return;
+    if (R() > 0.35 * bey.aggr) return;
     const mine = S.vil.filter(v => v.owner === bey.id);
-    for (const v of mine.sort(() => Math.random() - .5)) {
+    for (const v of mine.sort(() => R() - .5)) {
       const off = offPower(v.units); if (off < 250) continue;
       const busy = new Set(S.moves.filter(m => m.owner === bey.id && m.type !== 'return').map(m => m.to));
-      const canHitP = t >= S.protectUntil && t - bey.lastHitP > 6 * HOUR / S.speed;
+      const canHitP = t - bey.lastHitP > 6 * HOUR / S.speed;
       const cand = S.vil.filter(o => o.owner !== bey.id && !sameClan(o.owner, bey.id) && !busy.has(o.id) && dist(v, o) <= 9 &&
-        (o.owner === null || (o.owner === 'P' && canHitP && Math.random() < bey.aggr * .55)));
+        (o.owner === null || (isHuman(o.owner) && t >= protectOf(o.owner) && canHitP && R() < bey.aggr * .55)));
       let best = null, bscore = -Infinity;
       for (const o of cand) {
         syncRes(o, t);
         const d = defPower(o); if (off < d * 1.25) continue;
-        const score = (o.res[0] + o.res[1] + o.res[2]) / 500 - dist(v, o) + (o.owner === 'P' ? 3 * bey.aggr : 0);
+        const score = (o.res[0] + o.res[1] + o.res[2]) / 500 - dist(v, o) + (isHuman(o.owner) ? 3 * bey.aggr : 0);
         if (score > bscore) { bscore = score; best = o; }
       }
       if (!best) continue;
       const units = {}; for (const u of OFF) if (v.units[u] > 0) units[u] = v.units[u];
       // oyuncunun son köyü fethedilmez: yağmalanabilir ama beylik yok olmaz
-      const pLast = best.owner === 'P' && S.vil.filter(x => x.owner === 'P').length < 2;
+      const pLast = isHuman(best.owner) && lastVillage(best.owner);
       if ((v.units.sancakbeyi || 0) > 0 && off > defPower(best) * 2 && !pLast && (best.owner === null || bey.aggr > .6)) units.sancakbeyi = 1;
-      if (send(v, best, units, 'attack', t) === 'ok') { if (best.owner === 'P') { bey.lastHitP = t; allySupport(best, bey.id, t); } return; }
+      if (send(v, best, units, 'attack', t) === 'ok') { if (isHuman(best.owner)) { bey.lastHitP = t; allySupport(best, bey.id, t); } return; }
     }
   }
   function tick(t) {
     for (const v of S.vil) {
-      if (v.owner === 'P') continue;
+      if (isHuman(v.owner)) continue;
       syncRes(v, t);
       if (v.owner === null) { if (v.base) barbarian(v); continue; }
-      const bey = S.beys.find(b => b.id === v.owner);
+      const bey = beyOf(v.owner); if (!bey) continue;
       village(v, t, bey);
     }
-    for (const bey of S.beys) attack(bey, t);
+    for (const bey of aiBeys()) attack(bey, t);
   }
   return { tick, offPower, defPower };
 })();
 
 return {
   HOUR, RES_NAMES, MINES, B, B_ORDER, U, U_ORDER, REC_B, WORLD, TECH, TECH_ORDER,
-  reqFor, clanOf, sameClan, clanList, ownerPts, createClan, inviteBey, joinClan, leaveClan, playerSay, CLAN_MAX, techCost, techTime, canResearch, research, migrate, medreseMax, TL,
+  reqFor, isHuman, protectOf, mkVillage, clanOf, sameClan, clanList, ownerPts, createClan, inviteBey, joinClan, leaveClan, playerSay, CLAN_MAX, techCost, techTime, canResearch, research, migrate, medreseMax, TL,
   get S() { return S; }, set S(x) { S = x; },
   onNotify(fn) { log = fn; },
   maxAll(v, t) { syncRes(v, t); for (const b of B_ORDER) v.b[b] = B[b].max; v.bq = []; const c = cap(v); v.res = [c, c, c]; },
@@ -1203,6 +1240,171 @@ return {
 };
 })();
 if (typeof module !== 'undefined') module.exports = Core;
+
+</script>
+<script>
+// ============================================================
+//  UÇ BEYLERİ — çok oyunculu katman (Supabase)
+//  Dünya durumu sunucuda tek satırda (sıkıştırılmış JSON) durur.
+//  Her cihaz kendi hamlesini uygular ve sürüm kontrolüyle kaydeder;
+//  iki kişi aynı anda kaydederse hamle yeni durum üzerine yeniden uygulanır.
+// ============================================================
+const Net = (() => {
+'use strict';
+const URL = 'https://tgiqiybqfbikmdoblwba.supabase.co';
+const KEY = 'sb_publishable__r4MnoM3ecwE4T5RQR-2zw_7W046pR4';
+const AUTH_K = 'ub-auth';
+const ls = { get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }, del(k) { try { localStorage.removeItem(k); } catch (e) {} } };
+
+// ---------- kimlik (anonim giriş) ----------
+let auth = ls.get(AUTH_K);
+async function raw(path, { method = 'GET', body, headers = {}, token } = {}) {
+  const h = Object.assign({ apikey: KEY, 'Content-Type': 'application/json' }, headers);
+  if (token) h.Authorization = 'Bearer ' + token;
+  const r = await fetch(URL + path, { method, headers: h, body: body != null ? JSON.stringify(body) : undefined });
+  const txt = await r.text(); let data = null; try { data = txt ? JSON.parse(txt) : null; } catch (e) { data = txt; }
+  if (!r.ok) { const err = new Error((data && (data.message || data.msg || data.error_description || data.error)) || ('HTTP ' + r.status)); err.status = r.status; err.code = data && data.code; throw err; }
+  return data;
+}
+function keep(d) { auth = { access: d.access_token, refresh: d.refresh_token, exp: Date.now() + (d.expires_in || 3600) * 1000, uid: d.user && d.user.id }; ls.set(AUTH_K, auth); }
+async function session() {
+  if (auth && auth.access && Date.now() < auth.exp - 60000) return auth;
+  if (auth && auth.refresh) {
+    try { keep(await raw('/auth/v1/token?grant_type=refresh_token', { method: 'POST', body: { refresh_token: auth.refresh } })); return auth; }
+    catch (e) { if (e.status && e.status < 500 && e.status !== 429) { auth = null; ls.del(AUTH_K); } else throw e; }
+  }
+  keep(await raw('/auth/v1/signup', { method: 'POST', body: { data: {} } }));
+  return auth;
+}
+async function api(path, opts = {}) { const a = await session(); return raw(path, Object.assign({}, opts, { token: a.access })); }
+const rpc = (fn, args) => api('/rest/v1/rpc/' + fn, { method: 'POST', body: args });
+
+// ---------- sıkıştırma ----------
+function b64(buf) { const u = new Uint8Array(buf); let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); }
+function unb64(s) { const b = atob(s), u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u; }
+async function pack(obj) {
+  const str = JSON.stringify(obj);
+  if (typeof CompressionStream === 'undefined') return 'js:' + str;
+  const buf = await new Response(new Blob([str]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer();
+  return 'gz:' + b64(buf);
+}
+async function unpack(s) {
+  if (s.startsWith('js:')) return JSON.parse(s.slice(3));
+  const txt = await new Response(new Blob([unb64(s.slice(3))]).stream().pipeThrough(new DecompressionStream('gzip'))).text();
+  return JSON.parse(txt);
+}
+
+// ---------- dünya ↔ yerel görünüm ----------
+// Sunucudaki dünyada her gerçek oyuncunun kimliği H1, H2...; yerel oyuncu her cihazda 'P' olarak görünür.
+const OWN_KEYS = new Set(['owner', 'attOwner', 'defOwner', 'from']);
+function swapIds(x, a, b) {
+  if (Array.isArray(x)) { for (const y of x) if (y && typeof y === 'object') swapIds(y, a, b); return; }
+  for (const k in x) { const v = x[k]; if (v === a && OWN_KEYS.has(k)) x[k] = b; else if (v && typeof v === 'object') swapIds(v, a, b); }
+}
+const HCOL = ['#e3b341', '#4fc3f7', '#f06292', '#aed581', '#ffb74d', '#ce93d8', '#4db6ac', '#ff8a65'];
+function localize(W, hid) {
+  const S = JSON.parse(JSON.stringify(W));
+  const i = S.beys.findIndex(b => b.id === hid); if (i < 0) return null;
+  const me = S.beys.splice(i, 1)[0];
+  swapIds(S, hid, 'P');
+  S.player = { name: me.name, color: me.color };
+  S.tech = me.tech || {}; S.techq = me.techq || null;
+  S.clan = me.clan ? { name: me.clanName, tag: me.clan, created: me.clanAt || 0 } : null; S.clanJoinedAi = !!me.clanJoinedAi;
+  S.stats = me.stats || { trained: {}, barbWins: 0, spies: 0 };
+  S.protectUntil = me.protectUntil || 0; S.reports = me.reports || []; S.quests = me.quests || { claimed: [] };
+  S.cur = me.cur != null && S.vil[me.cur] && S.vil[me.cur].owner === 'P' ? me.cur : (S.vil.find(v => v.owner === 'P') || { id: 0 }).id;
+  S.clanChat = S.clanChat || {}; if (S.clan) S.clanChat[S.clan.tag] = S.clanChat[S.clan.tag] || [];
+  S.chat = { genel: (S.chat && S.chat.genel) || [], klan: S.clan ? S.clanChat[S.clan.tag] : [] };
+  S.chatq = S.chatq || []; S.chatSeen = { genel: 0, klan: 0 };
+  S.over = !S.vil.some(v => v.owner === 'P');
+  S._me = { hid, idx: i, uid: me.uid };
+  return S;
+}
+function delocalize(S0) {
+  const S = JSON.parse(JSON.stringify(S0)), m = S._me;
+  const me = { id: m.hid, human: true, uid: m.uid, name: S.player.name, color: S.player.color, aggr: 0, lastHitP: 0,
+    clan: S.clan ? S.clan.tag : null, clanName: S.clan ? S.clan.name : null, clanAt: S.clan ? S.clan.created : 0, clanJoinedAi: !!S.clanJoinedAi,
+    tech: S.tech, techq: S.techq, stats: S.stats, protectUntil: S.protectUntil, reports: S.reports, quests: S.quests, cur: S.cur };
+  swapIds(S, 'P', m.hid);
+  if (S.clan) S.clanChat[S.clan.tag] = S.chat.klan;
+  S.chat = { genel: S.chat.genel, klan: [] };
+  S.beys.splice(Math.min(m.idx, S.beys.length), 0, me);
+  for (const k of ['_me', 'player', 'tech', 'techq', 'clan', 'clanJoinedAi', 'stats', 'protectUntil', 'reports', 'quests', 'cur', 'chatSeen', 'over', 'pendingRes', 'pendingSupport']) delete S[k];
+  return S;
+}
+// yeni oyuncuya haritada boş bir köy verir (diğer oyunculardan ve beylerden uzakta)
+function addHuman(W, hid, uid, name, village, t) {
+  if (W.beys.some(b => b.id === hid)) return W;
+  const occupied = W.vil.filter(v => v.owner !== null);
+  const d = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+  let best = null, bs = Infinity;
+  for (const v of W.vil) {
+    if (v.owner !== null) continue;
+    const near = Math.min(...occupied.map(o => d(o, v)));
+    if (near < 3.5) continue;
+    const s = Math.abs(near - 5) * 2 + d(v, { x: 12, y: 12 }) * .4;
+    if (s < bs) { bs = s; best = v; }
+  }
+  if (!best) best = W.vil.find(v => v.owner === null);
+  if (!best) throw new Error('Haritada boş köy kalmadı');
+  const nv = Core.mkVillage(best.id, best.x, best.y, String(village || best.name).slice(0, 22), hid,
+    { konak: 1, kereste: 1, tas: 1, demir: 1, ambar: 1, ciftlik: 1 }, {}, [500, 500, 400], t);
+  W.vil[best.id] = nv;
+  W.moves = W.moves.filter(m => m.to !== best.id || m.type === 'return' || m.type === 'tradeback');
+  const n = W.beys.filter(b => b.human).length;
+  W.beys.push({ id: hid, human: true, uid, name: String(name || 'Beylik').slice(0, 28), color: HCOL[n % HCOL.length], aggr: 0, lastHitP: 0,
+    clan: null, clanName: null, clanJoinedAi: false, tech: {}, techq: null, stats: { trained: {}, barbWins: 0, spies: 0 },
+    protectUntil: t + 3 * 24 * Core.HOUR / W.speed, reports: [], quests: { claimed: [] }, cur: best.id });
+  W.chat.genel.push({ id: ++W.uid, t, from: 'SYS', text: String(name || 'Yeni bir bey') + ' dünyaya katıldı.' });
+  return W;
+}
+
+// ---------- sunucu işlemleri ----------
+const CODE_CH = 'ABCDEFGHJKLMNPRSTUVYZ23456789';
+const newCode = () => Array.from({ length: 6 }, () => CODE_CH[Math.floor(Math.random() * CODE_CH.length)]).join('');
+const normCode = c => String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+
+async function createWorld(W, name, pname) {
+  for (let i = 0; i < 5; i++) {
+    const code = newCode();
+    try {
+      const id = await rpc('create_world', { p_code: code, p_name: name, p_speed: W.speed, p_state: await pack(W), p_pname: pname });
+      return { id, code, hid: 'H1', version: 1 };
+    } catch (e) { if (e.code !== '23505') throw e; }
+  }
+  throw new Error('Kod üretilemedi, tekrar dene');
+}
+async function joinWorld(code, pname) {
+  const r = await rpc('join_world', { p_code: normCode(code), p_pname: pname });
+  const row = Array.isArray(r) ? r[0] : r;
+  if (!row || !row.r_world) throw new Error('Bu kodla bir dünya bulunamadı');
+  return { id: row.r_world, hid: row.r_hid, code: normCode(code) };
+}
+async function load(id) {
+  const rows = await api('/rest/v1/worlds?id=eq.' + id + '&select=state,version,code,name,speed');
+  if (!rows || !rows.length) throw new Error('Dünya bulunamadı ya da erişimin yok');
+  const r = rows[0];
+  return { W: await unpack(r.state), version: r.version, code: r.code, name: r.name };
+}
+// sürüm tutarsa kaydeder ve yeni sürümü döner; başka biri önce kaydettiyse null
+async function save(id, W, version) {
+  const rows = await api('/rest/v1/worlds?id=eq.' + id + '&version=eq.' + version + '&select=version', {
+    method: 'PATCH', headers: { Prefer: 'return=representation' },
+    body: { state: await pack(W), version: version + 1, updated_at: new Date().toISOString() } });
+  return rows && rows.length ? rows[0].version : null;
+}
+async function version(id) { const rows = await api('/rest/v1/worlds?id=eq.' + id + '&select=version'); return rows && rows.length ? rows[0].version : null; }
+async function myWorlds() {
+  const a = await session();
+  const rows = await api('/rest/v1/world_players?select=hid,name,world_id,worlds(code,name,speed,updated_at)&user_id=eq.' + a.uid);
+  return (rows || []).filter(r => r.worlds).map(r => ({ id: r.world_id, hid: r.hid, pname: r.name, code: r.worlds.code, name: r.worlds.name, speed: r.worlds.speed, updated: r.worlds.updated_at }))
+    .sort((x, y) => String(y.updated).localeCompare(String(x.updated)));
+}
+async function players(id) { return api('/rest/v1/world_players?select=hid,name,joined_at&world_id=eq.' + id + '&order=joined_at'); }
+async function leaveWorld(id) { const a = await session(); return api('/rest/v1/world_players?world_id=eq.' + id + '&user_id=eq.' + a.uid, { method: 'DELETE' }); }
+
+return { session, createWorld, joinWorld, load, save, version, myWorlds, players, leaveWorld, localize, delocalize, addHuman, normCode, get uid() { return auth && auth.uid; } };
+})();
 
 </script>
 <script>
@@ -1272,7 +1474,8 @@ let S = null, tab = 'koy', sig = '', lastSave = 0, catching = false, awayLog = [
 const drafts = {};
 const map = { ox: null, oy: null, T: 46, sel: null, drag: null };
 
-C.onNotify((kind, msg) => { if (catching) { awayLog.push([kind, msg]); return; } if (kind !== 'build' || S.speed < 50) toast(msg, kind); });
+let quiet = false;
+C.onNotify((kind, msg) => { if (quiet) return; if (catching) { awayLog.push([kind, msg]); return; } if (kind !== 'build' || S.speed < 50) toast(msg, kind); });
 
 function toast(msg, kind = 'info') {
   const box = $('toasts'); if (box.children.length > 2) box.firstChild.remove();
@@ -1282,10 +1485,121 @@ function toast(msg, kind = 'info') {
 const cur = () => S.vil[S.cur];
 const myVillages = () => S.vil.filter(v => v.owner === 'P');
 
-function save() { if (!S) return; S.lastT = now(); store.set(JSON.stringify(S)); lastSave = now(); }
+const LS = { get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }, del(k) { try { localStorage.removeItem(k); } catch (e) {} } };
+function save() {
+  if (!S) return; S.lastT = now(); lastSave = now();
+  if (MPX) { LS.set('ub-mp-cache-' + MPX.id, { S, ver: MPX.ver }); return; }
+  store.set(JSON.stringify(S));
+}
+
+// ---------- çok oyunculu ----------
+// MPX: açık dünya { id, code, hid, name, ver, pending: [hamle fonksiyonları], pushing, polling }
+let MPX = null;
+// Bir hamleyi uygular; çok oyunculuda sunucuya gönderilmek üzere sıraya koyar.
+// Başkası araya girerse hamle yeni dünya durumuna yeniden uygulanır, bu yüzden fn her seferinde cur()/C.vil(id) ile köyü yeniden bulmalı.
+function act(fn) {
+  const r = fn();
+  if (MPX && (r === undefined || r === 'ok')) { MPX.pending.push(fn); setTimeout(pushNow, 150); }
+  return r;
+}
+function setNet(st) { const d = $('netDot'); if (!d) return; d.hidden = !MPX; d.className = 'netdot' + (st && st !== 'ok' ? ' ' + st : ''); if (MPX) MPX.net = st; }
+const repKey = r => r.t + ':' + r.from + ':' + r.to + ':' + r.type;
+function adopt(W, ver) {
+  const had = !!S, keepCur = had ? S.cur : null;
+  const seen = (had && S.chatSeen) || LS.get('ub-seen-' + MPX.id) || { genel: 0, klan: 0 };
+  const known = new Set(had ? S.reports.map(repKey) : []), readK = new Set(had ? S.reports.filter(r => r.read).map(repKey) : []);
+  const L = Net.localize(W, MPX.hid); if (!L) throw new Error('Bu dünyada beyliğin bulunamadı');
+  if (keepCur != null && L.vil[keepCur] && L.vil[keepCur].owner === 'P') L.cur = keepCur;
+  L.chatSeen = seen;
+  C.S = S = L; MPX.ver = ver;
+  quiet = true; try { C.processUntil(now()); } finally { quiet = false; }
+  for (const r of S.reports) {
+    if (readK.has(repKey(r))) r.read = true;
+    else if (had && !known.has(repKey(r)) && !r.read) {
+      if (r.defOwner === 'P' && r.attOwner !== 'P') toast(r.defName + (r.win ? ' yağmalandı' : ' saldırıyı püskürttü'), r.win ? 'bad' : 'good');
+      else if (r.attOwner === 'P') toast((r.type === 'spy' ? 'Keşif: ' : 'Saldırı: ') + r.defName + (r.win ? ' — başarılı' : ' — başarısız'), r.win ? 'good' : 'bad');
+    }
+  }
+  if (had && !$('start')) { sig = ''; render(); }
+}
+async function pushNow() {
+  if (!MPX || MPX.pushing) return;
+  const M = MPX; M.pushing = true; setNet('sync');
+  try {
+    for (let tries = 0; tries < 8; tries++) {
+      const n = M.pending.length;
+      C.processUntil(now());
+      const v = await Net.save(M.id, Net.delocalize(S), M.ver);
+      if (MPX !== M) return;
+      if (v != null) { M.ver = v; M.pending.splice(0, n); M.lastPush = now(); M.pushedT = S.lastT; save(); if (!M.pending.length) break; continue; }
+      // başka bir oyuncu önce kaydetti: yeni durumu al, bekleyen hamleleri üstüne yeniden uygula
+      const R = await Net.load(M.id); if (MPX !== M) return;
+      const fns = M.pending.slice();
+      adopt(R.W, R.version);
+      for (const fn of fns) { try { fn(); } catch (e) {} }
+      save();
+    }
+    setNet('ok'); M.fails = 0;
+  } catch (e) { M.fails = (M.fails || 0) + 1; M.retryAt = now() + Math.min(30000, 3000 * M.fails); setNet('off'); }
+  finally { M.pushing = false; }
+}
+async function poll() {
+  const M = MPX;
+  if (!M || M.pushing || M.polling || document.hidden || !S) return;
+  if (M.pending.length) { if (now() >= (M.retryAt || 0)) pushNow(); return; }
+  M.polling = true;
+  try {
+    const v = await Net.version(M.id);
+    if (MPX === M && v != null && v > M.ver) {
+      const R = await Net.load(M.id);
+      if (MPX === M && !M.pending.length && !M.pushing) { adopt(R.W, R.version); save(); }
+    } else if (MPX === M && now() - (M.lastPush || 0) > 180000 && S.lastT - (M.pushedT || 0) > 60000) { M.polling = false; pushNow(); }
+    if (MPX === M && M.net !== 'sync') setNet('ok');
+  } catch (e) { setNet('off'); }
+  finally { M.polling = false; }
+}
+setInterval(poll, 4000);
+function loading(msg) {
+  $('top').hidden = true; $('tabs').hidden = true; closeSheet();
+  const old = $('start'); if (old) old.remove();
+  $('view').innerHTML = `<div class="loadbox"><div class="star-row">${STAR}</div><div>${esc(msg)}</div></div>`;
+}
+// dünyaya gir (gerekirse haritaya yeni köy ekleyerek)
+async function mpOpen(info, me) {
+  loading('Dünyaya bağlanılıyor…');
+  S = null; C.S = null;
+  MPX = { id: info.id, code: info.code, hid: info.hid, name: info.name || '', ver: 0, pending: [], pushing: false };
+  const M = MPX;
+  try {
+    let R = await Net.load(info.id);
+    M.code = R.code; M.name = R.name;
+    for (let i = 0; i < 8 && !R.W.beys.some(b => b.id === info.hid); i++) {
+      Net.addHuman(R.W, info.hid, Net.uid, (me && me.name) || 'Bey', (me && me.village) || '', now());
+      const v = await Net.save(info.id, R.W, R.version);
+      if (v != null) { R.version = v; break; }
+      R = await Net.load(info.id);
+    }
+    if (MPX !== M) return;
+    adopt(R.W, R.version);
+    M.lastPush = now(); M.pushedT = S.lastT;
+  } catch (e) {
+    const c = LS.get('ub-mp-cache-' + info.id);
+    if (MPX !== M) return;
+    if (!c || !c.S) { MPX = null; showStart(e.message || 'Bağlanılamadı'); return; }
+    C.S = S = c.S; M.ver = c.ver; C.processUntil(now());
+    toast('İnternet yok: son kayıttan devam ediliyor', 'bad');
+  }
+  LS.set('ub-mode', { mp: { id: M.id, code: M.code, hid: M.hid, name: M.name } });
+  save(); tab = 'koy'; map.ox = null; overShown = false; showGame(); setNet(M.net || 'ok');
+}
+function leaveToMenu() {
+  save(); MPX = null; S = null; C.S = null; LS.set('ub-mode', { sp: true }); closeSheet(); setNet(); showStart();
+}
 
 // ---------- boot ----------
 function boot() {
+  const mode = LS.get('ub-mode');
+  if (mode && mode.mp) { mpOpen(mode.mp); return; }
   const raw = store.get();
   if (raw) {
     try {
@@ -1305,42 +1619,113 @@ function boot() {
   showStart();
 }
 
-function showStart() {
-  $('top').hidden = true; $('tabs').hidden = true; $('view').innerHTML = '';
+function showStart(err) {
+  $('top').hidden = true; $('tabs').hidden = true; $('view').innerHTML = ''; setNet();
+  const old = $('start'); if (old) old.remove();
   const el = document.createElement('div'); el.className = 'start'; el.id = 'start';
+  const hasSp = !!store.get();
   el.innerHTML = `<div class="box">
     <div class="star-row">${STAR}</div>
     <div class="kicker">Anadolu · XIII. yüzyıl</div>
     <h1>Uç Beyleri</h1>
-    <p>Uç boylarında küçük bir köyün beyisin. Kaynak topla, ordunu kur, terk edilmiş köyleri yağmala ve yedi komşu beylikle Anadolu'nun hâkimiyeti için yarış.</p>
-    <label class="field">Beyliğinin adı<input id="stName" maxlength="28" value="Kızılırmak Beyliği" autocomplete="off"></label>
-    <label class="field">İlk köyünün adı<input id="stVil" maxlength="22" value="Kızılcahamam" autocomplete="off"></label>
-    <div class="field">Dünya hızı
+    <p>Uç boylarında küçük bir köyün beyisin. Kaynak topla, ordunu kur, terk edilmiş köyleri yağmala ve Anadolu'nun hâkimiyeti için yarış.</p>
+    <div class="seg two"><button data-mode="sp">Tek başına</button><button data-mode="mp">Arkadaşlarla</button></div>
+    ${err ? `<div class="mperr">${esc(err)}</div>` : ''}
+    <label class="field">Beyliğinin adı<input id="stName" maxlength="28" value="${esc(LS.get('ub-name') || 'Kızılırmak Beyliği')}" autocomplete="off"></label>
+    <label class="field">İlk köyünün adı<input id="stVil" maxlength="22" value="${esc(LS.get('ub-vil') || 'Kızılcahamam')}" autocomplete="off"></label>
+    <div class="field" id="spdField">Dünya hızı
       <div class="speeds">
         <label><input type="radio" name="spd" value="1"><b>Gerçek zaman (1×)</b><span>Binalar saatler, fetih haftalar sürer.</span></label>
         <label><input type="radio" name="spd" value="10" checked><b>Hızlı dünya (10×)</b><span>Her şey 10 kat hızlı. Birkaç günde fetih.</span></label>
         <label><input type="radio" name="spd" value="100"><b>Deneme (100×)</b><span>Oyunu hızlıca denemek için.</span></label>
       </div>
     </div>
-    <div class="field">Oyun modu
-      <div class="speeds">
-        <label><input type="radio" name="tst" value="" checked><b>Normal</b><span>Sıfırdan başla.</span></label>
-        <label><input type="radio" name="tst" value="res"><b>Test: kaynaklar dolu</b><span>Ambar dolu başlar, istediğin an tek dokunuşla yeniden doldurursun.</span></label>
-        <label><input type="radio" name="tst" value="full"><b>Test: bütün madenler en üst seviye</b><span>Kereste, Taş, Demir ve Ambar 30. seviye, kaynaklar dolu.</span></label>
-        <label><input type="radio" name="tst" value="max"><b>Test: bütün binalar son seviye</b><span>Köydeki her bina en üst seviyede, kaynaklar dolu.</span></label>
+    <div id="spPane" class="mpbox">
+      ${hasSp ? '<button class="btn firuze" id="stCont">Kayıtlı oyununa devam et</button>' : ''}
+      <div class="field">Oyun modu
+        <div class="speeds">
+          <label><input type="radio" name="tst" value="" checked><b>Normal</b><span>Sıfırdan başla.</span></label>
+          <label><input type="radio" name="tst" value="res"><b>Test: kaynaklar dolu</b><span>Ambar dolu başlar, istediğin an tek dokunuşla yeniden doldurursun.</span></label>
+          <label><input type="radio" name="tst" value="full"><b>Test: bütün madenler en üst seviye</b><span>Kereste, Taş, Demir ve Ambar 30. seviye, kaynaklar dolu.</span></label>
+          <label><input type="radio" name="tst" value="max"><b>Test: bütün binalar son seviye</b><span>Köydeki her bina en üst seviyede, kaynaklar dolu.</span></label>
+        </div>
       </div>
+      ${hasSp ? '<div class="muted small" style="text-align:center">Yeni oyun kurarsan kayıtlı tek kişilik oyunun silinir.</div>' : ''}
+      <button class="bigbtn" id="stGo">${hasSp ? 'Yeni oyun kur' : 'Beyliği kur'}</button>
     </div>
-    <button class="bigbtn" id="stGo">Beyliği kur</button>
+    <div id="mpPane" class="mpbox" hidden>
+      <section class="card mpbox"><b>Yeni dünya kur</b><div class="muted small">Seçtiğin hızda bir dünya kurulur. Sana 6 harfli bir kod verilir; arkadaşların bu kodla aynı dünyaya katılır.</div>
+        <button class="bigbtn" id="mpNew">Dünya kur</button></section>
+      <section class="card mpbox"><b>Koda katıl</b><div class="mprow"><input id="mpCode" maxlength="6" placeholder="KOD" autocomplete="off" aria-label="Dünya kodu"><button class="btn" id="mpJoin">Katıl</button></div></section>
+      <section class="card mpbox"><b>Dünyaların</b><div class="wlist" id="mpList"><div class="muted small">Yükleniyor…</div></div></section>
+      <div class="muted small" style="text-align:center">Hesabın bu cihaza bağlıdır. Uygulamanın verilerini silersen dünyalarına bu cihazdan giremezsin.</div>
+    </div>
   </div>`;
   $('app').appendChild(el);
+  let mode = LS.get('ub-startmode') || (hasSp ? 'sp' : 'mp');
+  const setMode = m => {
+    mode = m; LS.set('ub-startmode', m);
+    el.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('on', b.dataset.mode === m));
+    $('spPane').hidden = m !== 'sp'; $('mpPane').hidden = m !== 'mp';
+    if (m === 'mp') loadList();
+  };
+  el.querySelector('.seg').onclick = e => { const b = e.target.closest('[data-mode]'); if (b) setMode(b.dataset.mode); };
+  const names = () => { const name = $('stName').value.trim() || 'Kızılırmak Beyliği', village = $('stVil').value.trim() || 'Kızılcahamam'; LS.set('ub-name', name); LS.set('ub-vil', village); return { name, village }; };
+  const speedV = () => +document.querySelector('input[name=spd]:checked').value;
+  const busy = (on, msg) => { el.querySelectorAll('button').forEach(b => b.disabled = on); if (msg) { const l = $('mpList'); if (l) l.innerHTML = `<div class="muted small">${esc(msg)}</div>`; } };
+  const fail = e => { busy(false); showStart(netErr(e)); setTimeout(() => { const b = document.querySelector('[data-mode=mp]'); if (b) b.click(); }, 0); };
+  async function loadList() {
+    const box = $('mpList'); if (!box) return;
+    try {
+      const ws = await Net.myWorlds(); if (!$('mpList')) return;
+      box.innerHTML = ws.length ? ws.map(w => `<button data-world="${w.id}" data-hid="${esc(w.hid)}" data-code="${esc(w.code)}"><span><b>${esc(w.name)}</b><div class="muted small">${esc(w.pname)} · ${w.speed}× · ${w.updated ? clock(Date.parse(w.updated)) : ''}</div></span><span class="code">${esc(w.code)}</span></button>`).join('')
+        : '<div class="muted small">Henüz bir dünyan yok. Kur ya da arkadaşının kodunu yaz.</div>';
+    } catch (e) { if ($('mpList')) box.innerHTML = `<div class="mperr">${esc(netErr(e))}</div>`; }
+  }
+  $('mpList').onclick = e => { const b = e.target.closest('[data-world]'); if (!b) return; el.remove(); mpOpen({ id: b.dataset.world, hid: b.dataset.hid, code: b.dataset.code }); };
+  $('mpNew').onclick = async () => {
+    const { name, village } = names(); busy(true, 'Dünya kuruluyor…');
+    try {
+      await Net.session();
+      const S0 = C.newGame({ now: now(), speed: speedV(), name, village, mp: true });
+      S0._me = { hid: 'H1', idx: S0.beys.length, uid: Net.uid }; S0.clanChat = {};
+      const r = await Net.createWorld(Net.delocalize(S0), name.replace(/ Beyliği$/, '') + ' Dünyası', name);
+      el.remove(); await mpOpen({ id: r.id, hid: r.hid, code: r.code });
+      if (MPX) showCode(true);
+    } catch (e) { fail(e); }
+  };
+  $('mpJoin').onclick = async () => {
+    const code = Net.normCode($('mpCode').value); if (code.length !== 6) { toast('Kod 6 karakter olmalı', 'bad'); return; }
+    const me = names(); busy(true, 'Dünya aranıyor…');
+    try { const r = await Net.joinWorld(code, me.name); el.remove(); await mpOpen(r, me); if (MPX) toast('Dünyaya katıldın! Köyün haritada hazır.', 'good'); }
+    catch (e) { fail(e); }
+  };
+  const cont = $('stCont'); if (cont) cont.onclick = () => { el.remove(); LS.set('ub-mode', { sp: true }); boot(); };
   $('stGo').onclick = () => {
-    const name = $('stName').value.trim() || 'Kızılırmak Beyliği', village = $('stVil').value.trim() || 'Kızılcahamam';
-    const speed = +document.querySelector('input[name=spd]:checked').value;
+    const { name, village } = names();
+    const speed = speedV();
     const test = document.querySelector('input[name=tst]:checked').value || null;
     C.S = S = C.newGame({ now: now(), speed, name, village, test });
-    el.remove(); save(); tab = 'koy'; map.ox = null; showGame();
+    LS.set('ub-mode', { sp: true });
+    el.remove(); save(); tab = 'koy'; map.ox = null; overShown = false; showGame();
     toast('Beyliğin kuruldu. İlk görev seni bekliyor.', 'good');
   };
+  setMode(mode);
+}
+function netErr(e) {
+  const m = (e && e.message) || '';
+  if (/Failed to fetch|NetworkError|Load failed/i.test(m)) return 'Sunucuya ulaşılamadı. İnternet bağlantını kontrol et.';
+  if (/anonymous/i.test(m)) return 'Supabase\'de anonim giriş kapalı görünüyor.';
+  if (/relation|function .* does not exist|schema cache/i.test(m)) return 'Sunucu henüz hazır değil (SQL kurulumu eksik).';
+  return m || 'Bir şeyler ters gitti';
+}
+function showCode(first) {
+  sheet(`<div class="shead"><h3>${first ? 'Dünyan kuruldu' : 'Dünya kodu'}</h3><button class="x" data-close aria-label="Kapat">×</button></div>
+    <div class="muted">Arkadaşların uygulamayı açıp <b>Arkadaşlarla → Koda katıl</b> bölümüne bu kodu yazsın:</div>
+    <div class="bigcode" id="bigCode">${esc(MPX.code)}</div>
+    <button class="btn firuze" id="cpCode">Kodu kopyala</button>`, () => {
+    $('cpCode').onclick = async () => { try { await navigator.clipboard.writeText(MPX.code); toast('Kod kopyalandı', 'good'); } catch (e) { const r = document.createRange(); r.selectNodeContents($('bigCode')); const sl = getSelection(); sl.removeAllRanges(); sl.addRange(r); toast('Kodu seçtim, uzun basıp kopyala', 'info'); } };
+  });
 }
 
 function showGame() {
@@ -1429,10 +1814,27 @@ $('setBtn').onclick = () => {
     <div class="card small"><div><b>Beylik:</b> ${esc(S.player.name)}</div><div><b>Dünya hızı:</b> ${S.speed}×</div>
     <div><b>Başlangıç:</b> ${clock(S.created)}</div>
     <div><b>Acemi koruması:</b> ${now() < S.protectUntil ? dur(S.protectUntil - now()) + ' kaldı' : 'bitti'}</div></div>
+    ${MPX ? `<section class="card"><b>Çok oyunculu dünya</b><div class="bigcode" style="font-size:26px">${esc(MPX.code)}</div>
+      <div class="small">${S.beys.filter(b => b.human).length + 1} oyuncu: <b style="color:${S.player.color}">${esc(S.player.name)}</b>${S.beys.filter(b => b.human).map(b => `, <b style="color:${b.color}">${esc(b.name)}</b>`).join('')}</div>
+      <div class="small muted">Bağlantı: ${{ ok: 'senkron', sync: 'kaydediliyor…', off: 'internet yok, tekrar deneniyor' }[MPX.net || 'ok']}</div>
+      <div class="chips"><button class="btn firuze" id="mpShare">Kodu paylaş</button><button class="btn sec" id="mpMenu">Ana menü</button></div></section>
+      <button class="btn red" id="mpLeave">Bu dünyadan ayrıl</button>` : `
     <div class="muted small">Oyun bu cihazda kaydedilir. Uygulamayı kapatsan da dünya işlemeye devam eder; geri döndüğünde aradaki her şey hesaplanır.</div>
+    <button class="btn firuze" id="spMenu">Ana menü · Arkadaşlarla oyna</button>
     <section class="card"><b>Test araçları</b><div class="muted small">Oyunu denerken kullanman için. ${S.test ? 'Bu oyun test modunda.' : ''}</div>
       <div class="chips"><button class="btn firuze" id="tFill">Kaynakları doldur</button><button class="btn sec" id="tMines">Madenleri en üst seviyeye çıkar</button><button class="btn" id="tMax">Bütün binaları son seviyeye çıkar</button></div></section>
-    <button class="btn red" id="resetBtn">Yeni oyun başlat</button>`, box => {
+    <button class="btn red" id="resetBtn">Yeni oyun başlat</button>`}`, box => {
+    if (MPX) {
+      $('mpShare').onclick = () => showCode(false);
+      $('mpMenu').onclick = leaveToMenu;
+      let armedL = false;
+      $('mpLeave').onclick = async () => {
+        if (!armedL) { armedL = true; $('mpLeave').textContent = 'Emin misin? Dünya listenden çıkar, geri dönemezsin'; return; }
+        const id = MPX.id; try { await Net.leaveWorld(id); LS.del('ub-mp-cache-' + id); leaveToMenu(); } catch (e) { toast(netErr(e), 'bad'); }
+      };
+      return;
+    }
+    $('spMenu').onclick = leaveToMenu;
     $('tFill').onclick = () => { C.fillRes(cur(), now()); S.test = S.test || 'res'; save(); renderTop(); toast('Ambar dolduruldu', 'good'); };
     $('tMax').onclick = () => { C.maxAll(cur(), now()); S.test = 'max'; save(); closeSheet(); sig = ''; render(); toast('Bütün binalar son seviyede, ambar dolu', 'good'); };
     $('tMines').onclick = () => { const v = cur(); C.syncRes(v, now()); for (const m of C.MINES) v.b[m] = C.B[m].max; v.b.ambar = C.B.ambar.max; v.b.ciftlik = Math.max(v.b.ciftlik, 20); S.test = 'full'; C.fillRes(v, now()); save(); sig = ''; render(); toast('Madenler ve Ambar 30. seviyede, kaynaklar dolu', 'good'); };
@@ -2598,18 +3000,20 @@ function liveKoy() {
 $('view').addEventListener('click', e => {
   if (tab !== 'koy') return;
   if (e.target.closest('[data-claim]')) {
-    const v = cur(), q = activeQuest(); if (!q || !q.ok()) return;
-    C.syncRes(v, now()); const c = C.cap(v);
-    for (let i = 0; i < 3; i++) v.res[i] = Math.min(Math.max(c, v.res[i]), v.res[i] + q.r[i]);
-    S.quests.claimed.push(q.id); toast('Ödül ambara eklendi', 'good'); save(); liveKoy(); renderTop(); return;
+    const r = act(() => { const v = cur(), q = activeQuest(); if (!q || !q.ok()) return 'no';
+      C.syncRes(v, now()); const c = C.cap(v);
+      for (let i = 0; i < 3; i++) v.res[i] = Math.min(Math.max(c, v.res[i]), v.res[i] + q.r[i]);
+      S.quests.claimed.push(q.id); return 'ok'; });
+    if (r !== 'ok') return;
+    toast('Ödül ambara eklendi', 'good'); save(); liveKoy(); renderTop(); return;
   }
   const qb = e.target.closest('[data-qb]'); if (qb) { selectBuilding(qb.dataset.qb); return; }
   const pop = e.target.closest('#pop'); if (!pop) return;
   if (e.target.closest('[data-popclose]')) { selectBuilding(null); return; }
   if (e.target.closest('[data-pmore]')) { const b = SC.sel; openBuilding(b); return; }
-  if (e.target.closest('[data-pcancel]')) { C.cancelLast(cur(), now()); save(); liveKoy(); renderTop(); return; }
+  if (e.target.closest('[data-pcancel]')) { act(() => C.cancelLast(cur(), now())); save(); liveKoy(); renderTop(); return; }
   if (e.target.closest('[data-pup]')) {
-    const b = SC.sel, r = C.upgrade(cur(), b, now());
+    const b = SC.sel, r = act(() => C.upgrade(cur(), b, now()));
     if (r === 'ok') { toast(C.B[b].n + ' inşaatı başladı', 'info'); save(); liveKoy(); renderTop(); }
   }
 });
@@ -2785,27 +3189,27 @@ function openBuilding(b) {
     const ov = box.parentNode; ov.dataset.b = b; ov.dataset.sig = bSheetSig(b);
     box.addEventListener('click', e => {
       const up = e.target.closest('[data-up]');
-      if (up) { const r = C.upgrade(cur(), b, now()); if (r === 'ok') { toast(C.B[b].n + ' inşaatı başladı', 'info'); save(); sig = ''; render(); } return; }
+      if (up) { const r = act(() => C.upgrade(cur(), b, now())); if (r === 'ok') { toast(C.B[b].n + ' inşaatı başladı', 'info'); save(); sig = ''; render(); } return; }
       const cv0 = cur();
       const rsel = e.target.closest('.rsels[data-side] .rsel');
       if (rsel) { const side = rsel.parentNode.dataset.side, i = +rsel.dataset.i; if (side === 'g') mkDraft.gi = i; else mkDraft.wi = i; rsel.parentNode.querySelectorAll('.rsel').forEach(x => x.classList.toggle('on', x === rsel)); liveMarket(box.parentNode, cv0); return; }
       const mf = e.target.closest('[data-mkf]'); if (mf) { mkFilter = +mf.dataset.mkf; liveBSheet(); return; }
       if (e.target.closest('[data-mkcreate]')) {
-        const r = C.createOffer(cv0, mkDraft.gi, +$('mkGn').value, mkDraft.wi, +$('mkWn').value, now());
+        const gi = mkDraft.gi, gn = +$('mkGn').value, wi = mkDraft.wi, wn = +$('mkWn').value, r = act(() => C.createOffer(cur(), gi, gn, wi, wn, now()));
         if (r === 'ok') { toast('Teklif pazara kondu', 'good'); mkDraft.gn = ''; mkDraft.wn = ''; save(); liveBSheet(); renderTop(); }
         else toast({ same: 'Farklı iki kaynak seç', empty: 'Miktarları yaz', ratio: 'Oran en fazla 1:3 olabilir', res: 'Ambarda yeterli kaynak yok', merchants: 'Yeterli tüccar yok', limit: 'En fazla 6 teklif koyabilirsin', nobuild: 'Önce Kervansaray kur' }[r] || 'Teklif konamadı', 'bad');
         return;
       }
-      const mc = e.target.closest('[data-mkcancel]'); if (mc) { C.cancelOffer(+mc.dataset.mkcancel, now()); toast('Teklif geri çekildi', 'info'); save(); liveBSheet(); renderTop(); return; }
+      const mc = e.target.closest('[data-mkcancel]'); if (mc) { const id = +mc.dataset.mkcancel; act(() => C.cancelOffer(id, now())); toast('Teklif geri çekildi', 'info'); save(); liveBSheet(); renderTop(); return; }
       const ma = e.target.closest('[data-mkaccept]');
-      if (ma) { const r = C.acceptOffer(cv0, +ma.dataset.mkaccept, now()); toast(r === 'ok' ? 'Takas yapıldı, kervanlar yolda' : { res: 'Ambarda yeterli kaynak yok', merchants: 'Yeterli tüccar yok', gone: 'Teklif artık yok' }[r] || 'Takas yapılamadı', r === 'ok' ? 'good' : 'bad'); save(); liveBSheet(); renderTop(); return; }
+      if (ma) { const id = +ma.dataset.mkaccept, r = act(() => C.acceptOffer(cur(), id, now())); toast(r === 'ok' ? 'Takas yapıldı, kervanlar yolda' : { res: 'Ambarda yeterli kaynak yok', merchants: 'Yeterli tüccar yok', gone: 'Teklif artık yok' }[r] || 'Takas yapılamadı', r === 'ok' ? 'good' : 'bad'); save(); liveBSheet(); renderTop(); return; }
       const rs = e.target.closest('[data-research]');
-      if (rs) { const id = rs.dataset.research, r = C.research(cur(), id, now()); if (r === 'ok') { toast(C.TECH[id].n + ' araştırması başladı', 'info'); save(); liveBSheet(); renderTop(); } else toast({ busy: 'Aynı anda tek araştırma yapılabilir', res: 'Kaynaklar yetmiyor', cap: 'Ambar bu maliyeti alamıyor', req: 'Önce gereksinimleri tamamla' }[r] || 'Araştırma başlatılamadı', 'bad'); return; }
+      if (rs) { const id = rs.dataset.research, r = act(() => C.research(cur(), id, now())); if (r === 'ok') { toast(C.TECH[id].n + ' araştırması başladı', 'info'); save(); liveBSheet(); renderTop(); } else toast({ busy: 'Aynı anda tek araştırma yapılabilir', res: 'Kaynaklar yetmiyor', cap: 'Ambar bu maliyeti alamıyor', req: 'Önce gereksinimleri tamamla' }[r] || 'Araştırma başlatılamadı', 'bad'); return; }
       const mx = e.target.closest('[data-smax]');
       if (mx) { const u = mx.dataset.smax, inp = $('sq-' + u); inp.value = C.maxTrain(cur(), u) || ''; drafts[u] = inp.value; liveBSheet(); return; }
       const tb = e.target.closest('[data-strain]');
       if (tb) {
-        const u = tb.dataset.strain, inp = $('sq-' + u), n = +inp.value, r = C.train(cur(), u, n, now());
+        const u = tb.dataset.strain, inp = $('sq-' + u), n = +inp.value, r = act(() => C.train(cur(), u, n, now()));
         if (r === 'ok') { toast(`${n} ${C.U[u].n} eğitime alındı`, 'info'); inp.value = ''; drafts[u] = ''; save(); liveBSheet(); renderTop(); }
         else toast(r === 'pop' ? 'Nüfus yetmiyor, Çiftliği yükselt' : r === 'res' ? 'Kaynaklar yetmiyor' : 'Eğitim başlatılamadı', 'bad');
       }
@@ -2930,7 +3334,7 @@ $('view').addEventListener('click', e => {
   const tb = e.target.closest('[data-train]');
   if (tb) {
     const u = tb.dataset.train, inp = $('q-' + u), n = +inp.value;
-    const r = C.train(cur(), u, n, now());
+    const r = act(() => C.train(cur(), u, n, now()));
     if (r === 'ok') { toast(`${n} ${C.U[u].n} eğitime alındı`, 'info'); inp.value = ''; drafts[u] = ''; save(); liveOrdu(); renderTop(); }
     else toast(r === 'pop' ? 'Nüfus yetmiyor, Çiftliği yükselt' : r === 'res' ? 'Kaynaklar yetmiyor' : 'Eğitim başlatılamadı', 'bad');
   }
@@ -3469,7 +3873,7 @@ function resSheet(target) {
       if (e.target.closest('[data-rsplit]')) { const cap = C.merchantsFree(v) * C.CARRY; let left = cap; const per = Math.floor(cap / 3); [0, 1, 2].forEach(i => { const x = Math.min(Math.floor(v.res[i]), per, left); $('r-' + i).value = x; left -= x; }); upd(); }
     });
     $('rGo').onclick = () => {
-      const r = C.sendRes(v, target, read(), now());
+      const vid = v.id, tid = target.id, res = read(), r = act(() => C.sendRes(C.vil(vid), C.vil(tid), res, now()));
       if (r === 'ok') { toast('Kervan ' + target.name + ' köyüne yola çıktı', 'info'); closeSheet(); save(); renderTop(); }
       else toast({ merchants: 'Yeterli tüccar yok', res: 'Ambarda yeterli kaynak yok', empty: 'Gönderilecek miktarı yaz', self: 'Aynı köye gönderemezsin' }[r] || 'Gönderilemedi', 'bad');
     };
@@ -3500,7 +3904,7 @@ function sendSheet(target, type) {
     });
     const go = $('sendGo');
     if (go) go.onclick = () => {
-      const r = C.send(v, target, read(), type, now());
+      const vid = v.id, tid = target.id, us = read(), r = act(() => C.send(C.vil(vid), C.vil(tid), us, type, now()));
       if (r === 'ok') { toast(title + ' yola çıktı', 'info'); closeSheet(); save(); drawMap(); renderTop(); }
       else toast({ own: 'Kendi köyüne saldıramazsın', notown: 'Destek sadece kendi köylerine', empty: 'Birlik seçmedin' }[r] || 'Gönderilemedi', 'bad');
     };
@@ -3519,7 +3923,7 @@ function renderRapor() {
     return `<div class="rep${r.read ? '' : ' unread'}"><button data-rep="${r.id}"><span class="st" style="background:${col}"></span><span class="tt">${esc(title)}</span><span class="tm num">${clock(r.t)}</span><span class="sub">${esc(sub)}${r.loy ? ` · bağlılık ${r.loy[0]} → ${r.loy[1]}` : ''}</span></button>${openRep === r.id ? repDetail(r) : ''}</div>`;
   }).join('');
   $('view').innerHTML = `<div class="pad"><div class="qrow"><h2 class="sec">Raporlar</h2><button class="linkbtn" id="readAll">Hepsini okundu say</button></div>${items}</div>`;
-  $('readAll').onclick = () => { S.reports.forEach(r => r.read = true); save(); sig = ''; render(); };
+  $('readAll').onclick = () => { act(() => { S.reports.forEach(r => r.read = true); }); save(); sig = ''; render(); };
 }
 function unitTable(r) {
   const us = C.U_ORDER.filter(u => (r.aUnits[u] || 0) || (r.dUnits && r.dUnits[u]));
@@ -3545,7 +3949,7 @@ function repDetail(r) {
 $('view').addEventListener('click', e => {
   if (tab !== 'rapor') return;
   const b = e.target.closest('[data-rep]');
-  if (b) { const id = +b.dataset.rep, r = S.reports.find(x => x.id === id); if (r) r.read = true; openRep = openRep === id ? null : id; save(); render(); return; }
+  if (b) { const id = +b.dataset.rep, r0 = S.reports.find(x => x.id === id), k = r0 && repKey(r0); act(() => { const r = S.reports.find(x => repKey(x) === k); if (r) r.read = true; }); openRep = openRep === id ? null : id; save(); render(); return; }
   const a = e.target.closest('[data-again]');
   if (a) { map.sel = +a.dataset.again; tab = 'harita'; renderTabs(); sig = ''; map.ox = null; render(); setTimeout(() => { centerOn(S.vil[map.sel]); drawMap(); }, 0); }
 });
@@ -3560,12 +3964,12 @@ function renderKlan() {
   if (klanSub === 'bilgi') { view.innerHTML = seg + `<div style="flex:1;overflow-y:auto">${klanInfoHTML()}</div>`; chatRendered = { ch: null, last: 0 }; return; }
   const ch = klanSub;
   if (ch === 'klan' && !S.clan) { view.innerHTML = seg + `<div class="pad"><div class="card muted">Klan sohbeti için önce bir klana katıl ya da kendi klanını kur.</div></div>`; return; }
-  view.innerHTML = seg + `<div class="chatwrap"><div class="note small" style="margin:8px 12px 0">Bu sürümde sohbetteki beyler bilgisayar tarafından yönetiliyor. Sunucu kurulunca burada gerçek oyuncular olacak.</div>
+  view.innerHTML = seg + `<div class="chatwrap"><div class="note small" style="margin:8px 12px 0">${MPX ? (ch === 'klan' ? 'Klanındaki gerçek oyuncular burada yazışır.' : 'Dünyadaki gerçek oyuncular ve bilgisayar beyleri burada konuşur.') : 'Bu modda sohbetteki beyler bilgisayar tarafından yönetiliyor. Arkadaşlarla oynarken burada gerçek oyuncular olur.'}</div>
     <div class="chatlog" id="chatlog"></div>
     <form class="chatin" id="chatForm"><input id="chatIn" maxlength="200" autocomplete="off" placeholder="${ch === 'klan' ? '[' + esc(S.clan.tag) + '] klanına yaz' : 'Herkese yaz'}" aria-label="Mesaj"><button class="btn" type="submit">Gönder</button></form></div>`;
   chatRendered = { ch, last: 0 };
   $('chatForm').addEventListener('submit', e => {
-    e.preventDefault(); const inp = $('chatIn'), r = C.playerSay(ch, inp.value, now());
+    e.preventDefault(); const inp = $('chatIn'), txt = inp.value, r = act(() => C.playerSay(ch, txt, now()));
     if (r === 'ok') { inp.value = ''; save(); liveChat(); }
   });
   liveChat();
@@ -3581,13 +3985,13 @@ function liveChat() {
   if (lastId === chatRendered.last) return;
   const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 60 || !chatRendered.last;
   log.innerHTML = msgs.length ? msgs.map(msgHTML).join('') : '<div class="msg sys">Henüz mesaj yok. İlk selamı sen ver.</div>';
-  chatRendered.last = lastId; S.chatSeen[ch] = lastId;
+  chatRendered.last = lastId; S.chatSeen[ch] = lastId; if (MPX) LS.set('ub-seen-' + MPX.id, S.chatSeen);
   if (atBottom) log.scrollTop = log.scrollHeight;
 }
 function klanInfoHTML() {
-  const t = now(), clans = C.clanList(), free = S.beys.filter(b => !b.clan && S.vil.some(v => v.owner === b.id));
+  const t = now(), clans = C.clanList(), free = S.beys.filter(b => !b.human && !b.clan && S.vil.some(v => v.owner === b.id));
   const pts = o => fmt(C.ownerPts(o));
-  const memberRows = ids => ids.map(o => `<div class="mrow"><i class="sw" style="background:${C.ownerColor(o)}"></i><span><b>${esc(o === 'P' ? S.player.name : C.ownerName(o))}</b>${o === 'P' ? ' <span class="muted small">(sen)</span>' : ''}</span><span class="num muted small">${pts(o)} puan</span></div>`).join('');
+  const memberRows = ids => ids.map(o => `<div class="mrow"><i class="sw" style="background:${C.ownerColor(o)}"></i><span><b>${esc(o === 'P' ? S.player.name : C.ownerName(o))}</b>${o === 'P' ? ' <span class="muted small">(sen)</span>' : C.isHuman(o) ? ' <span class="ctag">OYUNCU</span>' : ''}</span><span class="num muted small">${pts(o)} puan</span></div>`).join('');
   let h = '<div class="pad">';
   if (S.clan) {
     const mine = clans.find(c => c.mine);
@@ -3610,26 +4014,27 @@ $('view').addEventListener('click', e => {
   if (tab !== 'klan') return;
   const sb = e.target.closest('[data-sub]'); if (sb) { klanSub = sb.dataset.sub; sig = ''; render(); return; }
   const inv = e.target.closest('[data-invite]');
-  if (inv) { const b = S.beys.find(x => x.id === inv.dataset.invite), r = C.inviteBey(inv.dataset.invite, now());
+  if (inv) { const b = S.beys.find(x => x.id === inv.dataset.invite);
+    const iid = inv.dataset.invite, r = act(() => C.inviteBey(iid, now()));
     toast(r === 'ok' ? b.name + ' klana katıldı!' : r === 'refused' ? b.name + ' davetini şimdilik reddetti. Güçlendikçe tekrar dene.' : r === 'full' ? 'Klan dolu' : 'Davet gönderilemedi', r === 'ok' ? 'good' : 'bad'); save(); sig = ''; render(); return; }
   const j = e.target.closest('[data-join]');
-  if (j) { const r = C.joinClan(j.dataset.join, now()); toast(r === 'ok' ? 'Klana katıldın!' : r === 'weak' ? 'Klan üyeleri seni henüz yeterince güçlü bulmuyor. Puanını artır.' : r === 'full' ? 'Klan dolu' : 'Katılamadın', r === 'ok' ? 'good' : 'bad'); save(); sig = ''; render(); return; }
+  if (j) { const tg = j.dataset.join, r = act(() => C.joinClan(tg, now())); toast(r === 'ok' ? 'Klana katıldın!' : r === 'weak' ? 'Klan üyeleri seni henüz yeterince güçlü bulmuyor. Puanını artır.' : r === 'full' ? 'Klan dolu' : 'Katılamadın', r === 'ok' ? 'good' : 'bad'); save(); sig = ''; render(); return; }
   if (e.target.id === 'leaveClan') {
     if (e.target.dataset.armed !== '1') { e.target.dataset.armed = '1'; e.target.textContent = 'Emin misin? Tekrar dokun'; return; }
-    C.leaveClan(now()); toast('Klandan ayrıldın', 'info'); save(); sig = ''; render();
+    act(() => C.leaveClan(now())); toast('Klandan ayrıldın', 'info'); save(); sig = ''; render();
   }
 });
 $('view').addEventListener('submit', e => {
   if (e.target.id !== 'clanForm') return;
   e.preventDefault();
-  const r = C.createClan($('clanName').value, $('clanTag').value, now());
+  const cn = $('clanName').value, ct = $('clanTag').value, r = act(() => C.createClan(cn, ct, now()));
   toast({ ok: 'Klan kuruldu!', name: 'Klan adı en az 3 harf olmalı', tag: 'Kısaltma 2–4 harf olmalı', taken: 'Bu kısaltma kullanılıyor' }[r] || 'Klan kurulamadı', r === 'ok' ? 'good' : 'bad');
   if (r === 'ok') { save(); sig = ''; render(); }
 });
 
 // ---------- SIRALAMA ----------
 function renderSira() {
-  const rows = C.ranking().map((r, i) => `<tr class="${r.id === 'P' ? 'me' : ''}"><td>${i + 1}</td><td style="text-align:left"><i class="sw" style="background:${r.color}"></i> ${esc(r.name)}${C.clanOf(r.id) ? ` <span class="ctag">${esc(C.clanOf(r.id))}</span>` : ''}</td><td>${r.n}</td><td>${fmt(r.pts)}</td></tr>`).join('');
+  const rows = C.ranking().map((r, i) => `<tr class="${r.id === 'P' ? 'me' : ''}"><td>${i + 1}</td><td style="text-align:left"><i class="sw" style="background:${r.color}"></i> ${esc(r.name)}${r.human ? ' <span class="muted small">(oyuncu)</span>' : ''}${C.clanOf(r.id) ? ` <span class="ctag">${esc(C.clanOf(r.id))}</span>` : ''}</td><td>${r.n}</td><td>${fmt(r.pts)}</td></tr>`).join('');
   const barb = S.vil.filter(v => v.owner === null).length;
   $('view').innerHTML = `<div class="pad"><h2 class="sec">Beylikler sıralaması</h2>
     <section class="card"><div class="tblwrap"><table class="tbl rank num"><thead><tr><th>#</th><th style="text-align:left">Beylik</th><th>Köy</th><th>Puan</th></tr></thead><tbody>${rows}</tbody></table></div></section>
@@ -3651,7 +4056,7 @@ function showOver() {
   if (overShown) return; overShown = true;
   const r = C.ranking();
   sheet(`<h3>Beyliğin düştü</h3><div>Son köyün de el değiştirdi. ${esc(r[0].name)} şu an Anadolu'nun en güçlü beyliği.</div>
-    <button class="btn" id="overNew">Yeni beylik kur</button>`, () => { $('overNew').onclick = () => { store.del(); S = null; C.S = null; overShown = false; closeSheet(); showStart(); }; });
+    <button class="btn" id="overNew">Yeni beylik kur</button>`, () => { $('overNew').onclick = () => { if (MPX) { leaveToMenu(); overShown = false; return; } store.del(); S = null; C.S = null; overShown = false; closeSheet(); showStart(); }; });
   $('ov').classList.add('center');
 }
 
@@ -3671,7 +4076,7 @@ setInterval(() => {
   render();
   if (now() - lastSave > 5000) save();
 }, 1000);
-document.addEventListener('visibilitychange', () => { if (document.hidden) save(); else if (S) { catching = true; awayLog = []; const t0 = S.lastT; C.processUntil(now()); catching = false; sig = ''; render(); if (now() - t0 > 60000 && awayLog.length) showAway(now() - t0); } });
+document.addEventListener('visibilitychange', () => { if (document.hidden) save(); else if (S) { catching = true; awayLog = []; const t0 = S.lastT; C.processUntil(now()); catching = false; sig = ''; render(); if (now() - t0 > 60000 && awayLog.length) showAway(now() - t0); if (MPX) poll(); } });
 addEventListener('pagehide', save);
 addEventListener('resize', () => { if (tab === 'harita') { sig = ''; render(); } });
 

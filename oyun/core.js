@@ -82,7 +82,7 @@ function reqFor(b, lvl) {
 // Online sürümde aynı veri yapısı sunucudan gelen gerçek oyuncu mesajlarıyla dolacak.
 const CHAT_MAX = 150, CLAN_MAX = 5;
 const AI_CLANS = [{ tag: 'KRM', name: 'Konya Divanı', m: ['B0', 'B5'] }, { tag: 'EGE', name: 'Ege Uçları', m: ['B2', 'B3', 'B4'] }];
-function clanOf(o) { if (!o) return null; if (o === 'P') return S.clan ? S.clan.tag : null; const b = S.beys.find(x => x.id === o); return b ? b.clan || null : null; }
+function clanOf(o) { if (!o) return null; if (o === 'P') return S.clan ? S.clan.tag : null; const b = beyOf(o); return b ? b.clan || null : null; }
 function sameClan(a, b) { const ca = clanOf(a), cb = clanOf(b); return !!ca && ca === cb; }
 function clanList() {
   const tags = {};
@@ -95,13 +95,22 @@ function say(ch, from, text, t) {
   const a = S.chat[ch]; a.push({ id: ++S.uid, t, from, text });
   if (a.length > CHAT_MAX) a.splice(0, a.length - CHAT_MAX);
 }
-const pick = a => a[Math.floor(Math.random() * a.length)];
+const pick = a => a[Math.floor(R() * a.length)];
+// tohumlu rastgelelik: aynı durumdan başlayan her cihaz aynı sonucu bulur (çok oyunculu için şart)
+function R() { let a = (S.rs = (S.rs + 0x6D2B79F5) | 0); let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }
+// gerçek oyuncular: yerel oyuncu her zaman 'P'; diğer insanlar beys içinde human:true
+const beyOf = o => (o && o !== 'P' ? S.beys.find(x => x.id === o) : null);
+const isHuman = o => o === 'P' || !!(beyOf(o) || {}).human;
+const protectOf = o => (o === 'P' ? S.protectUntil : ((beyOf(o) || {}).human ? beyOf(o).protectUntil || 0 : 0));
+function statsOf(o) { if (o === 'P') return S.stats; const b = beyOf(o); if (!b || !b.human) return null; return b.stats || (b.stats = { trained: {}, barbWins: 0, spies: 0 }); }
+const lastVillage = o => S.vil.filter(v => v.owner === o).length < 2;
 const beyShort = o => (o === 'P' ? S.player.name : ownerName(o).replace('oğulları', ''));
 function createClan(name, tag, t) {
   name = String(name || '').trim().slice(0, 24); tag = String(tag || '').trim().toUpperCase().replace(/[^A-ZÇĞİÖŞÜ0-9]/g, '').slice(0, 4);
   if (S.clan) return 'already'; if (name.length < 3) return 'name'; if (tag.length < 2) return 'tag';
   if (S.beys.some(b => b.clan === tag)) return 'taken';
   S.clan = { name, tag, created: t }; S.clanJoinedAi = false;
+  if (S.clanChat) S.chat.klan = S.clanChat[tag] = S.clanChat[tag] || [];
   say('genel', 'SYS', S.player.name + ' [' + tag + '] ' + name + ' klanını kurdu.', t);
   say('klan', 'SYS', 'Klan kuruldu. Bağımsız beylere davet göndererek klanını büyüt.', t);
   return 'ok';
@@ -110,9 +119,10 @@ function inviteBey(id, t) {
   const b = S.beys.find(x => x.id === id);
   if (!S.clan) return 'noclan'; if (!b || b.clan) return 'taken';
   if (1 + S.beys.filter(x => x.clan === S.clan.tag).length >= CLAN_MAX) return 'full';
+  if (b.human) return 'human';
   if (b.refusedUntil && t < b.refusedUntil) return 'wait';
   const ratio = (ownerPts('P') + 1) / (ownerPts(b.id) + 1);
-  if (ratio >= .55 && Math.random() < .35 + ratio * .4) {
+  if (ratio >= .55 && R() < .35 + ratio * .4) {
     b.clan = S.clan.tag; b.clanName = S.clan.name;
     say('klan', b.id, pick(['Davetin için sağ ol beyim, sancağımız bir olsun.', 'Kabul ediyorum. Düşmanımız ortak, ganimetimiz ortak!', 'Bu ittifak iki beyliğe de hayırlı olsun.']), t);
     say('genel', 'SYS', b.name + ', [' + S.clan.tag + '] klanına katıldı.', t);
@@ -126,9 +136,11 @@ function joinClan(tag, t) {
   const mem = S.beys.filter(b => b.clan === tag); if (!mem.length) return 'none';
   if (mem.length + 1 > CLAN_MAX) return 'full';
   const avg = mem.reduce((a, b) => a + ownerPts(b.id), 0) / mem.length;
-  if (ownerPts('P') < avg * .5) return 'weak';
+  if (!mem.some(b => b.human) && ownerPts('P') < avg * .5) return 'weak';
   S.clan = { name: mem[0].clanName, tag, created: t }; S.clanJoinedAi = true;
-  say('klan', mem[0].id, 'Hoş geldin ' + S.player.name + '! Kışlanı büyüt, sınırlarımızı birlikte koruyalım.', t);
+  if (S.clanChat) S.chat.klan = S.clanChat[tag] = S.clanChat[tag] || [];
+  const greet = mem.find(b => !b.human);
+  if (greet) say('klan', greet.id, 'Hoş geldin ' + S.player.name + '! Kışlanı büyüt, sınırlarımızı birlikte koruyalım.', t);
   say('genel', 'SYS', S.player.name + ', [' + tag + '] klanına katıldı.', t);
   return 'ok';
 }
@@ -136,7 +148,7 @@ function leaveClan(t) {
   if (!S.clan) return 'none';
   const tag = S.clan.tag, mine = S.beys.filter(b => b.clan === tag);
   const own = !S.clanJoinedAi;
-  if (own) for (const b of mine) { b.clan = null; b.clanName = null; }
+  if (own) for (const b of mine) if (!b.human) { b.clan = null; b.clanName = null; }
   say('genel', 'SYS', S.player.name + ', [' + tag + '] klanından ayrıldı.', t);
   S.clan = null; S.chat.klan = []; return 'ok';
 }
@@ -154,33 +166,35 @@ const CHAT_KLAN = [
   'Birimiz saldırıya uğrarsa hemen destek yollayalım.', 'Medresemde Zırh Yapımı bitmek üzere.',
   'Bu hafta sıralamada ilk üçe gireriz inşallah.', 'Yeni Divan kuruldu, Sancakbeyi yetiştiriyorum.',
 ];
-function aiChat(t) {
-  if (Math.random() < .55) { const b = pick(S.beys); const vv = pick(S.vil.filter(v => v.owner === null)) || S.vil[0]; say('genel', b.id, pick(CHAT_GENEL).replace('{v}', vv.name), t); }
-  const allies = S.clan ? S.beys.filter(b => b.clan === S.clan.tag) : [];
-  if (allies.length && Math.random() < .45) say('klan', pick(allies).id, pick(CHAT_KLAN), t);
+const aiBeys = () => S.beys.filter(b => !b.human);
+function aiChat(t, fresh) {
+  if (R() < .55) { const b = pick(aiBeys()); const vv = pick(S.vil.filter(v => v.owner === null)) || S.vil[0]; const txt = pick(CHAT_GENEL).replace('{v}', vv.name); if (fresh) say('genel', b.id, txt, t); }
+  const allies = S.clan ? S.beys.filter(b => !b.human && b.clan === S.clan.tag) : [];
+  if (allies.length && R() < .45) { const b = pick(allies), txt = pick(CHAT_KLAN); if (fresh && !S.mp) say('klan', b.id, txt, t); }
 }
 function allySupport(target, attacker, t) {
-  if (!S.clan || target.owner !== 'P') return;
-  for (const b of S.beys.filter(x => x.clan === S.clan.tag)) {
-    if (Math.random() > .6) continue;
+  const tag = clanOf(target.owner); if (!tag || !isHuman(target.owner)) return;
+  const myClan = S.clan && S.clan.tag === tag && !S.mp;
+  for (const b of S.beys.filter(x => !x.human && x.clan === tag)) {
+    if (R() > .6) continue;
     const src = S.vil.filter(v => v.owner === b.id).sort((a, c) => dist(a, target) - dist(c, target))[0]; if (!src) continue;
     const units = {}; let n = 0;
     for (const u of ['mizrakli', 'okcu']) { const k = Math.floor((src.units[u] || 0) * .3); if (k > 0) { units[u] = k; src.units[u] -= k; n += k; } }
     if (!n) continue;
     const dur = travelTime(src, target, units);
     S.moves.push({ id: ++S.uid, type: 'support', owner: b.id, from: src.id, to: target.id, units, loot: [0, 0, 0], depart: t, arrive: t + dur });
-    say('klan', b.id, target.name + ' köyüne ' + n + ' asker destek gönderdim, yolda.', t);
+    if (myClan) say('klan', b.id, target.name + ' köyüne ' + n + ' asker destek gönderdim, yolda.', t);
   }
-  const al = S.beys.filter(x => x.clan === S.clan.tag);
-  if (al.length) say('klan', pick(al).id, 'Dikkat! ' + ownerName(attacker) + ' ' + target.name + ' köyüne ordu gönderdi.', t);
+  const al = S.beys.filter(x => !x.human && x.clan === tag);
+  if (al.length && myClan) say('klan', pick(al).id, 'Dikkat! ' + ownerName(attacker) + ' ' + target.name + ' köyüne ordu gönderdi.', t);
 }
 const fmtN = n => Math.floor(n).toLocaleString('tr-TR');
 function allyResources(t) {
-  const al = S.clan ? S.beys.filter(b => b.clan === S.clan.tag) : []; if (!al.length) return;
+  const al = S.clan ? S.beys.filter(b => !b.human && b.clan === S.clan.tag) : []; if (!al.length) return;
   const b = pick(al), src = S.vil.filter(v => v.owner === b.id)[0], dst = S.vil.find(v => v.id === S.cur && v.owner === 'P') || S.vil.find(v => v.owner === 'P');
   if (!src || !dst) return;
   syncRes(src, t);
-  const res = src.res.map(x => Math.floor(Math.min(x * .25, 800 + Math.random() * 700)));
+  const res = src.res.map(x => Math.floor(Math.min(x * .25, 800 + R() * 700)));
   if (res.every(x => x < 50)) { say('klan', b.id, 'Ambarım boş beyim, şu an gönderemem.', t); return; }
   for (let i = 0; i < 3; i++) src.res[i] -= res[i];
   S.moves.push({ id: ++S.uid, type: 'trade', owner: b.id, from: src.id, to: dst.id, units: {}, res, merchants: Math.ceil((res[0] + res[1] + res[2]) / CARRY), loot: [0, 0, 0], depart: t, arrive: t + tradeTime(src, dst) });
@@ -191,15 +205,15 @@ function playerSay(ch, text, t) {
   if (ch === 'klan' && !S.clan) return 'noclan';
   say(ch, 'P', text, t);
   const low = text.toLocaleLowerCase('tr');
-  const pool = ch === 'klan' ? S.beys.filter(b => S.clan && b.clan === S.clan.tag) : S.beys;
-  if (!pool.length) return 'ok';
-  const who = pick(pool), delay = (4 + Math.random() * 10) * 1000;
+  const pool = ch === 'klan' ? S.beys.filter(b => !b.human && S.clan && b.clan === S.clan.tag) : aiBeys();
+  if (!pool.length || (S.mp && ch === 'klan')) return 'ok';
+  const who = pick(pool), delay = (4 + R() * 10) * 1000;
   let reply = null;
   if (/selam|merhaba|sa\b|slm/.test(low)) reply = pick(['Aleykümselam ' + S.player.name + '!', 'Selam beyim, hoş geldin.', 'Aleykümselam, bereketli günler.']);
-  else if (ch === 'klan' && /kaynak|kereste|taş|demir|maden|kervan|erzak/.test(low)) { reply = 'Ambarıma bakıp kervan hazırlıyorum.'; S.pendingRes = true; }
-  else if (ch === 'klan' && /yardım|destek|imdat|saldır/.test(low)) { reply = 'Hemen asker yolluyorum beyim, dayan!'; S.pendingSupport = true; }
+  else if (ch === 'klan' && /kaynak|kereste|taş|demir|maden|kervan|erzak/.test(low)) { reply = 'Ambarıma bakıp kervan hazırlıyorum.'; S.pendingRes = !S.mp; }
+  else if (ch === 'klan' && /yardım|destek|imdat|saldır/.test(low)) { reply = 'Hemen asker yolluyorum beyim, dayan!'; S.pendingSupport = !S.mp; }
   else if (/ittifak|klan/.test(low) && ch === 'genel') reply = 'Klanın güçlüyse konuşuruz, sıralamaya bakarız.';
-  else if (Math.random() < (ch === 'klan' ? .8 : .35)) reply = pick(['Doğru söylersin.', 'Anlaşıldı beyim.', 'Hele bir bakalım.', 'Ben de öyle düşünüyorum.', 'Bunu Divan’da konuşalım.', 'İyi fikir, hazırlanalım.']);
+  else if (R() < (ch === 'klan' ? .8 : .35)) reply = pick(['Doğru söylersin.', 'Anlaşıldı beyim.', 'Hele bir bakalım.', 'Ben de öyle düşünüyorum.', 'Bunu Divan’da konuşalım.', 'İyi fikir, hazırlanalım.']);
   if (reply) S.chatq.push({ t: t + delay, ch, from: who.id, text: reply });
   return 'ok';
 }
@@ -221,7 +235,7 @@ const TECH = {
 const TECH_ORDER = ['ocak', 'mimari', 'depo', 'talim', 'nal', 'kervan', 'demirci', 'zirh', 'burc', 'sancak'];
 const techCost = (id, l) => TECH[id].c.map(x => Math.round(x * Math.pow(1.45, l - 1)));
 const techTime = (id, l, med) => TECH[id].t * 1000 * Math.pow(1.35, l - 1) * Math.pow(.95, Math.max(0, med - 1)) / S.speed;
-const TL = (o, id) => (o === 'P' && S.tech ? (S.tech[id] || 0) : 0);
+const TL = (o, id) => { if (o === 'P') return S.tech ? (S.tech[id] || 0) : 0; if (!o) return 0; const b = beyOf(o); return b && b.human && b.tech ? (b.tech[id] || 0) : 0; };
 const TX = (o, id) => TL(o, id) * TECH[id].e;
 
 // ---------- formüller ----------
@@ -256,7 +270,7 @@ function newGame(opts) {
   const seed = opts.seed != null ? opts.seed : Math.floor(Math.random() * 1e9);
   const rnd = mulberry32(seed);
   const ri = (a, b) => a + Math.floor(rnd() * (b - a + 1));
-  S = { ver: 1, market: [], tech: {}, techq: null, clan: null, chat: { genel: [], klan: [] }, chatq: [], chatSeen: { genel: 0, klan: 0 }, nextChat: t + 30000, seed, speed: opts.speed, created: t, lastT: t, protectUntil: t + 3 * 24 * HOUR / opts.speed,
+  S = { ver: 1, rs: seed ^ 0x5bd1e995, mp: !!opts.mp, market: [], tech: {}, techq: null, clan: null, chat: { genel: [], klan: [] }, chatq: [], chatSeen: { genel: 0, klan: 0 }, nextChat: t + 30000, seed, speed: opts.speed, created: t, lastT: t, protectUntil: t + 3 * 24 * HOUR / opts.speed,
     nextAi: t + HOUR / opts.speed, uid: 100, player: { name: opts.name || 'Kızılırmak Beyliği', color: '#e3b341' },
     beys: [], vil: [], moves: [], reports: [], quests: { claimed: [] },
     stats: { trained: {}, barbWins: 0, spies: 0 }, cur: 0, over: false };
@@ -358,6 +372,7 @@ function migrate(st) {
   if (!st.chat) { st.chat = { genel: [], klan: [] }; st.chatq = []; st.chatSeen = { genel: 0, klan: 0 }; st.nextChat = st.lastT + 30000; st.clan = null;
     st.beys.forEach((b, i) => { const ac = AI_CLANS.find(c => c.m.includes('B' + i)); b.clan = ac ? ac.tag : null; b.clanName = ac ? ac.name : null; }); }
   if (st.techq === undefined) st.techq = null;
+  if (st.rs == null) st.rs = (st.seed || 1) ^ 0x5bd1e995;
   for (const v of st.vil) { if (v.b.medrese == null) v.b.medrese = 0; if (v.b.kervansaray == null) v.b.kervansaray = 0; }
   return st;
 }
@@ -419,11 +434,11 @@ function send(from, to, units, type, t) {
   if (type === 'support' && to.owner !== from.owner) return 'notown';
   if (type === 'attack' && to.owner === from.owner) return 'own';
   if (type === 'attack' && sameClan(to.owner, from.owner)) return 'ally';
-  if (to.owner === 'P' && from.owner !== 'P' && t < S.protectUntil) return 'protected';
+  if (isHuman(to.owner) && from.owner !== to.owner && t < protectOf(to.owner)) return 'protected';
   for (const [u, k] of Object.entries(clean)) from.units[u] -= k;
   const dur = travelTime(from, to, clean);
   S.moves.push({ id: ++S.uid, type, owner: from.owner, from: from.id, to: to.id, units: clean, loot: [0, 0, 0], depart: t, arrive: t + dur });
-  if (type === 'spy' && from.owner === 'P') S.stats.spies++;
+  if (type === 'spy' && statsOf(from.owner)) statsOf(from.owner).spies++;
   return 'ok';
 }
 
@@ -461,7 +476,7 @@ function battle(m, t) {
   if (dv.guest && unitSum(dv.guest)) rep.guest = Object.assign({}, dv.guest);
   const Dmix = A0 > 0 ? (Di * Ai + Dc * Ac) / A0 : Di;
   const D = (Dmix * (1 + TX(dv.owner, 'zirh')) + 20 + 40 * wallEff) * Math.pow(1.037, wallEff * (1 + TX(dv.owner, 'burc')));
-  const luck = Math.random() * 0.3 - 0.15; rep.luck = luck;
+  const luck = R() * 0.3 - 0.15; rep.luck = luck;
   const A = A0 * (1 + luck) * (1 + TX(m.owner, 'demirci'));
 
   if (A0 > 0 && A > D) {
@@ -482,12 +497,13 @@ function battle(m, t) {
     }
     for (let i = 0; i < 3; i++) { loot[i] = Math.floor(loot[i]); dv.res[i] -= loot[i]; }
     rep.loot = loot; m.loot = loot;
-    if (dv.owner === null && m.owner === 'P') S.stats.barbWins++;
+    if (dv.owner === null && statsOf(m.owner)) statsOf(m.owner).barbWins++;
     // fetih
     if ((att.sancakbeyi || 0) > 0 && dv.owner !== m.owner) {
       const before = dv.loy; let drop = 0;
-      for (let i = 0; i < att.sancakbeyi; i++) drop += 20 + Math.random() * 15 + TX(m.owner, 'sancak');
+      for (let i = 0; i < att.sancakbeyi; i++) drop += 20 + R() * 15 + TX(m.owner, 'sancak');
       dv.loy = Math.max(0, dv.loy - drop); rep.loy = [Math.floor(before), Math.floor(dv.loy)];
+      if (dv.loy <= 0 && isHuman(dv.owner) && lastVillage(dv.owner)) { dv.loy = 1; rep.loy[1] = 1; }   // oyuncunun son köyü fethedilmez
       if (dv.loy <= 0) {
         const prev = dv.owner;
         att.sancakbeyi--;
@@ -498,7 +514,7 @@ function battle(m, t) {
         say('genel', 'SYS', ownerName(m.owner) + ', ' + dv.name + ' köyünü fethetti.', t);
         hooks.notify(m.owner === 'P' ? 'good' : (prev === 'P' ? 'bad' : 'info'),
           m.owner === 'P' ? dv.name + ' artık senin!' : (prev === 'P' ? dv.name + ' düştü!' : ownerName(m.owner) + ', ' + dv.name + ' köyünü fethetti'));
-        if (prev === 'P') { if (S.cur === dv.id) { const mine = S.vil.find(x => x.owner === 'P'); if (mine) S.cur = mine.id; } if (!S.vil.some(x => x.owner === 'P')) S.over = true; }
+        if (prev === 'P' && !S.mp) { if (S.cur === dv.id) { const mine = S.vil.find(x => x.owner === 'P'); if (mine) S.cur = mine.id; } if (!S.vil.some(x => x.owner === 'P')) S.over = true; }
         pushReport(rep);
         return;
       }
@@ -510,7 +526,7 @@ function battle(m, t) {
     for (const [u, n] of Object.entries(dv.units)) { if (u === 'casus' || !n) continue; const lost = Math.round(n * r); if (lost) { rep.dLost[u] = lost; dv.units[u] = n - lost; } }
     if (dv.guest) for (const u in dv.guest) dv.guest[u] -= Math.round(dv.guest[u] * r);
     const survivors = unitSum(att);
-    if (!survivors && m.owner === 'P' && !spyOk) rep.dUnits = null;   // kimse dönmedi, rakibi göremedik
+    if (!survivors && isHuman(m.owner) && !spyOk) rep.dUnits = null;   // kimse dönmedi, rakibi göremedik
   }
   finishBattle(m, rep, att, dv, t);
 }
@@ -523,9 +539,14 @@ function finishBattle(m, rep, att, dv, t) {
   pushReport(rep);
 }
 function pushReport(rep) {
+  const lim = S.mp ? 40 : 80;
+  for (const o of new Set([rep.attOwner, rep.defOwner])) {
+    const b = beyOf(o); if (!b || !b.human) continue;
+    b.reports = b.reports || []; b.reports.unshift(JSON.parse(JSON.stringify(rep))); if (b.reports.length > lim) b.reports.length = lim;
+  }
   if (rep.attOwner !== 'P' && rep.defOwner !== 'P') return;
   S.reports.unshift(rep);
-  if (S.reports.length > 80) S.reports.length = 80;
+  if (S.reports.length > lim) S.reports.length = lim;
   if (rep.defOwner === 'P' && rep.attOwner !== 'P') hooks.notify(rep.win ? 'bad' : 'good', rep.defName + (rep.win ? ' yağmalandı' : ' saldırıyı püskürttü'));
   else if (rep.attOwner === 'P') hooks.notify(rep.win ? 'good' : 'bad', (rep.type === 'spy' ? 'Keşif: ' : 'Saldırı: ') + rep.defName + (rep.win ? ' — başarılı' : ' — başarısız'));
 }
@@ -590,27 +611,27 @@ function acceptOffer(v, id, t) {
 }
 function aiMarket(t) {
   S.market = S.market.filter(o => { if (t < o.exp) return true; const v = vil(o.vil); if (v.owner === o.owner) v.res[o.give[0]] += o.give[1]; if (o.owner === 'P') hooks.notify('info', 'Pazardaki teklifinin süresi doldu, kaynaklar geri döndü'); return false; });
-  for (const b of S.beys) {
+  for (const b of aiBeys()) {
     const v = S.vil.find(x => x.owner === b.id); if (!v) continue;
     syncRes(v, t);
     const r = v.res, hi = r.indexOf(Math.max(...r)), lo = r.indexOf(Math.min(...r));
     // oyuncunun tekliflerini değerlendir
-    for (const o of S.market.filter(x => x.owner === 'P')) {
+    for (const o of S.market.filter(x => isHuman(x.owner))) {
       const [wi, wn] = o.want, [gi, gn] = o.give, fair = wn / gn;
-      if (r[wi] > wn * 1.5 && r[wi] > r[gi] && fair <= 1.25 && Math.random() < (fair <= 1 ? .55 : .3)) {
+      if (r[wi] > wn * 1.5 && r[wi] > r[gi] && fair <= 1.25 && R() < (fair <= 1 ? .55 : .3)) {
         r[wi] -= wn; const pv = vil(o.vil);
         S.market.splice(S.market.indexOf(o), 1);
-        tradeMove(pv, v, resArr(gi, gn), 'P', t, o.merchants, true);
+        tradeMove(pv, v, resArr(gi, gn), o.owner, t, o.merchants, true);
         tradeMove(v, pv, resArr(wi, wn), b.id, t, null, true);
-        hooks.notify('good', b.name + ' takas teklifini kabul etti');
+        if (o.owner === 'P') hooks.notify('good', b.name + ' takas teklifini kabul etti');
         say('genel', b.id, pick(['Pazardaki teklifini aldım, kervan yolda.', 'Adil bir takas, anlaştık.', 'Tam ihtiyacım olan şey, kabul!']), t);
         break;
       }
     }
     // kendi teklifini koy
-    if (hi !== lo && r[hi] > 500 && r[hi] > r[lo] * 1.08 && S.market.filter(o => o.owner === b.id).length < 2 && Math.random() < .6) {
-      const gn = Math.max(200, Math.round(Math.min(r[hi] * .4, 400 + Math.random() * 2500) / 100) * 100);
-      const wn = Math.round(gn * (.8 + Math.random() * .45) / 100) * 100;
+    if (hi !== lo && r[hi] > 500 && r[hi] > r[lo] * 1.08 && S.market.filter(o => o.owner === b.id).length < 2 && R() < .6) {
+      const gn = Math.max(200, Math.round(Math.min(r[hi] * .4, 400 + R() * 2500) / 100) * 100);
+      const wn = Math.round(gn * (.8 + R() * .45) / 100) * 100;
       if (gn >= 200 && wn >= 100) { r[hi] -= gn; S.market.push({ id: ++S.uid, owner: b.id, vil: v.id, give: [hi, gn], want: [lo, wn], t, exp: t + 36 * HOUR / S.speed, merchants: Math.ceil(gn / CARRY) }); }
     }
   }
@@ -628,7 +649,7 @@ function arrive(m, t) {
       hooks.notify('good', 'Kervan ' + to.name + ' köyüne ulaştı: ' + txt + (lost > 0 ? ' (ambar doluydu, ' + fmtN(lost) + ' kaybedildi)' : ''));
       if (to.owner && to.owner !== 'P') {
         const b = S.beys.find(x => x.id === to.owner);
-        if (b) { b.gifts = (b.gifts || 0) + m.res[0] + m.res[1] + m.res[2]; b.refusedUntil = 0;
+        if (b && !b.human) { b.gifts = (b.gifts || 0) + m.res[0] + m.res[1] + m.res[2]; b.refusedUntil = 0;
           say(sameClan('P', b.id) ? 'klan' : 'genel', b.id, pick(['Gönderdiğin kervan ulaştı, cömertliğin unutulmayacak ' + S.player.name + '.', 'Kaynaklar için sağ ol beyim, ambarlarımız doldu.', 'Bu hediye dostluğumuzu pekiştirdi.']), t); }
       }
     } else if (to.owner === 'P') hooks.notify('good', ownerName(m.owner) + ' kervanı ' + to.name + ' köyüne ulaştı: ' + txt);
@@ -664,13 +685,14 @@ function nextEvent() {
   for (const m of S.moves) if (m.arrive < best.t) best = { t: m.arrive, k: 'm', m };
   if (S.nextAi < best.t) best = { t: S.nextAi, k: 'ai' };
   if (S.techq && S.techq.done < best.t) best = { t: S.techq.done, k: 'tech' };
+  for (const b of S.beys) if (b.techq && b.techq.done < best.t) best = { t: b.techq.done, k: 'htech', b };
   if (S.nextChat < best.t) best = { t: S.nextChat, k: 'chat' };
   for (const c of S.chatq) if (c.t < best.t) best = { t: c.t, k: 'chatq', c };
   return best;
 }
 function processUntil(now) {
   let n = 0;
-  if (S.over) return 0;
+  if (S.over && !S.mp) return 0;
   for (let guard = 0; guard < 500000; guard++) {
     const e = nextEvent(); if (e.t > now) break;
     n++;
@@ -680,13 +702,13 @@ function processUntil(now) {
     } else if (e.k === 'u') {
       const v = e.v, q = v.rq[e.b], it = q[0];
       v.units[it.u] = (v.units[it.u] || 0) + 1; it.n--;
-      if (v.owner === 'P') S.stats.trained[it.u] = (S.stats.trained[it.u] || 0) + 1;
+      const st = statsOf(v.owner); if (st) st.trained[it.u] = (st.trained[it.u] || 0) + 1;
       if (it.n <= 0) { q.shift(); if (q.length) q[0].next = e.t + q[0].each; } else it.next += it.each;
     } else if (e.k === 'm') {
       S.moves.splice(S.moves.indexOf(e.m), 1); arrive(e.m, e.t);
     } else if (e.k === 'chat') {
-      S.nextChat = e.t + (45 + Math.random() * 100) * 1000;
-      if (now - e.t < 15 * 60000) aiChat(e.t);
+      S.nextChat = e.t + (45 + R() * 100) * 1000;
+      aiChat(e.t, now - e.t < 15 * 60000);
     } else if (e.k === 'chatq') {
       S.chatq.splice(S.chatq.indexOf(e.c), 1); say(e.c.ch, e.c.from, e.c.text, e.t);
       if (S.pendingRes) { S.pendingRes = false; allyResources(e.t); }
@@ -694,19 +716,21 @@ function processUntil(now) {
     } else if (e.k === 'tech') {
       const q = S.techq; S.techq = null; S.tech[q.id] = q.lvl;
       hooks.notify('good', 'Araştırma bitti: ' + TECH[q.id].n + ' ' + q.lvl + '. seviye');
+    } else if (e.k === 'htech') {
+      const b = e.b, q = b.techq; b.techq = null; b.tech = b.tech || {}; b.tech[q.id] = q.lvl;
     } else if (e.k === 'ai') {
       AI.tick(e.t); aiMarket(e.t); S.nextAi = e.t + HOUR / S.speed;
     }
-    if (S.over) break;
+    if (S.over && !S.mp) break;
   }
   S.lastT = now;
   return n;
 }
 
-function ownerName(o) { if (o === 'P') return S.player.name; if (o === null) return 'Terk edilmiş'; const b = S.beys.find(x => x.id === o); return b ? b.name : '?'; }
-function ownerColor(o) { if (o === 'P') return S.player.color; if (o === null) return '#8d8a80'; const b = S.beys.find(x => x.id === o); return b ? b.color : '#888'; }
+function ownerName(o) { if (o === 'P') return S.player.name; if (o === null) return 'Terk edilmiş'; const b = beyOf(o); return b ? b.name : '?'; }
+function ownerColor(o) { if (o === 'P') return S.player.color; if (o === null) return '#8d8a80'; const b = beyOf(o); return b ? b.color : '#888'; }
 function ranking() {
-  const rows = [{ id: 'P', name: S.player.name, color: S.player.color, pts: 0, n: 0 }, ...S.beys.map(b => ({ id: b.id, name: b.name, color: b.color, pts: 0, n: 0 }))];
+  const rows = [{ id: 'P', name: S.player.name, color: S.player.color, pts: 0, n: 0 }, ...S.beys.map(b => ({ id: b.id, name: b.name, color: b.color, pts: 0, n: 0, human: !!b.human }))];
   for (const v of S.vil) { const r = rows.find(x => x.id === v.owner); if (r) { r.pts += vPoints(v); r.n++; } }
   return rows.filter(r => r.n > 0 || r.id === 'P').sort((a, b) => b.pts - a.pts);
 }
@@ -749,7 +773,7 @@ const AI = (() => {
       else if (b === 'medrese') s = K * 0.3 - l;
       else if (b === 'kervansaray') s = K * 0.2 - l;
       s += boost[b] || 0;
-      s += Math.random() * 1.5;
+      s += R() * 1.5;
       const cc = bCost(b, l + 1);
       if (cc.some(x => x > c)) { if (b !== 'ambar') continue; }
       if (B[b].pop > pm - used && b !== 'ciftlik') continue;
@@ -768,7 +792,7 @@ const AI = (() => {
     if (unitUnlocked(v, 'casus') && (v.units.casus || 0) < 10) w.push(['casus', 0.3]);
     return w;
   }
-  function pickW(w) { const tot = w.reduce((a, x) => a + x[1], 0); let r = Math.random() * tot; for (const [k, x] of w) { r -= x; if (r <= 0) return k; } return w.length ? w[w.length - 1][0] : null; }
+  function pickW(w) { const tot = w.reduce((a, x) => a + x[1], 0); let r = R() * tot; for (const [k, x] of w) { r -= x; if (r <= 0) return k; } return w.length ? w[w.length - 1][0] : null; }
 
   function village(v, t, bey) {
     let reserve = [0, 0, 0];
@@ -797,48 +821,48 @@ const AI = (() => {
   }
   function barbarian(v) {
     for (const [u, n] of Object.entries(v.base)) { const h = v.units[u] || 0; if (h < n) v.units[u] = Math.min(n, h + Math.max(1, Math.round(n * .05))); }
-    if (Math.random() < .015) { const m = MINES[Math.floor(Math.random() * 3)]; if (v.b[m] < 14) v.b[m]++; }
+    if (R() < .015) { const m = MINES[Math.floor(R() * 3)]; if (v.b[m] < 14) v.b[m]++; }
   }
   function attack(bey, t) {
-    if (Math.random() > 0.35 * bey.aggr) return;
+    if (R() > 0.35 * bey.aggr) return;
     const mine = S.vil.filter(v => v.owner === bey.id);
-    for (const v of mine.sort(() => Math.random() - .5)) {
+    for (const v of mine.sort(() => R() - .5)) {
       const off = offPower(v.units); if (off < 250) continue;
       const busy = new Set(S.moves.filter(m => m.owner === bey.id && m.type !== 'return').map(m => m.to));
-      const canHitP = t >= S.protectUntil && t - bey.lastHitP > 6 * HOUR / S.speed;
+      const canHitP = t - bey.lastHitP > 6 * HOUR / S.speed;
       const cand = S.vil.filter(o => o.owner !== bey.id && !sameClan(o.owner, bey.id) && !busy.has(o.id) && dist(v, o) <= 9 &&
-        (o.owner === null || (o.owner === 'P' && canHitP && Math.random() < bey.aggr * .55)));
+        (o.owner === null || (isHuman(o.owner) && t >= protectOf(o.owner) && canHitP && R() < bey.aggr * .55)));
       let best = null, bscore = -Infinity;
       for (const o of cand) {
         syncRes(o, t);
         const d = defPower(o); if (off < d * 1.25) continue;
-        const score = (o.res[0] + o.res[1] + o.res[2]) / 500 - dist(v, o) + (o.owner === 'P' ? 3 * bey.aggr : 0);
+        const score = (o.res[0] + o.res[1] + o.res[2]) / 500 - dist(v, o) + (isHuman(o.owner) ? 3 * bey.aggr : 0);
         if (score > bscore) { bscore = score; best = o; }
       }
       if (!best) continue;
       const units = {}; for (const u of OFF) if (v.units[u] > 0) units[u] = v.units[u];
       // oyuncunun son köyü fethedilmez: yağmalanabilir ama beylik yok olmaz
-      const pLast = best.owner === 'P' && S.vil.filter(x => x.owner === 'P').length < 2;
+      const pLast = isHuman(best.owner) && lastVillage(best.owner);
       if ((v.units.sancakbeyi || 0) > 0 && off > defPower(best) * 2 && !pLast && (best.owner === null || bey.aggr > .6)) units.sancakbeyi = 1;
-      if (send(v, best, units, 'attack', t) === 'ok') { if (best.owner === 'P') { bey.lastHitP = t; allySupport(best, bey.id, t); } return; }
+      if (send(v, best, units, 'attack', t) === 'ok') { if (isHuman(best.owner)) { bey.lastHitP = t; allySupport(best, bey.id, t); } return; }
     }
   }
   function tick(t) {
     for (const v of S.vil) {
-      if (v.owner === 'P') continue;
+      if (isHuman(v.owner)) continue;
       syncRes(v, t);
       if (v.owner === null) { if (v.base) barbarian(v); continue; }
-      const bey = S.beys.find(b => b.id === v.owner);
+      const bey = beyOf(v.owner); if (!bey) continue;
       village(v, t, bey);
     }
-    for (const bey of S.beys) attack(bey, t);
+    for (const bey of aiBeys()) attack(bey, t);
   }
   return { tick, offPower, defPower };
 })();
 
 return {
   HOUR, RES_NAMES, MINES, B, B_ORDER, U, U_ORDER, REC_B, WORLD, TECH, TECH_ORDER,
-  reqFor, clanOf, sameClan, clanList, ownerPts, createClan, inviteBey, joinClan, leaveClan, playerSay, CLAN_MAX, techCost, techTime, canResearch, research, migrate, medreseMax, TL,
+  reqFor, isHuman, protectOf, mkVillage, clanOf, sameClan, clanList, ownerPts, createClan, inviteBey, joinClan, leaveClan, playerSay, CLAN_MAX, techCost, techTime, canResearch, research, migrate, medreseMax, TL,
   get S() { return S; }, set S(x) { S = x; },
   onNotify(fn) { log = fn; },
   maxAll(v, t) { syncRes(v, t); for (const b of B_ORDER) v.b[b] = B[b].max; v.bq = []; const c = cap(v); v.res = [c, c, c]; },
