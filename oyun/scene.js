@@ -17,7 +17,8 @@ function P(u, v, z = 0) { const p = Pq(u, v, z); if (MODE === 'draw') trackPt(p.
 const RX = r => r * TW / Math.SQRT2, RY = r => r * TH / Math.SQRT2;
 
 // ---------- dokular ----------
-function mkTex(w, h, fn) { const c = document.createElement('canvas'); c.width = w; c.height = h; fn(c.getContext('2d'), w, h); return c; }
+const TEXR = 3;   // dokular 3 kat çözünürlükte üretilir: yakınlaşınca bulanıklaşmaz
+function mkTex(w, h, fn) { const c = document.createElement('canvas'); c.width = w * TEXR; c.height = h * TEXR; const g = c.getContext('2d'); g.scale(TEXR, TEXR); fn(g, w, h); return c; }
 function bricks(g, w, h, rh, minW, maxW, col, rnd, bevel = true) {
   const rows = Math.round(h / rh);
   for (let r = 0; r < rows; r++) {
@@ -86,7 +87,7 @@ function buildTex() {
   T.plowed = mkTex(32, 32, (g, w, h) => { for (let y = 0; y < h; y += 4) { g.fillStyle = hsl(26, 34, 33); g.fillRect(0, y, w, 2.4); g.fillStyle = hsl(24, 30, 22); g.fillRect(0, y + 2.4, w, 1.6); } speck(g, w, h, 200, .12); });
   return T;
 }
-function pat(g, name) { let m = PATC.get(g); if (!m) { m = {}; PATC.set(g, m); } return m[name] || (m[name] = g.createPattern(TEX[name], 'repeat')); }
+function pat(g, name) { let m = PATC.get(g); if (!m) { m = {}; PATC.set(g, m); } if (!m[name]) { const p = g.createPattern(TEX[name], 'repeat'); try { p.setTransform(new DOMMatrix([1 / TEXR, 0, 0, 1 / TEXR, 0, 0])); } catch (e) {} m[name] = p; } return m[name]; }
 
 // ---------- 3B yardımcılar ----------
 const sub3 = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
@@ -116,6 +117,13 @@ function face(g, pts, tex, opt = {}) {
   const f = opt.shade != null ? opt.shade : shadeOf(pts);
   if (f < 1) { g.fillStyle = `rgba(24,18,36,${Math.min(.7, 1 - f)})`; g.fill(); }
   else if (f > 1) { g.fillStyle = `rgba(255,244,220,${Math.min(.3, f - 1)})`; g.fill(); }
+  const zs = pts.map(p => p[2]), zlo = Math.min(...zs), zhi = Math.max(...zs);
+  if (opt.grad !== false && zhi - zlo > .12) {   // duvar dibi koyu, üstü aydınlık: binaya hacim verir
+    let y0 = Infinity, y1 = -Infinity; for (const p of s) { if (p.y < y0) y0 = p.y; if (p.y > y1) y1 = p.y; }
+    const gr = g.createLinearGradient(0, y1, 0, y0);
+    gr.addColorStop(0, 'rgba(22,14,20,.30)'); gr.addColorStop(.45, 'rgba(22,14,20,0)'); gr.addColorStop(1, 'rgba(255,240,210,.10)');
+    g.fillStyle = gr; g.fill();
+  }
   if (opt.edge !== false) { g.strokeStyle = opt.edgeCol || 'rgba(30,20,10,.3)'; g.lineWidth = .6; g.stroke(); }
   g.restore();
 }
@@ -131,29 +139,71 @@ function shPoly(base, h) { const pts = []; for (const [u, v] of base) { pts.push
 function shBox(u0, v0, w, d, h) { shPoly([[u0, v0], [u0 + w, v0], [u0 + w, v0 + d], [u0, v0 + d]], h); }
 function shCirc(u, v, r, h) { const b = []; for (let k = 0; k < 12; k++) { const a = k / 12 * 6.283; b.push([u + Math.cos(a) * r, v + Math.sin(a) * r]); } shPoly(b, h); }
 
+function contactShadow(g, u0, v0, w, d) {
+  g.save();
+  for (const [e, a] of [[.16, .10], [.07, .16]]) {
+    const q = [P(u0 - e * .3, v0 - e * .3), P(u0 + w + e, v0 - e * .3), P(u0 + w + e, v0 + d + e), P(u0 - e * .3, v0 + d + e)];
+    g.beginPath(); q.forEach((p, i) => i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y)); g.closePath(); g.fillStyle = `rgba(20,16,10,${a})`; g.fill();
+  }
+  g.restore();
+}
+// sıvalı duvara ahşap çatkı (hımış) kirişleri: ön (v0+d) ve sağ (u0+w) yüzlere
+function timber(g, u0, v0, w, d, z0, h, full = true) {
+  if (MODE !== 'draw') return;
+  g.save(); g.strokeStyle = 'rgba(78,50,28,.9)'; g.lineCap = 'round';
+  const line = (a, b, lw) => { g.lineWidth = lw; g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.stroke(); };
+  const faces = [[u => P(u0 + u * w, v0 + d + .003, 0), w], [u => P(u0 + w + .003, v0 + d - u * d, 0), d]];
+  for (const [at, L] of faces) {
+    const pt = (f, z) => { const p = at(f); return { x: p.x, y: p.y - z * ZH }; };
+    for (const z of full ? [z0 + .03, z0 + h * .52, z0 + h - .03] : [z0 + h * .52]) line(pt(0, z), pt(1, z), 1.5);
+    if (!full) continue;
+    const n = Math.max(2, Math.round(L / .32));
+    for (let i = 0; i <= n; i++) line(pt(i / n, z0 + .03), pt(i / n, z0 + h - .03), i === 0 || i === n ? 1.6 : 1.1);
+    for (let i = 0; i < n; i += 2) line(pt(i / n, z0 + .05), pt((i + 1) / n, z0 + h * .5), .9);
+  }
+  g.restore();
+}
 function ibox(g, u0, v0, w, d, z0, h, tex, top, opt = {}) {
   if (MODE === 'shadow') { if (!opt.noShadow) shBox(u0, v0, w, d, z0 + h); return; }
   const z1 = z0 + h;
+  if (z0 <= .02 && !opt.noAO && MODE === 'draw') contactShadow(g, u0, v0, w, d);
   face(g, [[u0, v0 + d, z1], [u0 + w, v0 + d, z1], [u0 + w, v0 + d, z0], [u0, v0 + d, z0]], tex, opt);
   face(g, [[u0 + w, v0 + d, z1], [u0 + w, v0, z1], [u0 + w, v0, z0], [u0 + w, v0 + d, z0]], tex, opt);
   if (top !== null) face(g, [[u0, v0, z1], [u0 + w, v0, z1], [u0 + w, v0 + d, z1], [u0, v0 + d, z1]], top || tex, { color: opt.color, dens: opt.dens });
 }
 function hipRoof(g, u0, v0, w, d, z, rh, tex, ov = .1) {
+  if (MODE === 'draw') {   // saçağın duvara düşen gölgesi
+    const ez = Math.max(0, z - .13);
+    face(g, [[u0, v0 + d + .004, z], [u0 + w, v0 + d + .004, z], [u0 + w, v0 + d + .004, ez], [u0, v0 + d + .004, ez]], null, { color: 'rgba(20,12,8,.34)', shade: 1, edge: false, grad: false });
+    face(g, [[u0 + w + .004, v0 + d, z], [u0 + w + .004, v0, z], [u0 + w + .004, v0, ez], [u0 + w + .004, v0 + d, ez]], null, { color: 'rgba(20,12,8,.4)', shade: 1, edge: false, grad: false });
+  }
   u0 -= ov; v0 -= ov; w += 2 * ov; d += 2 * ov;
   if (MODE === 'shadow') { shBox(u0, v0, w, d, z + rh * .6); return; }
   const A = [u0, v0, z], B = [u0 + w, v0, z], C = [u0 + w, v0 + d, z], D = [u0, v0 + d, z];
   if (w >= d) {
     const r1 = [u0 + d / 2, v0 + d / 2, z + rh], r2 = [u0 + w - d / 2, v0 + d / 2, z + rh];
-    face(g, [A, B, r2, r1], tex); face(g, [D, A, r1], tex); face(g, [B, C, r2], tex); face(g, [D, C, r2, r1], tex);
+    face(g, [A, B, r2, r1], tex, { grad: false }); face(g, [D, A, r1], tex, { grad: false }); face(g, [B, C, r2], tex, { grad: false }); face(g, [D, C, r2, r1], tex, { grad: false });
+    ridge(g, r1, r2, [D, C, B]);
   } else {
     const r1 = [u0 + w / 2, v0 + w / 2, z + rh], r2 = [u0 + w / 2, v0 + d - w / 2, z + rh];
-    face(g, [A, B, r1], tex); face(g, [D, A, r1, r2], tex); face(g, [B, C, r2, r1], tex); face(g, [D, C, r2], tex);
+    face(g, [A, B, r1], tex, { grad: false }); face(g, [D, A, r1, r2], tex, { grad: false }); face(g, [B, C, r2, r1], tex, { grad: false }); face(g, [D, C, r2], tex, { grad: false });
+    ridge(g, r1, r2, [D, C, B]);
   }
+}
+function ridge(g, r1, r2, eave) {
+  if (MODE !== 'draw') return;
+  const a = P(...r1), b = P(...r2), c = P(...eave[1]);
+  g.save(); g.lineCap = 'round';
+  g.strokeStyle = 'rgba(255,236,200,.55)'; g.lineWidth = 1.3; g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.stroke();
+  g.strokeStyle = 'rgba(255,236,200,.28)'; g.lineWidth = .9; g.beginPath(); g.moveTo(b.x, b.y); g.lineTo(c.x, c.y); g.stroke();
+  const e = eave.map(q => P(...q)); g.strokeStyle = 'rgba(30,16,10,.55)'; g.lineWidth = 1.2; g.beginPath(); e.forEach((p, i) => i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y)); g.stroke();
+  g.restore();
 }
 function cyl(g, u, v, z0, h, r, tex, base) {
   if (MODE === 'shadow') { shCirc(u, v, r, z0 + h); return; }
   const c0 = P(u, v, z0), c1 = P(u, v, z0 + h), rx = RX(r), ry = RY(r);
   trackPt(c0.x - rx, c0.y + ry); trackPt(c1.x + rx, c1.y - ry);
+  if (z0 <= .02 && r > .1) { g.fillStyle = 'rgba(20,16,10,.16)'; g.beginPath(); g.ellipse(c0.x + rx * .1, c0.y + ry * .15, rx * 1.25, ry * 1.3, 0, 0, 7); g.fill(); }
   g.save(); g.beginPath(); g.moveTo(c1.x - rx, c1.y); g.lineTo(c0.x - rx, c0.y); g.ellipse(c0.x, c0.y, rx, ry, 0, Math.PI, 0, true); g.lineTo(c1.x + rx, c1.y); g.closePath();
   g.fillStyle = base; g.fill();
   if (tex) { g.save(); g.clip(); g.translate(c0.x - rx, c1.y); g.scale(.9, .9); g.fillStyle = pat(g, tex); g.fillRect(0, -10, rx * 2.4 + 10, c0.y - c1.y + ry + 30); g.restore(); }
@@ -202,7 +252,12 @@ function hole(g, a, b, z0, z1, arch, col = '#2a2019', glow = true) {
   const c = { x: (s0.x + s1.x) / 2, y: (s0.y + s1.y) / 2 - (arch || 0) * ZH * 2 };
   const path = () => { g.beginPath(); g.moveTo(s3.x, s3.y); g.lineTo(s0.x, s0.y); if (arch) g.quadraticCurveTo(c.x, c.y, s1.x, s1.y); else g.lineTo(s1.x, s1.y); g.lineTo(s2.x, s2.y); g.closePath(); };
   path(); g.fillStyle = col; g.fill(); g.strokeStyle = 'rgba(245,230,195,.45)'; g.lineWidth = .7; g.stroke();
-  if (glow) SC.wins.push({ s0, s1, s2, s3, c, arch: !!arch });
+  if (glow) {   // pencere: tahta kanat çizgisi ve taş denizlik
+    g.strokeStyle = 'rgba(120,80,45,.7)'; g.lineWidth = .6; const m0 = { x: (s0.x + s1.x) / 2, y: (s0.y + s1.y) / 2 }, m1 = { x: (s3.x + s2.x) / 2, y: (s3.y + s2.y) / 2 };
+    g.beginPath(); g.moveTo(m0.x, m0.y); g.lineTo(m1.x, m1.y); g.stroke();
+    g.strokeStyle = 'rgba(250,238,210,.85)'; g.lineWidth = 1.4; g.beginPath(); g.moveTo(s3.x - (s2.x - s3.x) * .12, s3.y + 1 - (s2.y - s3.y) * .12); g.lineTo(s2.x + (s2.x - s3.x) * .12, s2.y + 1 + (s2.y - s3.y) * .12); g.stroke();
+    SC.wins.push({ s0, s1, s2, s3, c, arch: !!arch });
+  }
 }
 function flagPole(g, u, v, z, h, col, s = 1) {
   if (MODE !== 'draw') return;
@@ -276,6 +331,7 @@ function tree(g, u, v, kind, sz, seed) {
   if (MODE === 'shadow') { shCirc(u, v, (kind === 'mese' ? .3 : .13) * sz, tall * sz); return; }
   if (MODE !== 'draw') return;
   const b = Pq(u, v, 0), r = mul32(seed);
+  trackPt(b.x - 22 * sz, b.y - 54 * sz); trackPt(b.x + 22 * sz, b.y + 4);
   if (kind === 'mese') {
     g.fillStyle = '#4a3524'; g.fillRect(b.x - 1.6 * sz, b.y - 12 * sz, 3.2 * sz, 12 * sz);
     const cx = b.x, cy = b.y - 22 * sz, blobs = [];
@@ -308,11 +364,12 @@ function bKonak(add, l) {
   add(6, 6, g => {
     ibox(g, 4.75, 4.75, 2.5, 2.5, 0, z0, 'pave', 'pave', { noShadow: true });
     if (l >= 5) {
-      ibox(g, 4.85, 5.6, .5, 1.2, z0, H * .7, 'plaster', null); hipRoof(g, 4.85, 5.6, .5, 1.2, z0 + H * .7, .3, l >= 20 ? 'lead' : 'roof');
-      ibox(g, 5.6, 4.85, 1.2, .5, z0, H * .7, 'plaster', null); hipRoof(g, 5.6, 4.85, 1.2, .5, z0 + H * .7, .3, l >= 20 ? 'lead' : 'roof');
+      ibox(g, 4.85, 5.6, .5, 1.2, z0, H * .7, 'plaster', null); timber(g, 4.85, 5.6, .5, 1.2, z0, H * .7); hipRoof(g, 4.85, 5.6, .5, 1.2, z0 + H * .7, .3, l >= 20 ? 'lead' : 'roof');
+      ibox(g, 5.6, 4.85, 1.2, .5, z0, H * .7, 'plaster', null); timber(g, 5.6, 4.85, 1.2, .5, z0, H * .7); hipRoof(g, 5.6, 4.85, 1.2, .5, z0 + H * .7, .3, l >= 20 ? 'lead' : 'roof');
     }
     ibox(g, m0, m0, m, m, z0, .22, 'stone', null);
     ibox(g, m0, m0, m, m, z0 + .22, H - .22, 'plaster', null);
+    timber(g, m0, m0, m, m, z0 + .22, H - .22, false);
     ibox(g, m0 - .02, m0 - .02, m + .04, m + .04, z0 + H - .17, .11, 'turq', null, { dens: 70 });
     ibox(g, m0 - .05, m0 - .05, m + .1, m + .1, z0 + H - .06, .07, 'stone', 'stone');
     for (const a of [5.55, 6.65]) hole(g, [a, fv + .002], [a + .2, fv + .002], z0 + .4, z0 + .66, .06);
@@ -356,6 +413,12 @@ function bMedrese(add, l) {
     dome(g, u0 + w / 2, v0 + d / 2 - .1, H + .15, .3, .32, '#d9e3ea', '#8d9ba6', '#4b5761');
     if (l >= 10) { cyl(g, u0 + .12, v0 + .12, H + .07, .5, .07, 'stone', '#d8ccb0'); const a = cone(g, u0 + .12, v0 + .12, H + .57, .08, .3, '#8d99a3', 'lead'); if (a && MODE === 'draw') alem(g, a.x, a.y); }
   }, 'medrese');
+  if (l >= 15) add(9.0, 5.8, g => {   // kubbeli revak (sütunlu avlu kanadı)
+    const u0 = 8.75, v0 = 5.2, d = 1.15, h = .5;
+    ibox(g, u0, v0, .3, d, 0, h, 'stone', 'pave');
+    for (let i = 0; i < 3; i++) hole(g, [u0 + .302, v0 + d - .08 - i * .37], [u0 + .302, v0 + d - .3 - i * .37], 0, h * .72, .07, '#3a2a1c', false);
+    for (let i = 0; i < 3; i++) dome(g, u0 + .15, v0 + d - .19 - i * .37, h, .13, .13, '#d9e3ea', '#8d9ba6', '#4b5761');
+  }, 'medrese');
 }
 function bKervansaray(add, l) {
   const u0 = 3.3, v0 = 13.0, w = 1.6, d = 1.25, H = .55 + Math.min(l, 20) * .01;
@@ -370,6 +433,8 @@ function bKervansaray(add, l) {
     hole(g, [u0 + w + .002, v0 + .8], [u0 + w + .002, v0 + .6], H * .35, H * .7, .05);
     dome(g, u0 + .8, v0 + d - .2, H + .3, .18, .18, '#d9e3ea', '#8d9ba6', '#4b5761');
     flagPole(g, u0 + .1, v0 + .1, H + .1, .45, S.player.color, .8);
+    if (l >= 10) for (const [a, b] of [[u0 + w, v0 + d], [u0 + w, v0]]) { cyl(g, a, b, 0, H + .22, .13, 'stone', '#cbbd9d'); cone(g, a, b, H + .22, .16, .22, '#8d99a3', 'lead'); }
+    if (l >= 15) for (const a of [u0 + .35, u0 + 1.25]) dome(g, a, v0 + .45, H + .02, .16, .15, '#d9e3ea', '#8d9ba6', '#4b5761');
   }, 'kervansaray');
   const n = Math.min(3, 1 + Math.floor(l / 6));
   for (let i = 0; i < n; i++) { const cu = u0 - .45, cv = v0 + .25 + i * .45; add(cu, cv, g => cam(g, cu, cv, i), 'kervansaray'); }
@@ -399,12 +464,12 @@ function bDivan(add, l) {
 function bKisla(add, l) {
   const H = .5 + Math.min(l, 25) * .008;
   if (l >= 6) add(5.9, 3.9, g => {
-    ibox(g, 5.35, 3.5, 1.1, .8, 0, .16, 'stone', null); ibox(g, 5.35, 3.5, 1.1, .8, .16, H * .85 - .16, 'plaster', null);
+    ibox(g, 5.35, 3.5, 1.1, .8, 0, .16, 'stone', null); ibox(g, 5.35, 3.5, 1.1, .8, .16, H * .85 - .16, 'plaster', null); timber(g, 5.35, 3.5, 1.1, .8, .16, H * .85 - .16);
     for (const a of [5.55, 6.05]) hole(g, [a, 4.302], [a + .18, 4.302], .24, .4, .04);
     hipRoof(g, 5.35, 3.5, 1.1, .8, H * .85, .3, 'roof');
   }, 'kisla');
   add(4.4, 3.95, g => {
-    ibox(g, 3.5, 3.5, 1.8, .9, 0, .18, 'stone', null); ibox(g, 3.5, 3.5, 1.8, .9, .18, H - .18, 'plaster', null);
+    ibox(g, 3.5, 3.5, 1.8, .9, 0, .18, 'stone', null); ibox(g, 3.5, 3.5, 1.8, .9, .18, H - .18, 'plaster', null); timber(g, 3.5, 3.5, 1.8, .9, .18, H - .18);
     for (const a of [3.7, 4.0, 4.95]) hole(g, [a, 4.402], [a + .16, 4.402], .26, .44, .04);
     hole(g, [4.35, 4.402], [4.62, 4.402], 0, .42, .1, '#3a2414', false);
     hole(g, [5.302, 4.15], [5.302, 3.95], .26, .44, .04);
@@ -413,6 +478,13 @@ function bKisla(add, l) {
   }, 'kisla');
   const n = Math.min(4, 1 + Math.floor(l / 5));
   add(7.1, 3.7, g => { for (let i = 0; i < n; i++) dummy(g, 6.75 + i * .28, 3.55 + (i % 2) * .2); }, 'kisla');
+  if (l >= 12) add(3.2, 3.3, g => {   // ahşap gözetleme kulesi
+    for (const [a, b] of [[3.0, 3.1], [3.32, 3.1], [3.0, 3.42], [3.32, 3.42]]) ibox(g, a, b, .06, .06, 0, 1.25, 'wood', 'wood', { noAO: true });
+    ibox(g, 2.96, 3.06, .44, .44, 1.0, .08, 'wood', 'wood');
+    ibox(g, 2.96, 3.06, .44, .04, 1.08, .16, 'wood', null, { noShadow: true }); ibox(g, 2.96, 3.06, .04, .44, 1.08, .16, 'wood', null, { noShadow: true });
+    hipRoof(g, 2.96, 3.06, .44, .44, 1.3, .28, 'roof', .06);
+    flagPole(g, 3.18, 3.28, 1.55, .35, S.player.color, .7);
+  }, 'kisla');
   // kışla önünde nizam içinde bekleyen askerler (süs)
   const cols = Math.min(7, 3 + Math.floor(l / 4)), rows = Math.min(4, 1 + Math.floor(l / 5));
   for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
@@ -459,6 +531,11 @@ function bAmbar(add, l) {
     const n = Math.min(5, 1 + Math.floor(l / 5));
     for (let i = 0; i < n; i++) ibox(g, u0 + .05 + i * .23, v0 + d + .12, .18, .18, 0, .16, 'wood', 'wood');
   }, 'ambar');
+  if (l >= 20) add(9.0, 3.85, g => {   // taş tahıl silosu
+    cyl(g, 9.0, 3.85, 0, .95 + Math.min(l - 20, 10) * .02, .26, 'stone', '#cbbd9d');
+    const a = cone(g, 9.0, 3.85, .95 + Math.min(l - 20, 10) * .02, .31, .38, '#9b3b27', 'roof');
+    if (a && MODE === 'draw') { g.fillStyle = '#d8b04a'; g.beginPath(); g.arc(a.x, a.y - 1, 1.6, 0, 7); g.fill(); }
+  }, 'ambar');
 }
 function bTophane(add, l) {
   const H = .55 + Math.min(l, 15) * .02;
@@ -473,6 +550,17 @@ function bTophane(add, l) {
     hole(g, [u0 + w + .002, v0 + .7], [u0 + w + .002, v0 + .55], .3, .45, .04);
   }, 'tophane');
   add(5.1, 8.45, g => trebuchet(g, 5.1, 8.45), 'tophane');
+  if (l >= 8) for (const [u, v] of [[3.75, 8.55], [4.2, 8.6]]) add(u, v, g => cannon(g, u, v), 'tophane');
+}
+function cannon(g, u, v) {
+  if (MODE === 'shadow') { shBox(u - .12, v - .06, .28, .12, .12); return; }
+  if (MODE !== 'draw') return;
+  const a = P(u - .12, v, .1), b = P(u + .18, v, .15), w1 = P(u - .04, v + .05, .05), w2 = P(u - .04, v - .05, .05);
+  g.strokeStyle = '#26282d'; g.lineCap = 'round'; g.lineWidth = 4.2; g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.stroke();
+  g.strokeStyle = 'rgba(255,255,255,.25)'; g.lineWidth = 1; g.beginPath(); g.moveTo(a.x, a.y - 1.3); g.lineTo(b.x, b.y - 1.3); g.stroke();
+  g.fillStyle = '#1b1c20'; g.beginPath(); g.arc(b.x + 1, b.y, 1.5, 0, 7); g.fill();
+  for (const w of [w2, w1]) { g.fillStyle = '#5e3b1f'; g.beginPath(); g.ellipse(w.x, w.y, 3.2, 3.4, 0, 0, 7); g.fill(); g.strokeStyle = '#3a2414'; g.lineWidth = .8; g.stroke(); g.fillStyle = '#8a6238'; g.beginPath(); g.arc(w.x, w.y, 1, 0, 7); g.fill(); }
+  g.fillStyle = '#2a2a2e'; for (const [dx, dy] of [[5, 3], [7, 2], [6, 1]]) { g.beginPath(); g.arc(w1.x + dx, w1.y + dy, 1.4, 0, 7); g.fill(); }
 }
 function trebuchet(g, u, v) {
   if (MODE === 'shadow') { shBox(u - .2, v - .15, .4, .3, .5); return; }
@@ -498,6 +586,11 @@ function bAhir(add, l) {
     cyl(g, 11.65, 4.0, 0, .16, .13, null, '#d6b25e');
   }, 'ahir');
   add(10.9, 5.6, g => fence(g, 10.0, 4.8, 1.8, 1.6), 'ahir');
+  if (l >= 10) add(9.75, 4.0, g => {   // samanlıklı ek ahır
+    ibox(g, 9.5, 3.7, .45, .72, 0, H * .78, 'wood', null); hipRoof(g, 9.5, 3.7, .45, .72, H * .78, .28, 'roof', .06);
+    hole(g, [9.6, 4.422], [9.85, 4.422], 0, H * .55, 0, '#2b1b10', false);
+    for (const [u, v] of [[9.62, 4.65], [9.85, 4.7]]) cyl(g, u, v, 0, .12, .1, null, '#d6b25e');
+  }, 'ahir');
   if (MODE === 'draw') SC.anims.push({ k: 'horses', u0: 10.15 + SH.ahir[0], v0: 4.95 + SH.ahir[1], w: 1.5, d: 1.3, n: Math.min(4, Math.ceil(l / 4)) });
 }
 function fence(g, u0, v0, w, d) {
@@ -568,12 +661,18 @@ function bDemir(add, l) {
 }
 function bCiftlik(add, l) {
   add(10.35, 11.8, g => {
-    ibox(g, 10.0, 11.5, .7, .6, 0, .4, 'plaster', null);
+    ibox(g, 10.0, 11.5, .7, .6, 0, .4, 'plaster', null); timber(g, 10.0, 11.5, .7, .6, 0, .4);
     hole(g, [10.15, 12.102], [10.3, 12.102], .16, .3, .03); hole(g, [10.42, 12.102], [10.58, 12.102], 0, .3, .06, '#3a2414', false);
     hipRoof(g, 10.0, 11.5, .7, .6, .4, .3, 'roof');
     smokeAt(10.15, 11.6, .75, .4);
   }, 'ciftlik');
   add(11.2, 11.75, g => { for (const [u, v] of [[10.95, 11.6], [11.25, 11.75], [11.1, 11.95]]) cyl(g, u, v, 0, .14, .12, null, '#d6b25e'); }, 'ciftlik');
+  if (l >= 10) add(11.95, 12.1, g => {   // yel değirmeni
+    cyl(g, 11.95, 12.1, 0, .95, .22, 'stone', '#d6cbb0');
+    cone(g, 11.95, 12.1, .95, .26, .35, '#9b3b27', 'roof');
+    hole(g, [11.9, 12.322], [12.05, 12.322], 0, .3, .06, '#3a2414', false);
+    if (MODE === 'draw') { const p = P(11.95 + .2, 12.1 + .2, .85); SC.anims.push({ k: 'mill', x: p.x, y: p.y }); }
+  }, 'ciftlik');
 }
 function stake(g, u, v, h) {
   if (MODE === 'shadow') { shCirc(u, v, .06, h); return; }
@@ -707,18 +806,33 @@ function mergeHit(b, t) {
   else SC.hits.push({ b, x0: t.x0, x1: t.x1, y0: t.y0, y1: t.y1 });
 }
 
-// ---------- durağan katman ----------
-function renderStatic(v, pw, ph) {
+// ---------- durağan katman: karo (tile) sistemi ----------
+// Sahne bir kez "kurulur" (ağaçlar, binalar, gölgeler, sınır kutuları). Ekrana önce düşük çözünürlüklü
+// bir taban resim çizilir; yakınlaştıkça yalnızca görünen parçalar (karolar) o yakınlığa uygun netlikte,
+// kare başına birkaç tane olmak üzere çizilir. Böylece yakınlaştırma donmaz ve görüntü bulanıklaşmaz.
+const TS = 512, LEVELS = [.6, .9, 1.35, 2, 3, 4.5, 6.75, 10], TILE_MAX = 32;
+const TILES = new Map(), NOISE = new Map();
+function noiseCanvas(seed) {
+  if (NOISE.has(seed)) return NOISE.get(seed);
+  const gw = 512, gh = Math.round(512 * SC.H / SC.W), c = document.createElement('canvas'); c.width = gw; c.height = gh;
+  const x = c.getContext('2d'), id = x.createImageData(gw, gh), d = id.data, k = SC.W / gw;
+  for (let j = 0; j < gh; j++) for (let i = 0; i < gw; i++) {
+    const lx = i * k, ly = j * k, n1 = fbm(lx / 95, ly / 70, seed), n2 = fbm(lx / 45 + 50, ly / 34, seed + 7), f = (hash2(i, j, seed + 3) - .5) * 14;
+    let r = 74 + 44 * n1, gg = 100 + 44 * n1, b = 44 + 22 * n1;
+    if (n2 > .58) { const t = Math.min(1, (n2 - .58) * 3); r += (150 - r) * t * .6; gg += (140 - gg) * t * .5; b += (88 - b) * t * .6; }
+    const o = (j * gw + i) * 4; d[o] = r + f; d[o + 1] = gg + f; d[o + 2] = b + f * .6; d[o + 3] = 255;
+  }
+  x.putImageData(id, 0, 0);
+  if (NOISE.size > 6) NOISE.delete(NOISE.keys().next().value);
+  NOISE.set(seed, c); return c;
+}
+function buildStatic(v, vi) {
   if (!TEX) TEX = buildTex();
-  const c = document.createElement('canvas'); c.width = pw; c.height = ph;
-  const g = c.getContext('2d'), sc = pw / SC.W, seed = (S.seed + v.id * 977) | 0, rnd = mul32(seed);
-  g.setTransform(sc, 0, 0, sc, 0, 0);
-  SC.anims = []; SC.wins = []; SC.hits = [];
-  MODE = 'draw'; TRACK = null;
-  ground(g, pw, ph, seed % 1000, rnd);
-  decals(g, v);
-  const items = [], add = (u, vv, fn, b, o) => { o = o || (b && SH[b]) || [0, 0]; items.push({ key: u + vv + o[0] + o[1], fn: g2 => { OFF = o; fn(g2); OFF = [0, 0]; }, b }); };
-  // ağaçlar
+  const seed = (S.seed + v.id * 977) | 0, rnd = mul32(seed);
+  const G = { v, items: [], grass: [], flowers: [], noise: noiseCanvas(seed % 1000) };
+  for (let i = 0; i < 700; i++) { const px = rnd() * SC.W, py = rnd() * SC.H, l = 2 + rnd() * 3, c = rnd() < .5, dx = (rnd() - .5) * 2; G.grass.push([px, py, l, c, dx]); }
+  for (let i = 0; i < 60; i++) G.flowers.push([rnd() * SC.W, rnd() * SC.H, i % 4]);
+  const items = G.items, add = (u, vv, fn, b, o) => { o = o || (b && SH[b]) || [0, 0]; items.push({ key: u + vv + o[0] + o[1], fn: g2 => { OFF = o; fn(g2); OFF = [0, 0]; }, b }); };
   const tr = [];
   for (let i = 0; i < 8000 && tr.length < 240; i++) {
     const u = -20 + rnd() * 50, vv = -20 + rnd() * 54, p = Pq(u, vv);
@@ -726,35 +840,97 @@ function renderStatic(v, pw, ph) {
     if (occupied(u, vv) || tr.some(t => Math.hypot(t[0] - u, t[1] - vv) < .6)) continue;
     const r = rnd(); tr.push([u, vv, r < .3 ? 'servi' : r < .42 ? 'kavak' : 'mese', .8 + rnd() * .45, (rnd() * 1e9) | 0]);
   }
-  for (const [u, vv, k, sz, s] of tr) add(u, vv, g => tree(g, u, vv, k, sz, s), null);
+  for (const [u, vv, k, sz, s2] of tr) add(u, vv, g => tree(g, u, vv, k, sz, s2), null);
   walls(add, v.b.sur);
-  const B = { konak: bKonak, kervansaray: bKervansaray, medrese: bMedrese, divan: bDivan, kisla: bKisla, ambar: bAmbar, tophane: bTophane, ahir: bAhir, kereste: bKereste, tas: bTas, demir: bDemir, ciftlik: bCiftlik };
-  for (const b in B) if (v.b[b] > 0) B[b](add, v.b[b]);
+  const BF = { konak: bKonak, kervansaray: bKervansaray, medrese: bMedrese, divan: bDivan, kisla: bKisla, ambar: bAmbar, tophane: bTophane, ahir: bAhir, kereste: bKereste, tas: bTas, demir: bDemir, ciftlik: bCiftlik };
+  for (const b in BF) if (v.b[b] > 0) BF[b](add, v.b[b]);
   for (const q of v.bq) { const lot = LOTS[q.b]; if (lot && q.b !== 'sur' && q.b !== 'ciftlik') add(lot[0] + lot[2] / 2, lot[1] + lot[3] / 2 + .05, g => scaffold(g, lot, v.b[q.b]), q.b); }
-  // gölgeler
+  // gölgeler: bir kez, yumuşatılmış olarak
   MODE = 'shadow'; SHADOWS = [];
-  for (const it of items) it.fn(g);
+  const dummy = document.createElement('canvas').getContext('2d');
+  for (const it of items) it.fn(dummy);
   MODE = 'draw';
-  const shc = document.createElement('canvas'); shc.width = pw; shc.height = ph;
-  const sg = shc.getContext('2d'); sg.setTransform(sc, 0, 0, sc, 0, 0); sg.fillStyle = '#000';
+  const ss = 1.25, shc = document.createElement('canvas'); shc.width = Math.round(SC.W * ss); shc.height = Math.round(SC.H * ss);
+  const sg = shc.getContext('2d'); sg.setTransform(ss, 0, 0, ss, 0, 0); sg.fillStyle = '#000';
   for (const p of SHADOWS) { if (p.length < 3) continue; sg.beginPath(); p.forEach((q, i) => i ? sg.lineTo(q.x, q.y) : sg.moveTo(q.x, q.y)); sg.closePath(); sg.fill(); }
-  g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = .3; g.filter = 'blur(' + Math.max(1, sc * 1.6).toFixed(1) + 'px)'; g.drawImage(shc, 0, 0); g.restore();
-  // nesneler (arkadan öne)
+  G.shadow = document.createElement('canvas'); G.shadow.width = shc.width; G.shadow.height = shc.height;
+  const bg = G.shadow.getContext('2d'); bg.filter = 'blur(2px)'; bg.drawImage(shc, 0, 0);
   items.sort((a, b) => a.key - b.key);
-  for (const it of items) {
-    if (it.b) TRACK = { x0: 1e9, y0: 1e9, x1: -1e9, y1: -1e9 };
+  // taban resim + sınır kutuları, dokunma alanları, animasyon noktaları
+  const bs = Math.min(1.6, Math.max(.6, vi.cover * vi.dpr * .8));
+  G.base = document.createElement('canvas'); G.base.width = Math.round(SC.W * bs); G.base.height = Math.round(SC.H * bs); G.bs = G.base.width / SC.W;
+  const g = G.base.getContext('2d'); g.setTransform(G.bs, 0, 0, G.bs, 0, 0);
+  SC.anims = []; SC.wins = []; SC.hits = [];
+  paintStatic(g, G, null, true);
+  SC.anims.push({ k: 'birds' }, { k: 'clouds' });
+  return G;
+}
+function paintStatic(g, G, rect, measure) {
+  const v = G.v;
+  g.imageSmoothingEnabled = true; g.drawImage(G.noise, 0, 0, SC.W, SC.H);
+  g.lineWidth = .8;
+  for (const [px, py, l, c, dx] of G.grass) { if (rect && (px < rect.x0 - 4 || px > rect.x1 + 4 || py < rect.y0 - 6 || py > rect.y1 + 6)) continue; g.strokeStyle = c ? 'rgba(40,70,25,.35)' : 'rgba(170,190,110,.3)'; g.beginPath(); g.moveTo(px, py); g.lineTo(px + dx, py - l); g.stroke(); }
+  g.globalAlpha = .7;
+  for (const [x, y, k] of G.flowers) { g.fillStyle = ['#e8d36a', '#f2f0e8', '#c46a8a', '#8fa8e0'][k]; g.beginPath(); g.arc(x, y, .9, 0, 7); g.fill(); }
+  g.globalAlpha = 1;
+  decals(g, v);
+  g.save(); g.globalAlpha = .3; g.drawImage(G.shadow, 0, 0, SC.W, SC.H); g.restore();
+  for (const it of G.items) {
+    const bb = it.bb;
+    if (rect && bb && (bb.x1 < rect.x0 || bb.x0 > rect.x1 || bb.y1 < rect.y0 || bb.y0 > rect.y1)) continue;
+    if (measure) TRACK = { x0: 1e9, y0: 1e9, x1: -1e9, y1: -1e9 };
     it.fn(g);
-    if (it.b) mergeHit(it.b, TRACK);
-    TRACK = null;
+    if (measure) {
+      if (TRACK.x0 <= TRACK.x1) it.bb = { x0: TRACK.x0 - 8, y0: TRACK.y0 - 8, x1: TRACK.x1 + 8, y1: TRACK.y1 + 8 };
+      if (it.b) mergeHit(it.b, TRACK);
+      TRACK = null;
+    }
   }
-  if (v.b.sur > 0) { const a = Pq(WA, WA, 1), b2 = Pq(WB, WA, 0), c2 = Pq(WB, WB, 0), d2 = Pq(WA, WB, 0); SC.hits.push({ b: 'sur', nobadge: true, x0: d2.x, x1: b2.x, y0: a.y, y1: c2.y }); }
+  if (measure && v.b.sur > 0) { const a = Pq(WA, WA, 1), b2 = Pq(WB, WA, 0), c2 = Pq(WB, WB, 0), d2 = Pq(WA, WB, 0); SC.hits.push({ b: 'sur', nobadge: true, x0: d2.x, x1: b2.x, y0: a.y, y1: c2.y }); }
   // ışık: sol üstten sıcak güneş, kenarlarda hafif karartma
   const sun = g.createRadialGradient(SC.W * .15, -40, 20, SC.W * .2, 0, SC.W * .9);
   sun.addColorStop(0, 'rgba(255,226,160,.18)'); sun.addColorStop(1, 'rgba(255,226,160,0)'); g.fillStyle = sun; g.fillRect(0, 0, SC.W, SC.H);
   const vg = g.createRadialGradient(SC.W / 2, SC.H * .55, SC.H * .45, SC.W / 2, SC.H * .55, SC.W * .62);
   vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(10,15,25,.32)'); g.fillStyle = vg; g.fillRect(0, 0, SC.W, SC.H);
-  SC.anims.push({ k: 'birds' }, { k: 'clouds' });
+}
+function renderTile(G, L, i, j) {
+  const s = LEVELS[L], ts = TS / s, c = document.createElement('canvas'); c.width = c.height = TS + 2;
+  const g = c.getContext('2d'), x0 = i * ts, y0 = j * ts;
+  g.setTransform(s, 0, 0, s, -x0 * s + 1, -y0 * s + 1);
+  const keep = [SC.anims, SC.wins, SC.hits]; SC.anims = []; SC.wins = []; SC.hits = [];   // karo çizimi yan etki bırakmasın
+  try {
+    g.beginPath(); g.rect(x0 - 1 / s, y0 - 1 / s, ts + 2 / s, ts + 2 / s); g.clip();
+    g.fillStyle = '#56733a'; g.fillRect(x0 - 1 / s, y0 - 1 / s, ts + 2 / s, ts + 2 / s);
+    paintStatic(g, G, { x0: x0 - 2, y0: y0 - 2, x1: x0 + ts + 2, y1: y0 + ts + 2 }, false);
+  } finally { SC.anims = keep[0]; SC.wins = keep[1]; SC.hits = keep[2]; }
   return c;
+}
+// durağan katmanı ekrana basar; eksik karoları zaman bütçesiyle üretir
+function drawStatic(g, vi, pinching, panning) {
+  const G = SC.G, k = vi.k, d = vi.dpr, need = k * d;
+  g.setTransform(k * d, 0, 0, k * d, vi.ox * d, vi.oy * d); g.imageSmoothingEnabled = true;
+  let L = LEVELS.findIndex(x => x >= need * .92); if (L < 0) L = LEVELS.length - 1;
+  if (LEVELS[L] <= G.bs * 1.08) { g.drawImage(G.base, 0, 0, SC.W, SC.H); return; }
+  const x0 = Math.max(0, -vi.ox / k), y0 = Math.max(0, -vi.oy / k), x1 = Math.min(SC.W, (vi.r.width - vi.ox) / k), y1 = Math.min(SC.H, (vi.r.height - vi.oy) / k);
+  const cells = (LL, fn) => { const ts = TS / LEVELS[LL]; for (let j = Math.floor(y0 / ts); j <= Math.floor((y1 - .01) / ts); j++) for (let i = Math.floor(x0 / ts); i <= Math.floor((x1 - .01) / ts); i++) fn(i, j, ts); };
+  const put = (LL, i, j, ts, c) => { const e = 1 / LEVELS[LL]; g.drawImage(c, i * ts - e, j * ts - e, ts + 2 * e, ts + 2 * e); };
+  const missing = [];
+  cells(L, (i, j) => { if (!TILES.has(L + ':' + i + ':' + j)) missing.push([i, j]); });
+  if (missing.length) g.drawImage(G.base, 0, 0, SC.W, SC.H);
+  if (missing.length) for (let LL = L - 1; LL >= 0 && LEVELS[LL] > G.bs * 1.08; LL--) {   // eksikler için bir alt seviyede ne varsa
+    cells(LL, (i, j, ts) => { const c = TILES.get(LL + ':' + i + ':' + j); if (c) put(LL, i, j, ts, c); }); break;
+  }
+  cells(L, (i, j, ts) => { const key = L + ':' + i + ':' + j, c = TILES.get(key); if (c) { TILES.delete(key); TILES.set(key, c); put(L, i, j, ts, c); } });
+  if (!missing.length || pinching) return;
+  const ts = TS / LEVELS[L], cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  missing.sort((a, b) => Math.hypot((a[0] + .5) * ts - cx, (a[1] + .5) * ts - cy) - Math.hypot((b[0] + .5) * ts - cx, (b[1] + .5) * ts - cy));
+  const t0 = performance.now(), budget = panning ? 4 : 10;
+  for (const [i, j] of missing) {
+    const c = renderTile(G, L, i, j); TILES.set(L + ':' + i + ':' + j, c);
+    g.setTransform(k * d, 0, 0, k * d, vi.ox * d, vi.oy * d); put(L, i, j, ts, c);
+    if (performance.now() - t0 > budget) break;
+  }
+  while (TILES.size > TILE_MAX) TILES.delete(TILES.keys().next().value);
 }
 
 // ---------- hareketli katman ----------
@@ -830,6 +1006,17 @@ function drawAnims(g, t, night, v) {
       const f = (Math.sin(t / 3200) + 1) / 2, x = a.a.x + (a.b.x - a.a.x) * f, y = a.a.y + (a.b.y - a.a.y) * f;
       g.fillStyle = '#5a4030'; g.fillRect(x - 5, y - 6, 10, 5); g.fillStyle = '#6f7f96'; g.beginPath(); g.ellipse(x, y - 6, 4.5, 2, 0, 0, 7); g.fill();
       g.fillStyle = '#222'; g.beginPath(); g.arc(x - 3, y, 1.6, 0, 7); g.arc(x + 3, y, 1.6, 0, 7); g.fill();
+    } else if (a.k === 'mill') {
+      const r = 20, ang = t / 1600;
+      g.save(); g.translate(a.x, a.y); g.scale(1, .82);
+      for (let i = 0; i < 4; i++) {
+        const q = ang + i * Math.PI / 2, cx = Math.cos(q), sy = Math.sin(q);
+        g.strokeStyle = '#5e3b1f'; g.lineWidth = 1.3; g.beginPath(); g.moveTo(0, 0); g.lineTo(cx * r, sy * r); g.stroke();
+        g.fillStyle = 'rgba(238,230,210,.9)'; g.beginPath(); g.moveTo(cx * 4, sy * 4); g.lineTo(cx * r, sy * r);
+        g.lineTo(cx * r - sy * 5, sy * r + cx * 5); g.lineTo(cx * 4 - sy * 4, sy * 4 + cx * 4); g.closePath(); g.fill();
+        g.strokeStyle = 'rgba(90,60,30,.5)'; g.lineWidth = .5; g.stroke();
+      }
+      g.fillStyle = '#3a2a1e'; g.beginPath(); g.arc(0, 0, 2, 0, 7); g.fill(); g.restore();
     } else if (a.k === 'birds') {
       for (let i = 0; i < 3; i++) {
         const x = ((t / 45 + i * 60) % (SC.W + 80)) - 40, y = 60 + i * 9 + Math.sin(t / 900 + i) * 6, f = Math.sin(t / 110 + i * 2) * 3;
@@ -920,17 +1107,17 @@ function bodyRects(v) {
 }
 
 // ---------- kamera ----------
-SC.cam = SC.cam || { z: 1.55, x: 330, y: 525 }; SC.rs = 0; SC.idle = 0; SC.ptrs = new Map(); SC.sel = null;
+SC.cam = SC.cam || { z: 1.55, x: 330, y: 525 }; SC.idle = 0; SC.ptrs = new Map(); SC.sel = null;
 function viewInfo() {
   const cv = $('scene'); if (!cv) return null;
-  const r = cv.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const r = cv.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, 2.5);
   const cover = Math.max(r.width / SC.W, r.height / SC.H), k = cover * SC.cam.z;
   return { cv, r, dpr, cover, k, ox: r.width / 2 - SC.cam.x * k, oy: r.height / 2 - SC.cam.y * k };
 }
 function clampCam() {
   const vi = viewInfo(); if (!vi) return;
   const zmin = 1;
-  SC.cam.z = Math.max(zmin, Math.min(3.2, SC.cam.z));
+  SC.cam.z = Math.max(zmin, Math.min(4.5, SC.cam.z));
   const k = vi.cover * SC.cam.z, hw = vi.r.width / k / 2, hh = vi.r.height / k / 2;
   SC.cam.x = hw * 2 >= SC.W ? SC.W / 2 : Math.max(hw, Math.min(SC.W - hw, SC.cam.x));
   SC.cam.y = hh * 2 >= SC.H ? SC.H / 2 : Math.max(hh, Math.min(SC.H - hh, SC.cam.y));
@@ -941,7 +1128,7 @@ function zoomAt(f, cx, cy) {
   const before = toLogical(cx, cy);
   SC.cam.z *= f; clampCam();
   const after = toLogical(cx, cy);
-  SC.cam.x += before.x - after.x; SC.cam.y += before.y - after.y; clampCam(); SC.idle = performance.now();
+  SC.cam.x += before.x - after.x; SC.cam.y += before.y - after.y; clampCam(); SC.idle = SC.zoomT = performance.now();
 }
 
 // ---------- etiketler ----------
@@ -999,15 +1186,11 @@ function drawScene(t) {
   const W = Math.round(vi.r.width * vi.dpr), H = Math.round(vi.r.height * vi.dpr);
   if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; clampCam(); }
   const hr = SC.hour != null ? SC.hour : new Date().getHours(), night = hr >= 20 || hr < 6;
-  const want = vi.cover * vi.dpr * Math.min(SC.cam.z, 2.4);
-  const sig = v.id + '|' + JSON.stringify(v.b) + '|' + v.bq.map(q => q.b).join();
-  const busy = SC.ptrs.size > 0 || performance.now() - SC.idle < 220;
-  if (!SC.stat || sig !== SC.sig || (!busy && Math.abs(want - SC.rs) / want > .18)) {
-    SC.sig = sig; SC.rs = want; SC.stat = renderStatic(v, Math.round(SC.W * want), Math.round(SC.H * want));
-  }
+  const sig = v.id + '|' + S.seed + '|' + JSON.stringify(v.b) + '|' + v.bq.map(q => q.b).join() + '|' + S.player.color;
+  if (!SC.G || sig !== SC.sig) { SC.sig = sig; TILES.clear(); SC.G = buildStatic(v, vi); }
   g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = '#0c1422'; g.fillRect(0, 0, W, H);
-  const d = vi.dpr, s = vi.k * d / SC.rs;
-  g.setTransform(s, 0, 0, s, vi.ox * d, vi.oy * d); g.imageSmoothingEnabled = true; g.drawImage(SC.stat, 0, 0);
+  const d = vi.dpr, pinching = SC.ptrs.size >= 2 || performance.now() - (SC.zoomT || 0) < 140, panning = SC.ptrs.size === 1 && SC.moved;
+  drawStatic(g, vi, pinching, panning);
   g.setTransform(vi.k * d, 0, 0, vi.k * d, vi.ox * d, vi.oy * d);
   if (SC.bodySig !== sig) { SC.bodySig = sig; SC.body = bodyRects(v); }
   drawAnims(g, t, night, v);

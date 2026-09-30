@@ -13,6 +13,8 @@ const MICON = {
 };
 const mvKind = m => (m.type === 'trade' && m.owner !== 'P' ? 'gift' : m.type === 'trade' || m.type === 'tradeback' ? m.type : m.owner !== 'P' ? 'inc' : m.type);
 function mvRelevant(m) { return m.owner === 'P' || (S.vil[m.to] && S.vil[m.to].owner === 'P'); }
+// çok oyunculuda başka oyuncuların seferleri: yalnızca yol çizgisi (asker sayısı ve figür gösterilmez)
+function mvOther(m) { return !!S.mp && !mvRelevant(m) && C.isHuman(m.owner) && (m.type === 'attack' || m.type === 'spy' || m.type === 'support'); }
 function mvGeom(m, T) {
   const a = S.vil[m.type === 'return' || m.type === 'tradeback' ? m.via : m.from], b = S.vil[m.to];
   const ax = (a.x + .5) * T - map.ox, ay = (a.y + .62) * T - map.oy, bx = (b.x + .5) * T - map.ox, by = (b.y + .62) * T - map.oy;
@@ -144,6 +146,7 @@ function drawMoves(g, T) {
   const t = now(), at = performance.now();
   const rel = S.moves.filter(mvRelevant);
   for (const m of rel) { const G = mvGeom(m, T), k = Math.min(1, Math.max(0, (t - m.depart) / (m.arrive - m.depart))); drawRoute(g, G, k, MCOL[mvKind(m)], T); }
+  for (const m of S.moves.filter(mvOther)) { const G = mvGeom(m, T), k = Math.min(1, Math.max(0, (t - m.depart) / (m.arrive - m.depart))); g.save(); g.globalAlpha = .8; drawRoute(g, G, k, C.ownerColor(m.owner), T); g.restore(); }
   for (const m of rel) if (mvKind(m) === 'inc' && m.type === 'attack') drawTargetAlert(g, mvGeom(m, T), at, T);
   return () => {
     for (const m of rel.slice().sort((a, b) => qpt(mvGeom(a, T), .5).y - qpt(mvGeom(b, T), .5).y)) {

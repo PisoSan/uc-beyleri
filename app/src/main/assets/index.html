@@ -1408,6 +1408,174 @@ return { session, createWorld, joinWorld, load, save, version, myWorlds, players
 
 </script>
 <script>
+// ============================================================
+//  UÇ BEYLERİ — ses (hiç ses dosyası yok; her şey Web Audio ile üretilir)
+//  Efektler: dokunma, inşaat, bitiş, eğitim, sefer borusu, kervan, zafer, yenilgi, alarm, mesaj.
+//  Müzik: Hicaz makamında saz (Karplus-Strong telli çalgı), ney benzeri üfleme, dem sesi ve def.
+// ============================================================
+const Sfx = (() => {
+'use strict';
+const K = { fx: 'ub-sfx', mu: 'ub-music' };
+const get = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : v === '1'; } catch (e) { return d; } };
+const put = (k, v) => { try { localStorage.setItem(k, v ? '1' : '0'); } catch (e) {} };
+let fxOn = get(K.fx, true), muOn = get(K.mu, true);
+let ac = null, master = null, fxBus = null, muBus = null, verb = null;
+
+function init() {
+  if (ac) return ac;
+  const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return null;
+  ac = new AC();
+  master = ac.createDynamicsCompressor(); master.threshold.value = -14; master.ratio.value = 4; master.connect(ac.destination);
+  fxBus = ac.createGain(); fxBus.gain.value = .55; fxBus.connect(master);
+  muBus = ac.createGain(); muBus.gain.value = 0; muBus.connect(master);
+  // küçük oda yankısı
+  const len = ac.sampleRate * 1.6, ir = ac.createBuffer(2, len, ac.sampleRate);
+  for (let c = 0; c < 2; c++) { const d = ir.getChannelData(c); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3); }
+  verb = ac.createConvolver(); verb.buffer = ir; const vg = ac.createGain(); vg.gain.value = .22; verb.connect(vg); vg.connect(master);
+  return ac;
+}
+// ilk dokunuşta sesi aç (tarayıcı kuralı)
+function unlock() { if (!init()) return; if (ac.state === 'suspended') ac.resume(); if (muOn) startMusic(); }
+['pointerdown', 'keydown'].forEach(e => addEventListener(e, unlock, { passive: true }));
+document.addEventListener('visibilitychange', () => { if (!ac) return; if (document.hidden) ac.suspend(); else ac.resume(); });
+
+// ---------- yapı taşları ----------
+function env(g, t, a, peak, dec, sus = 0) { g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(peak, t + a); g.gain.exponentialRampToValueAtTime(Math.max(.0001, sus || .0001), t + a + dec); }
+function tone(freq, t, dur, { type = 'sine', vol = .3, a = .005, bus = fxBus, glide = 0, wet = .3 } = {}) {
+  const o = ac.createOscillator(), g = ac.createGain(); o.type = type; o.frequency.setValueAtTime(freq, t);
+  if (glide) o.frequency.exponentialRampToValueAtTime(freq * glide, t + dur);
+  env(g, t, a, vol, dur); o.connect(g); g.connect(bus); if (wet) { const w = ac.createGain(); w.gain.value = wet; g.connect(w); w.connect(verb); }
+  o.start(t); o.stop(t + a + dur + .05);
+}
+let noiseBuf = null;
+function noise(t, dur, { vol = .3, f = 1200, q = 1, type = 'bandpass', bus = fxBus, a = .002, wet = .15 } = {}) {
+  if (!noiseBuf) { noiseBuf = ac.createBuffer(1, ac.sampleRate, ac.sampleRate); const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; }
+  const s = ac.createBufferSource(), fl = ac.createBiquadFilter(), g = ac.createGain();
+  s.buffer = noiseBuf; fl.type = type; fl.frequency.value = f; fl.Q.value = q; env(g, t, a, vol, dur);
+  s.connect(fl); fl.connect(g); g.connect(bus); if (wet) { const w = ac.createGain(); w.gain.value = wet; g.connect(w); w.connect(verb); }
+  s.start(t, Math.random() * .5); s.stop(t + a + dur + .05);
+}
+// telli çalgı (Karplus-Strong): saz / bağlama tınısı
+const plucks = new Map();
+function pluckBuf(freq, bright = .5) {
+  const key = Math.round(freq * 10) + ':' + bright; if (plucks.has(key)) return plucks.get(key);
+  const sr = ac.sampleRate, n = Math.round(sr * 1.6), N = Math.max(2, Math.round(sr / freq)), buf = ac.createBuffer(1, n, sr), d = buf.getChannelData(0), line = new Float32Array(N);
+  for (let i = 0; i < N; i++) line[i] = (Math.random() * 2 - 1) * (1 - bright * .5) + (i < N / 2 ? bright : -bright) * .5;
+  let p = 0;
+  for (let i = 0; i < n; i++) { const a = line[p], b = line[(p + 1) % N]; d[i] = a; line[p] = (a + b) * .5 * .996; p = (p + 1) % N; }
+  plucks.set(key, buf); if (plucks.size > 80) plucks.delete(plucks.keys().next().value);
+  return buf;
+}
+function pluck(freq, t, { vol = .35, bus = fxBus, bright = .5, wet = .35 } = {}) {
+  const s = ac.createBufferSource(), g = ac.createGain(), hp = ac.createBiquadFilter();
+  s.buffer = pluckBuf(freq, bright); hp.type = 'highpass'; hp.frequency.value = 90; g.gain.value = vol;
+  s.connect(hp); hp.connect(g); g.connect(bus); if (wet) { const w = ac.createGain(); w.gain.value = wet; g.connect(w); w.connect(verb); }
+  s.start(t);
+}
+function drum(t, { vol = .5, f = 90, bus = fxBus } = {}) {   // def / davul
+  tone(f, t, .28, { vol, glide: .55, bus, wet: .2 });
+  noise(t, .06, { vol: vol * .35, f: 1800, q: .8, bus });
+}
+function horn(freqs, t, step, { vol = .22 } = {}) {   // boru / nefir
+  freqs.forEach((f, i) => {
+    const s = t + i * step, o = ac.createOscillator(), o2 = ac.createOscillator(), fl = ac.createBiquadFilter(), g = ac.createGain();
+    o.type = 'sawtooth'; o2.type = 'sawtooth'; o.frequency.value = f; o2.frequency.value = f * 1.004; fl.type = 'lowpass'; fl.frequency.setValueAtTime(600, s); fl.frequency.linearRampToValueAtTime(2200, s + .08);
+    g.gain.setValueAtTime(.0001, s); g.gain.exponentialRampToValueAtTime(vol, s + .05); g.gain.setValueAtTime(vol, s + step * .8); g.gain.exponentialRampToValueAtTime(.0001, s + step * 1.1);
+    o.connect(fl); o2.connect(fl); fl.connect(g); g.connect(fxBus); const w = ac.createGain(); w.gain.value = .35; g.connect(w); w.connect(verb);
+    o.start(s); o2.start(s); o.stop(s + step * 1.2); o2.stop(s + step * 1.2);
+  });
+}
+const N = n => 293.66 * Math.pow(2, n / 12);   // Re (D4) tabanlı yarım ton
+
+// ---------- efektler ----------
+const FX = {
+  tap: t => tone(1400, t, .035, { vol: .06, type: 'triangle', wet: 0 }),
+  build: t => { for (let i = 0; i < 3; i++) { noise(t + i * .16, .07, { vol: .32, f: 2400, q: 3 }); tone(520 - i * 30, t + i * .16, .06, { vol: .12, type: 'square', wet: .1 }); } },
+  done: t => { pluck(N(12), t, { vol: .3, bright: .7 }); pluck(N(19), t + .09, { vol: .28, bright: .7 }); tone(N(24), t + .18, .8, { vol: .08 }); },
+  train: t => { drum(t, { vol: .35, f: 110 }); noise(t + .12, .12, { vol: .25, f: 3800, q: 6 }); tone(1900, t + .12, .25, { vol: .05, type: 'triangle' }); },
+  attack: t => { horn([N(-5), N(0), N(0)], t, .22); drum(t + .66, { vol: .45 }); drum(t + .86, { vol: .45 }); },
+  march: t => { drum(t, { vol: .35, f: 120 }); drum(t + .2, { vol: .3, f: 120 }); horn([N(0), N(7)], t + .1, .2, { vol: .14 }); },
+  spy: t => { noise(t, .35, { vol: .14, f: 900, q: .7, type: 'lowpass' }); pluck(N(13), t + .05, { vol: .18, bright: .2 }); },
+  coin: t => { for (let i = 0; i < 4; i++) { tone(2600 + i * 300, t + i * .06, .18, { vol: .08, type: 'triangle' }); tone(3900 + i * 250, t + i * .06, .12, { vol: .04 }); } },
+  research: t => { [0, 4, 7, 12].forEach((n, i) => pluck(N(n + 7), t + i * .07, { vol: .2, bright: .6 })); },
+  good: t => { [0, 4, 7].forEach((n, i) => pluck(N(n), t + i * .1, { vol: .28, bright: .6 })); tone(N(12), t + .3, 1, { vol: .08 }); },
+  win: t => { horn([N(0), N(4), N(7), N(12)], t, .16, { vol: .18 }); drum(t + .64, { vol: .5 }); },
+  bad: t => { [5, 1, -2].forEach((n, i) => pluck(N(n), t + i * .14, { vol: .26, bright: .35 })); drum(t + .42, { vol: .35, f: 70 }); },
+  alarm: t => { horn([N(-5), N(-4), N(-5), N(-4)], t, .18, { vol: .2 }); drum(t, { vol: .5, f: 70 }); drum(t + .36, { vol: .5, f: 70 }); },
+  chat: t => { pluck(N(19), t, { vol: .14, bright: .8, wet: .2 }); pluck(N(24), t + .07, { vol: .11, bright: .8, wet: .2 }); },
+  err: t => tone(160, t, .18, { vol: .12, type: 'square', wet: 0 }),
+};
+let lastFx = {};
+function play(name) {
+  if (!fxOn || !FX[name]) return;
+  if (!init() || ac.state !== 'running') return;
+  const now = performance.now(); if (now - (lastFx[name] || 0) < 120) return; lastFx[name] = now;
+  try { FX[name](ac.currentTime + .01); } catch (e) {}
+}
+
+// ---------- müzik: Hicaz makamında sakin bir uç boyu havası ----------
+// Hicaz dizisi (Re): Re Mi♭ Fa# Sol La Si♭ Do Re
+const HICAZ = [0, 1, 4, 5, 7, 8, 10, 12, 13, 16, 17, 19];
+let mu = { on: false, next: 0, bar: 0, deg: 4, timer: 0 };
+function startMusic() {
+  if (!init() || mu.on) return;
+  mu.on = true; mu.next = ac.currentTime + .3; mu.bar = 0;
+  muBus.gain.cancelScheduledValues(ac.currentTime); muBus.gain.setValueAtTime(muBus.gain.value, ac.currentTime); muBus.gain.linearRampToValueAtTime(.3, ac.currentTime + 3);
+  drone(ac.currentTime + .1);
+  mu.timer = setInterval(schedule, 250);
+}
+function stopMusic() {
+  if (!ac || !mu.on) return; mu.on = false; clearInterval(mu.timer);
+  muBus.gain.cancelScheduledValues(ac.currentTime); muBus.gain.setValueAtTime(muBus.gain.value, ac.currentTime); muBus.gain.linearRampToValueAtTime(0, ac.currentTime + 1.2);
+  if (mu.drone) { const d = mu.drone; setTimeout(() => d.forEach(o => { try { o.stop(); } catch (e) {} }), 1500); mu.drone = null; }
+}
+function drone(t) {   // dem: Re ve La, yumuşak
+  const out = ac.createGain(); out.gain.value = .07; const fl = ac.createBiquadFilter(); fl.type = 'lowpass'; fl.frequency.value = 520; fl.connect(out); out.connect(muBus);
+  const lfo = ac.createOscillator(), lg = ac.createGain(); lfo.frequency.value = .07; lg.gain.value = 180; lfo.connect(lg); lg.connect(fl.frequency);
+  const os = [N(-12), N(-12) * 1.003, N(-5)].map((f, i) => { const o = ac.createOscillator(); o.type = i === 2 ? 'triangle' : 'sawtooth'; o.frequency.value = f; const g = ac.createGain(); g.gain.value = i === 2 ? .5 : .35; o.connect(g); g.connect(fl); o.start(t); return o; });
+  lfo.start(t); os.push(lfo); mu.drone = os;
+}
+function ney(freq, t, dur) {   // ney: nefesli, titreşimli
+  const o = ac.createOscillator(), g = ac.createGain(), vib = ac.createOscillator(), vg = ac.createGain();
+  o.type = 'sine'; o.frequency.value = freq; vib.frequency.value = 5; vg.gain.value = freq * .008; vib.connect(vg); vg.connect(o.frequency);
+  g.gain.setValueAtTime(.0001, t); g.gain.linearRampToValueAtTime(.09, t + .25); g.gain.setValueAtTime(.09, t + dur * .7); g.gain.linearRampToValueAtTime(.0001, t + dur);
+  o.connect(g); g.connect(muBus); const w = ac.createGain(); w.gain.value = .6; g.connect(w); w.connect(verb);
+  o.start(t); vib.start(t); o.stop(t + dur + .1); vib.stop(t + dur + .1);
+  noise(t, dur * .8, { vol: .012, f: freq * 2, q: 2, bus: muBus, a: .2, wet: .3 });
+}
+function schedule() {
+  if (!mu.on || !ac || ac.state !== 'running') return;
+  const beat = .42;   // yaklaşık 70 vuruş/dk, ağır aksak hissi
+  while (mu.next < ac.currentTime + 1.2) {
+    const t = mu.next, bar = mu.bar++, phrase = Math.floor(bar / 4) % 4;
+    // def: düm . tek . düm tek
+    drum(t, { vol: .16, f: 85, bus: muBus }); drum(t + beat * 2, { vol: .07, f: 170, bus: muBus }); drum(t + beat * 3, { vol: .12, f: 85, bus: muBus }); drum(t + beat * 3.5, { vol: .06, f: 170, bus: muBus });
+    if (phrase === 3 && bar % 4 === 0) { ney(N(HICAZ[4 + Math.floor(Math.random() * 3)]), t, beat * 7.5); }
+    else {
+      // saz: dizide küçük adımlarla gezinen ezgi, cümle sonunda karara (Re) iner
+      const steps = bar % 4 === 3 ? [0, 1, 2] : [0, .5, 1, 2, 2.5, 3];
+      for (const s of steps) {
+        if (Math.random() < .15) continue;
+        const cad = bar % 4 === 3 && s === 2;
+        mu.deg = cad ? 0 : Math.max(0, Math.min(HICAZ.length - 1, mu.deg + [-2, -1, -1, 1, 1, 2][Math.floor(Math.random() * 6)]));
+        pluck(N(HICAZ[mu.deg]), t + s * beat, { vol: cad ? .2 : .14, bus: muBus, bright: .45, wet: .4 });
+        if (cad) pluck(N(HICAZ[mu.deg] - 12), t + s * beat, { vol: .12, bus: muBus, bright: .3, wet: .4 });
+      }
+    }
+    mu.next += beat * 4;
+  }
+}
+
+return {
+  play,
+  get fx() { return fxOn; }, get music() { return muOn; },
+  setFx(v) { fxOn = !!v; put(K.fx, fxOn); if (fxOn) { unlock(); play('tap'); } },
+  setMusic(v) { muOn = !!v; put(K.mu, muOn); if (muOn) { unlock(); startMusic(); } else stopMusic(); },
+};
+})();
+
+</script>
+<script>
 (() => {
 'use strict';
 const C = Core;
@@ -1475,8 +1643,9 @@ const drafts = {};
 const map = { ox: null, oy: null, T: 46, sel: null, drag: null };
 
 let quiet = false;
-C.onNotify((kind, msg) => { if (quiet) return; if (catching) { awayLog.push([kind, msg]); return; } if (kind !== 'build' || S.speed < 50) toast(msg, kind); });
+C.onNotify((kind, msg) => { if (quiet) return; if (!catching) Sfx.play(kind === 'build' ? 'done' : kind === 'good' ? (/artık senin|başarılı/.test(msg) ? 'win' : 'good') : kind === 'bad' ? 'bad' : 'chat'); if (catching) { awayLog.push([kind, msg]); return; } if (kind !== 'build' || S.speed < 50) toast(msg, kind); });
 
+document.addEventListener('click', e => { if (e.target.closest('button')) Sfx.play('tap'); }, true);
 function toast(msg, kind = 'info') {
   const box = $('toasts'); if (box.children.length > 2) box.firstChild.remove();
   const el = document.createElement('div'); el.className = 'toast ' + kind; el.textContent = msg; box.appendChild(el);
@@ -1792,11 +1961,13 @@ function renderTop() {
   $('resbar').innerHTML = html;
   const inc = S.moves.filter(m => m.owner !== 'P' && m.type === 'attack' && S.vil[m.to].owner === 'P').sort((a, b) => a.arrive - b.arrive);
   const al = $('alert');
+  if (inc.length > (renderTop.inc || 0)) Sfx.play('alarm'); renderTop.inc = inc.length;
   if (inc.length) {
     al.hidden = false;
     al.innerHTML = `<span class="dot"></span><span>${inc.length} saldırı geliyor · ilki ${esc(S.vil[inc[0].to].name)} köyüne <span class="num">${dur(inc[0].arrive - now())}</span> içinde</span>`;
   } else al.hidden = true;
   const cu = ['klan', 'genel'].reduce((a, ch) => a + S.chat[ch].filter(m => m.id > (S.chatSeen[ch] || 0) && m.from !== 'P').length, 0), cbd = $('chatBadge');
+  if (cu > (renderTop.cu || 0) && renderTop.cu != null) Sfx.play('chat'); renderTop.cu = cu;
   if (cbd) { cbd.hidden = !cu || tab === 'klan'; cbd.textContent = cu > 9 ? '9+' : cu; }
   const unread = S.reports.filter(r => !r.read).length, bd = $('repBadge');
   if (bd) { bd.hidden = !unread; bd.textContent = unread > 9 ? '9+' : unread; }
@@ -1814,6 +1985,7 @@ $('setBtn').onclick = () => {
     <div class="card small"><div><b>Beylik:</b> ${esc(S.player.name)}</div><div><b>Dünya hızı:</b> ${S.speed}×</div>
     <div><b>Başlangıç:</b> ${clock(S.created)}</div>
     <div><b>Acemi koruması:</b> ${now() < S.protectUntil ? dur(S.protectUntil - now()) + ' kaldı' : 'bitti'}</div></div>
+    <section class="card"><b>Ses</b><div class="chips"><button class="btn ${Sfx.fx ? 'firuze' : 'sec'}" id="sfxT">Efektler: ${Sfx.fx ? 'Açık' : 'Kapalı'}</button><button class="btn ${Sfx.music ? 'firuze' : 'sec'}" id="muT">Müzik: ${Sfx.music ? 'Açık' : 'Kapalı'}</button></div></section>
     ${MPX ? `<section class="card"><b>Çok oyunculu dünya</b><div class="bigcode" style="font-size:26px">${esc(MPX.code)}</div>
       <div class="small">${S.beys.filter(b => b.human).length + 1} oyuncu: <b style="color:${S.player.color}">${esc(S.player.name)}</b>${S.beys.filter(b => b.human).map(b => `, <b style="color:${b.color}">${esc(b.name)}</b>`).join('')}</div>
       <div class="small muted">Bağlantı: ${{ ok: 'senkron', sync: 'kaydediliyor…', off: 'internet yok, tekrar deneniyor' }[MPX.net || 'ok']}</div>
@@ -1824,6 +1996,9 @@ $('setBtn').onclick = () => {
     <section class="card"><b>Test araçları</b><div class="muted small">Oyunu denerken kullanman için. ${S.test ? 'Bu oyun test modunda.' : ''}</div>
       <div class="chips"><button class="btn firuze" id="tFill">Kaynakları doldur</button><button class="btn sec" id="tMines">Madenleri en üst seviyeye çıkar</button><button class="btn" id="tMax">Bütün binaları son seviyeye çıkar</button></div></section>
     <button class="btn red" id="resetBtn">Yeni oyun başlat</button>`}`, box => {
+    const sb = (id, on, n) => { const b = $(id); b.textContent = n + ': ' + (on ? 'Açık' : 'Kapalı'); b.className = 'btn ' + (on ? 'firuze' : 'sec'); };
+    $('sfxT').onclick = () => { Sfx.setFx(!Sfx.fx); sb('sfxT', Sfx.fx, 'Efektler'); };
+    $('muT').onclick = () => { Sfx.setMusic(!Sfx.music); sb('muT', Sfx.music, 'Müzik'); };
     if (MPX) {
       $('mpShare').onclick = () => showCode(false);
       $('mpMenu').onclick = leaveToMenu;
@@ -1889,7 +2064,8 @@ function P(u, v, z = 0) { const p = Pq(u, v, z); if (MODE === 'draw') trackPt(p.
 const RX = r => r * TW / Math.SQRT2, RY = r => r * TH / Math.SQRT2;
 
 // ---------- dokular ----------
-function mkTex(w, h, fn) { const c = document.createElement('canvas'); c.width = w; c.height = h; fn(c.getContext('2d'), w, h); return c; }
+const TEXR = 3;   // dokular 3 kat çözünürlükte üretilir: yakınlaşınca bulanıklaşmaz
+function mkTex(w, h, fn) { const c = document.createElement('canvas'); c.width = w * TEXR; c.height = h * TEXR; const g = c.getContext('2d'); g.scale(TEXR, TEXR); fn(g, w, h); return c; }
 function bricks(g, w, h, rh, minW, maxW, col, rnd, bevel = true) {
   const rows = Math.round(h / rh);
   for (let r = 0; r < rows; r++) {
@@ -1958,7 +2134,7 @@ function buildTex() {
   T.plowed = mkTex(32, 32, (g, w, h) => { for (let y = 0; y < h; y += 4) { g.fillStyle = hsl(26, 34, 33); g.fillRect(0, y, w, 2.4); g.fillStyle = hsl(24, 30, 22); g.fillRect(0, y + 2.4, w, 1.6); } speck(g, w, h, 200, .12); });
   return T;
 }
-function pat(g, name) { let m = PATC.get(g); if (!m) { m = {}; PATC.set(g, m); } return m[name] || (m[name] = g.createPattern(TEX[name], 'repeat')); }
+function pat(g, name) { let m = PATC.get(g); if (!m) { m = {}; PATC.set(g, m); } if (!m[name]) { const p = g.createPattern(TEX[name], 'repeat'); try { p.setTransform(new DOMMatrix([1 / TEXR, 0, 0, 1 / TEXR, 0, 0])); } catch (e) {} m[name] = p; } return m[name]; }
 
 // ---------- 3B yardımcılar ----------
 const sub3 = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
@@ -1988,6 +2164,13 @@ function face(g, pts, tex, opt = {}) {
   const f = opt.shade != null ? opt.shade : shadeOf(pts);
   if (f < 1) { g.fillStyle = `rgba(24,18,36,${Math.min(.7, 1 - f)})`; g.fill(); }
   else if (f > 1) { g.fillStyle = `rgba(255,244,220,${Math.min(.3, f - 1)})`; g.fill(); }
+  const zs = pts.map(p => p[2]), zlo = Math.min(...zs), zhi = Math.max(...zs);
+  if (opt.grad !== false && zhi - zlo > .12) {   // duvar dibi koyu, üstü aydınlık: binaya hacim verir
+    let y0 = Infinity, y1 = -Infinity; for (const p of s) { if (p.y < y0) y0 = p.y; if (p.y > y1) y1 = p.y; }
+    const gr = g.createLinearGradient(0, y1, 0, y0);
+    gr.addColorStop(0, 'rgba(22,14,20,.30)'); gr.addColorStop(.45, 'rgba(22,14,20,0)'); gr.addColorStop(1, 'rgba(255,240,210,.10)');
+    g.fillStyle = gr; g.fill();
+  }
   if (opt.edge !== false) { g.strokeStyle = opt.edgeCol || 'rgba(30,20,10,.3)'; g.lineWidth = .6; g.stroke(); }
   g.restore();
 }
@@ -2003,29 +2186,71 @@ function shPoly(base, h) { const pts = []; for (const [u, v] of base) { pts.push
 function shBox(u0, v0, w, d, h) { shPoly([[u0, v0], [u0 + w, v0], [u0 + w, v0 + d], [u0, v0 + d]], h); }
 function shCirc(u, v, r, h) { const b = []; for (let k = 0; k < 12; k++) { const a = k / 12 * 6.283; b.push([u + Math.cos(a) * r, v + Math.sin(a) * r]); } shPoly(b, h); }
 
+function contactShadow(g, u0, v0, w, d) {
+  g.save();
+  for (const [e, a] of [[.16, .10], [.07, .16]]) {
+    const q = [P(u0 - e * .3, v0 - e * .3), P(u0 + w + e, v0 - e * .3), P(u0 + w + e, v0 + d + e), P(u0 - e * .3, v0 + d + e)];
+    g.beginPath(); q.forEach((p, i) => i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y)); g.closePath(); g.fillStyle = `rgba(20,16,10,${a})`; g.fill();
+  }
+  g.restore();
+}
+// sıvalı duvara ahşap çatkı (hımış) kirişleri: ön (v0+d) ve sağ (u0+w) yüzlere
+function timber(g, u0, v0, w, d, z0, h, full = true) {
+  if (MODE !== 'draw') return;
+  g.save(); g.strokeStyle = 'rgba(78,50,28,.9)'; g.lineCap = 'round';
+  const line = (a, b, lw) => { g.lineWidth = lw; g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.stroke(); };
+  const faces = [[u => P(u0 + u * w, v0 + d + .003, 0), w], [u => P(u0 + w + .003, v0 + d - u * d, 0), d]];
+  for (const [at, L] of faces) {
+    const pt = (f, z) => { const p = at(f); return { x: p.x, y: p.y - z * ZH }; };
+    for (const z of full ? [z0 + .03, z0 + h * .52, z0 + h - .03] : [z0 + h * .52]) line(pt(0, z), pt(1, z), 1.5);
+    if (!full) continue;
+    const n = Math.max(2, Math.round(L / .32));
+    for (let i = 0; i <= n; i++) line(pt(i / n, z0 + .03), pt(i / n, z0 + h - .03), i === 0 || i === n ? 1.6 : 1.1);
+    for (let i = 0; i < n; i += 2) line(pt(i / n, z0 + .05), pt((i + 1) / n, z0 + h * .5), .9);
+  }
+  g.restore();
+}
 function ibox(g, u0, v0, w, d, z0, h, tex, top, opt = {}) {
   if (MODE === 'shadow') { if (!opt.noShadow) shBox(u0, v0, w, d, z0 + h); return; }
   const z1 = z0 + h;
+  if (z0 <= .02 && !opt.noAO && MODE === 'draw') contactShadow(g, u0, v0, w, d);
   face(g, [[u0, v0 + d, z1], [u0 + w, v0 + d, z1], [u0 + w, v0 + d, z0], [u0, v0 + d, z0]], tex, opt);
   face(g, [[u0 + w, v0 + d, z1], [u0 + w, v0, z1], [u0 + w, v0, z0], [u0 + w, v0 + d, z0]], tex, opt);
   if (top !== null) face(g, [[u0, v0, z1], [u0 + w, v0, z1], [u0 + w, v0 + d, z1], [u0, v0 + d, z1]], top || tex, { color: opt.color, dens: opt.dens });
 }
 function hipRoof(g, u0, v0, w, d, z, rh, tex, ov = .1) {
+  if (MODE === 'draw') {   // saçağın duvara düşen gölgesi
+    const ez = Math.max(0, z - .13);
+    face(g, [[u0, v0 + d + .004, z], [u0 + w, v0 + d + .004, z], [u0 + w, v0 + d + .004, ez], [u0, v0 + d + .004, ez]], null, { color: 'rgba(20,12,8,.34)', shade: 1, edge: false, grad: false });
+    face(g, [[u0 + w + .004, v0 + d, z], [u0 + w + .004, v0, z], [u0 + w + .004, v0, ez], [u0 + w + .004, v0 + d, ez]], null, { color: 'rgba(20,12,8,.4)', shade: 1, edge: false, grad: false });
+  }
   u0 -= ov; v0 -= ov; w += 2 * ov; d += 2 * ov;
   if (MODE === 'shadow') { shBox(u0, v0, w, d, z + rh * .6); return; }
   const A = [u0, v0, z], B = [u0 + w, v0, z], C = [u0 + w, v0 + d, z], D = [u0, v0 + d, z];
   if (w >= d) {
     const r1 = [u0 + d / 2, v0 + d / 2, z + rh], r2 = [u0 + w - d / 2, v0 + d / 2, z + rh];
-    face(g, [A, B, r2, r1], tex); face(g, [D, A, r1], tex); face(g, [B, C, r2], tex); face(g, [D, C, r2, r1], tex);
+    face(g, [A, B, r2, r1], tex, { grad: false }); face(g, [D, A, r1], tex, { grad: false }); face(g, [B, C, r2], tex, { grad: false }); face(g, [D, C, r2, r1], tex, { grad: false });
+    ridge(g, r1, r2, [D, C, B]);
   } else {
     const r1 = [u0 + w / 2, v0 + w / 2, z + rh], r2 = [u0 + w / 2, v0 + d - w / 2, z + rh];
-    face(g, [A, B, r1], tex); face(g, [D, A, r1, r2], tex); face(g, [B, C, r2, r1], tex); face(g, [D, C, r2], tex);
+    face(g, [A, B, r1], tex, { grad: false }); face(g, [D, A, r1, r2], tex, { grad: false }); face(g, [B, C, r2, r1], tex, { grad: false }); face(g, [D, C, r2], tex, { grad: false });
+    ridge(g, r1, r2, [D, C, B]);
   }
+}
+function ridge(g, r1, r2, eave) {
+  if (MODE !== 'draw') return;
+  const a = P(...r1), b = P(...r2), c = P(...eave[1]);
+  g.save(); g.lineCap = 'round';
+  g.strokeStyle = 'rgba(255,236,200,.55)'; g.lineWidth = 1.3; g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.stroke();
+  g.strokeStyle = 'rgba(255,236,200,.28)'; g.lineWidth = .9; g.beginPath(); g.moveTo(b.x, b.y); g.lineTo(c.x, c.y); g.stroke();
+  const e = eave.map(q => P(...q)); g.strokeStyle = 'rgba(30,16,10,.55)'; g.lineWidth = 1.2; g.beginPath(); e.forEach((p, i) => i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y)); g.stroke();
+  g.restore();
 }
 function cyl(g, u, v, z0, h, r, tex, base) {
   if (MODE === 'shadow') { shCirc(u, v, r, z0 + h); return; }
   const c0 = P(u, v, z0), c1 = P(u, v, z0 + h), rx = RX(r), ry = RY(r);
   trackPt(c0.x - rx, c0.y + ry); trackPt(c1.x + rx, c1.y - ry);
+  if (z0 <= .02 && r > .1) { g.fillStyle = 'rgba(20,16,10,.16)'; g.beginPath(); g.ellipse(c0.x + rx * .1, c0.y + ry * .15, rx * 1.25, ry * 1.3, 0, 0, 7); g.fill(); }
   g.save(); g.beginPath(); g.moveTo(c1.x - rx, c1.y); g.lineTo(c0.x - rx, c0.y); g.ellipse(c0.x, c0.y, rx, ry, 0, Math.PI, 0, true); g.lineTo(c1.x + rx, c1.y); g.closePath();
   g.fillStyle = base; g.fill();
   if (tex) { g.save(); g.clip(); g.translate(c0.x - rx, c1.y); g.scale(.9, .9); g.fillStyle = pat(g, tex); g.fillRect(0, -10, rx * 2.4 + 10, c0.y - c1.y + ry + 30); g.restore(); }
@@ -2074,7 +2299,12 @@ function hole(g, a, b, z0, z1, arch, col = '#2a2019', glow = true) {
   const c = { x: (s0.x + s1.x) / 2, y: (s0.y + s1.y) / 2 - (arch || 0) * ZH * 2 };
   const path = () => { g.beginPath(); g.moveTo(s3.x, s3.y); g.lineTo(s0.x, s0.y); if (arch) g.quadraticCurveTo(c.x, c.y, s1.x, s1.y); else g.lineTo(s1.x, s1.y); g.lineTo(s2.x, s2.y); g.closePath(); };
   path(); g.fillStyle = col; g.fill(); g.strokeStyle = 'rgba(245,230,195,.45)'; g.lineWidth = .7; g.stroke();
-  if (glow) SC.wins.push({ s0, s1, s2, s3, c, arch: !!arch });
+  if (glow) {   // pencere: tahta kanat çizgisi ve taş denizlik
+    g.strokeStyle = 'rgba(120,80,45,.7)'; g.lineWidth = .6; const m0 = { x: (s0.x + s1.x) / 2, y: (s0.y + s1.y) / 2 }, m1 = { x: (s3.x + s2.x) / 2, y: (s3.y + s2.y) / 2 };
+    g.beginPath(); g.moveTo(m0.x, m0.y); g.lineTo(m1.x, m1.y); g.stroke();
+    g.strokeStyle = 'rgba(250,238,210,.85)'; g.lineWidth = 1.4; g.beginPath(); g.moveTo(s3.x - (s2.x - s3.x) * .12, s3.y + 1 - (s2.y - s3.y) * .12); g.lineTo(s2.x + (s2.x - s3.x) * .12, s2.y + 1 + (s2.y - s3.y) * .12); g.stroke();
+    SC.wins.push({ s0, s1, s2, s3, c, arch: !!arch });
+  }
 }
 function flagPole(g, u, v, z, h, col, s = 1) {
   if (MODE !== 'draw') return;
@@ -2148,6 +2378,7 @@ function tree(g, u, v, kind, sz, seed) {
   if (MODE === 'shadow') { shCirc(u, v, (kind === 'mese' ? .3 : .13) * sz, tall * sz); return; }
   if (MODE !== 'draw') return;
   const b = Pq(u, v, 0), r = mul32(seed);
+  trackPt(b.x - 22 * sz, b.y - 54 * sz); trackPt(b.x + 22 * sz, b.y + 4);
   if (kind === 'mese') {
     g.fillStyle = '#4a3524'; g.fillRect(b.x - 1.6 * sz, b.y - 12 * sz, 3.2 * sz, 12 * sz);
     const cx = b.x, cy = b.y - 22 * sz, blobs = [];
@@ -2180,11 +2411,12 @@ function bKonak(add, l) {
   add(6, 6, g => {
     ibox(g, 4.75, 4.75, 2.5, 2.5, 0, z0, 'pave', 'pave', { noShadow: true });
     if (l >= 5) {
-      ibox(g, 4.85, 5.6, .5, 1.2, z0, H * .7, 'plaster', null); hipRoof(g, 4.85, 5.6, .5, 1.2, z0 + H * .7, .3, l >= 20 ? 'lead' : 'roof');
-      ibox(g, 5.6, 4.85, 1.2, .5, z0, H * .7, 'plaster', null); hipRoof(g, 5.6, 4.85, 1.2, .5, z0 + H * .7, .3, l >= 20 ? 'lead' : 'roof');
+      ibox(g, 4.85, 5.6, .5, 1.2, z0, H * .7, 'plaster', null); timber(g, 4.85, 5.6, .5, 1.2, z0, H * .7); hipRoof(g, 4.85, 5.6, .5, 1.2, z0 + H * .7, .3, l >= 20 ? 'lead' : 'roof');
+      ibox(g, 5.6, 4.85, 1.2, .5, z0, H * .7, 'plaster', null); timber(g, 5.6, 4.85, 1.2, .5, z0, H * .7); hipRoof(g, 5.6, 4.85, 1.2, .5, z0 + H * .7, .3, l >= 20 ? 'lead' : 'roof');
     }
     ibox(g, m0, m0, m, m, z0, .22, 'stone', null);
     ibox(g, m0, m0, m, m, z0 + .22, H - .22, 'plaster', null);
+    timber(g, m0, m0, m, m, z0 + .22, H - .22, false);
     ibox(g, m0 - .02, m0 - .02, m + .04, m + .04, z0 + H - .17, .11, 'turq', null, { dens: 70 });
     ibox(g, m0 - .05, m0 - .05, m + .1, m + .1, z0 + H - .06, .07, 'stone', 'stone');
     for (const a of [5.55, 6.65]) hole(g, [a, fv + .002], [a + .2, fv + .002], z0 + .4, z0 + .66, .06);
@@ -2228,6 +2460,12 @@ function bMedrese(add, l) {
     dome(g, u0 + w / 2, v0 + d / 2 - .1, H + .15, .3, .32, '#d9e3ea', '#8d9ba6', '#4b5761');
     if (l >= 10) { cyl(g, u0 + .12, v0 + .12, H + .07, .5, .07, 'stone', '#d8ccb0'); const a = cone(g, u0 + .12, v0 + .12, H + .57, .08, .3, '#8d99a3', 'lead'); if (a && MODE === 'draw') alem(g, a.x, a.y); }
   }, 'medrese');
+  if (l >= 15) add(9.0, 5.8, g => {   // kubbeli revak (sütunlu avlu kanadı)
+    const u0 = 8.75, v0 = 5.2, d = 1.15, h = .5;
+    ibox(g, u0, v0, .3, d, 0, h, 'stone', 'pave');
+    for (let i = 0; i < 3; i++) hole(g, [u0 + .302, v0 + d - .08 - i * .37], [u0 + .302, v0 + d - .3 - i * .37], 0, h * .72, .07, '#3a2a1c', false);
+    for (let i = 0; i < 3; i++) dome(g, u0 + .15, v0 + d - .19 - i * .37, h, .13, .13, '#d9e3ea', '#8d9ba6', '#4b5761');
+  }, 'medrese');
 }
 function bKervansaray(add, l) {
   const u0 = 3.3, v0 = 13.0, w = 1.6, d = 1.25, H = .55 + Math.min(l, 20) * .01;
@@ -2242,6 +2480,8 @@ function bKervansaray(add, l) {
     hole(g, [u0 + w + .002, v0 + .8], [u0 + w + .002, v0 + .6], H * .35, H * .7, .05);
     dome(g, u0 + .8, v0 + d - .2, H + .3, .18, .18, '#d9e3ea', '#8d9ba6', '#4b5761');
     flagPole(g, u0 + .1, v0 + .1, H + .1, .45, S.player.color, .8);
+    if (l >= 10) for (const [a, b] of [[u0 + w, v0 + d], [u0 + w, v0]]) { cyl(g, a, b, 0, H + .22, .13, 'stone', '#cbbd9d'); cone(g, a, b, H + .22, .16, .22, '#8d99a3', 'lead'); }
+    if (l >= 15) for (const a of [u0 + .35, u0 + 1.25]) dome(g, a, v0 + .45, H + .02, .16, .15, '#d9e3ea', '#8d9ba6', '#4b5761');
   }, 'kervansaray');
   const n = Math.min(3, 1 + Math.floor(l / 6));
   for (let i = 0; i < n; i++) { const cu = u0 - .45, cv = v0 + .25 + i * .45; add(cu, cv, g => cam(g, cu, cv, i), 'kervansaray'); }
@@ -2271,12 +2511,12 @@ function bDivan(add, l) {
 function bKisla(add, l) {
   const H = .5 + Math.min(l, 25) * .008;
   if (l >= 6) add(5.9, 3.9, g => {
-    ibox(g, 5.35, 3.5, 1.1, .8, 0, .16, 'stone', null); ibox(g, 5.35, 3.5, 1.1, .8, .16, H * .85 - .16, 'plaster', null);
+    ibox(g, 5.35, 3.5, 1.1, .8, 0, .16, 'stone', null); ibox(g, 5.35, 3.5, 1.1, .8, .16, H * .85 - .16, 'plaster', null); timber(g, 5.35, 3.5, 1.1, .8, .16, H * .85 - .16);
     for (const a of [5.55, 6.05]) hole(g, [a, 4.302], [a + .18, 4.302], .24, .4, .04);
     hipRoof(g, 5.35, 3.5, 1.1, .8, H * .85, .3, 'roof');
   }, 'kisla');
   add(4.4, 3.95, g => {
-    ibox(g, 3.5, 3.5, 1.8, .9, 0, .18, 'stone', null); ibox(g, 3.5, 3.5, 1.8, .9, .18, H - .18, 'plaster', null);
+    ibox(g, 3.5, 3.5, 1.8, .9, 0, .18, 'stone', null); ibox(g, 3.5, 3.5, 1.8, .9, .18, H - .18, 'plaster', null); timber(g, 3.5, 3.5, 1.8, .9, .18, H - .18);
     for (const a of [3.7, 4.0, 4.95]) hole(g, [a, 4.402], [a + .16, 4.402], .26, .44, .04);
     hole(g, [4.35, 4.402], [4.62, 4.402], 0, .42, .1, '#3a2414', false);
     hole(g, [5.302, 4.15], [5.302, 3.95], .26, .44, .04);
@@ -2285,6 +2525,13 @@ function bKisla(add, l) {
   }, 'kisla');
   const n = Math.min(4, 1 + Math.floor(l / 5));
   add(7.1, 3.7, g => { for (let i = 0; i < n; i++) dummy(g, 6.75 + i * .28, 3.55 + (i % 2) * .2); }, 'kisla');
+  if (l >= 12) add(3.2, 3.3, g => {   // ahşap gözetleme kulesi
+    for (const [a, b] of [[3.0, 3.1], [3.32, 3.1], [3.0, 3.42], [3.32, 3.42]]) ibox(g, a, b, .06, .06, 0, 1.25, 'wood', 'wood', { noAO: true });
+    ibox(g, 2.96, 3.06, .44, .44, 1.0, .08, 'wood', 'wood');
+    ibox(g, 2.96, 3.06, .44, .04, 1.08, .16, 'wood', null, { noShadow: true }); ibox(g, 2.96, 3.06, .04, .44, 1.08, .16, 'wood', null, { noShadow: true });
+    hipRoof(g, 2.96, 3.06, .44, .44, 1.3, .28, 'roof', .06);
+    flagPole(g, 3.18, 3.28, 1.55, .35, S.player.color, .7);
+  }, 'kisla');
   // kışla önünde nizam içinde bekleyen askerler (süs)
   const cols = Math.min(7, 3 + Math.floor(l / 4)), rows = Math.min(4, 1 + Math.floor(l / 5));
   for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
@@ -2331,6 +2578,11 @@ function bAmbar(add, l) {
     const n = Math.min(5, 1 + Math.floor(l / 5));
     for (let i = 0; i < n; i++) ibox(g, u0 + .05 + i * .23, v0 + d + .12, .18, .18, 0, .16, 'wood', 'wood');
   }, 'ambar');
+  if (l >= 20) add(9.0, 3.85, g => {   // taş tahıl silosu
+    cyl(g, 9.0, 3.85, 0, .95 + Math.min(l - 20, 10) * .02, .26, 'stone', '#cbbd9d');
+    const a = cone(g, 9.0, 3.85, .95 + Math.min(l - 20, 10) * .02, .31, .38, '#9b3b27', 'roof');
+    if (a && MODE === 'draw') { g.fillStyle = '#d8b04a'; g.beginPath(); g.arc(a.x, a.y - 1, 1.6, 0, 7); g.fill(); }
+  }, 'ambar');
 }
 function bTophane(add, l) {
   const H = .55 + Math.min(l, 15) * .02;
@@ -2345,6 +2597,17 @@ function bTophane(add, l) {
     hole(g, [u0 + w + .002, v0 + .7], [u0 + w + .002, v0 + .55], .3, .45, .04);
   }, 'tophane');
   add(5.1, 8.45, g => trebuchet(g, 5.1, 8.45), 'tophane');
+  if (l >= 8) for (const [u, v] of [[3.75, 8.55], [4.2, 8.6]]) add(u, v, g => cannon(g, u, v), 'tophane');
+}
+function cannon(g, u, v) {
+  if (MODE === 'shadow') { shBox(u - .12, v - .06, .28, .12, .12); return; }
+  if (MODE !== 'draw') return;
+  const a = P(u - .12, v, .1), b = P(u + .18, v, .15), w1 = P(u - .04, v + .05, .05), w2 = P(u - .04, v - .05, .05);
+  g.strokeStyle = '#26282d'; g.lineCap = 'round'; g.lineWidth = 4.2; g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.stroke();
+  g.strokeStyle = 'rgba(255,255,255,.25)'; g.lineWidth = 1; g.beginPath(); g.moveTo(a.x, a.y - 1.3); g.lineTo(b.x, b.y - 1.3); g.stroke();
+  g.fillStyle = '#1b1c20'; g.beginPath(); g.arc(b.x + 1, b.y, 1.5, 0, 7); g.fill();
+  for (const w of [w2, w1]) { g.fillStyle = '#5e3b1f'; g.beginPath(); g.ellipse(w.x, w.y, 3.2, 3.4, 0, 0, 7); g.fill(); g.strokeStyle = '#3a2414'; g.lineWidth = .8; g.stroke(); g.fillStyle = '#8a6238'; g.beginPath(); g.arc(w.x, w.y, 1, 0, 7); g.fill(); }
+  g.fillStyle = '#2a2a2e'; for (const [dx, dy] of [[5, 3], [7, 2], [6, 1]]) { g.beginPath(); g.arc(w1.x + dx, w1.y + dy, 1.4, 0, 7); g.fill(); }
 }
 function trebuchet(g, u, v) {
   if (MODE === 'shadow') { shBox(u - .2, v - .15, .4, .3, .5); return; }
@@ -2370,6 +2633,11 @@ function bAhir(add, l) {
     cyl(g, 11.65, 4.0, 0, .16, .13, null, '#d6b25e');
   }, 'ahir');
   add(10.9, 5.6, g => fence(g, 10.0, 4.8, 1.8, 1.6), 'ahir');
+  if (l >= 10) add(9.75, 4.0, g => {   // samanlıklı ek ahır
+    ibox(g, 9.5, 3.7, .45, .72, 0, H * .78, 'wood', null); hipRoof(g, 9.5, 3.7, .45, .72, H * .78, .28, 'roof', .06);
+    hole(g, [9.6, 4.422], [9.85, 4.422], 0, H * .55, 0, '#2b1b10', false);
+    for (const [u, v] of [[9.62, 4.65], [9.85, 4.7]]) cyl(g, u, v, 0, .12, .1, null, '#d6b25e');
+  }, 'ahir');
   if (MODE === 'draw') SC.anims.push({ k: 'horses', u0: 10.15 + SH.ahir[0], v0: 4.95 + SH.ahir[1], w: 1.5, d: 1.3, n: Math.min(4, Math.ceil(l / 4)) });
 }
 function fence(g, u0, v0, w, d) {
@@ -2440,12 +2708,18 @@ function bDemir(add, l) {
 }
 function bCiftlik(add, l) {
   add(10.35, 11.8, g => {
-    ibox(g, 10.0, 11.5, .7, .6, 0, .4, 'plaster', null);
+    ibox(g, 10.0, 11.5, .7, .6, 0, .4, 'plaster', null); timber(g, 10.0, 11.5, .7, .6, 0, .4);
     hole(g, [10.15, 12.102], [10.3, 12.102], .16, .3, .03); hole(g, [10.42, 12.102], [10.58, 12.102], 0, .3, .06, '#3a2414', false);
     hipRoof(g, 10.0, 11.5, .7, .6, .4, .3, 'roof');
     smokeAt(10.15, 11.6, .75, .4);
   }, 'ciftlik');
   add(11.2, 11.75, g => { for (const [u, v] of [[10.95, 11.6], [11.25, 11.75], [11.1, 11.95]]) cyl(g, u, v, 0, .14, .12, null, '#d6b25e'); }, 'ciftlik');
+  if (l >= 10) add(11.95, 12.1, g => {   // yel değirmeni
+    cyl(g, 11.95, 12.1, 0, .95, .22, 'stone', '#d6cbb0');
+    cone(g, 11.95, 12.1, .95, .26, .35, '#9b3b27', 'roof');
+    hole(g, [11.9, 12.322], [12.05, 12.322], 0, .3, .06, '#3a2414', false);
+    if (MODE === 'draw') { const p = P(11.95 + .2, 12.1 + .2, .85); SC.anims.push({ k: 'mill', x: p.x, y: p.y }); }
+  }, 'ciftlik');
 }
 function stake(g, u, v, h) {
   if (MODE === 'shadow') { shCirc(u, v, .06, h); return; }
@@ -2579,18 +2853,33 @@ function mergeHit(b, t) {
   else SC.hits.push({ b, x0: t.x0, x1: t.x1, y0: t.y0, y1: t.y1 });
 }
 
-// ---------- durağan katman ----------
-function renderStatic(v, pw, ph) {
+// ---------- durağan katman: karo (tile) sistemi ----------
+// Sahne bir kez "kurulur" (ağaçlar, binalar, gölgeler, sınır kutuları). Ekrana önce düşük çözünürlüklü
+// bir taban resim çizilir; yakınlaştıkça yalnızca görünen parçalar (karolar) o yakınlığa uygun netlikte,
+// kare başına birkaç tane olmak üzere çizilir. Böylece yakınlaştırma donmaz ve görüntü bulanıklaşmaz.
+const TS = 512, LEVELS = [.6, .9, 1.35, 2, 3, 4.5, 6.75, 10], TILE_MAX = 32;
+const TILES = new Map(), NOISE = new Map();
+function noiseCanvas(seed) {
+  if (NOISE.has(seed)) return NOISE.get(seed);
+  const gw = 512, gh = Math.round(512 * SC.H / SC.W), c = document.createElement('canvas'); c.width = gw; c.height = gh;
+  const x = c.getContext('2d'), id = x.createImageData(gw, gh), d = id.data, k = SC.W / gw;
+  for (let j = 0; j < gh; j++) for (let i = 0; i < gw; i++) {
+    const lx = i * k, ly = j * k, n1 = fbm(lx / 95, ly / 70, seed), n2 = fbm(lx / 45 + 50, ly / 34, seed + 7), f = (hash2(i, j, seed + 3) - .5) * 14;
+    let r = 74 + 44 * n1, gg = 100 + 44 * n1, b = 44 + 22 * n1;
+    if (n2 > .58) { const t = Math.min(1, (n2 - .58) * 3); r += (150 - r) * t * .6; gg += (140 - gg) * t * .5; b += (88 - b) * t * .6; }
+    const o = (j * gw + i) * 4; d[o] = r + f; d[o + 1] = gg + f; d[o + 2] = b + f * .6; d[o + 3] = 255;
+  }
+  x.putImageData(id, 0, 0);
+  if (NOISE.size > 6) NOISE.delete(NOISE.keys().next().value);
+  NOISE.set(seed, c); return c;
+}
+function buildStatic(v, vi) {
   if (!TEX) TEX = buildTex();
-  const c = document.createElement('canvas'); c.width = pw; c.height = ph;
-  const g = c.getContext('2d'), sc = pw / SC.W, seed = (S.seed + v.id * 977) | 0, rnd = mul32(seed);
-  g.setTransform(sc, 0, 0, sc, 0, 0);
-  SC.anims = []; SC.wins = []; SC.hits = [];
-  MODE = 'draw'; TRACK = null;
-  ground(g, pw, ph, seed % 1000, rnd);
-  decals(g, v);
-  const items = [], add = (u, vv, fn, b, o) => { o = o || (b && SH[b]) || [0, 0]; items.push({ key: u + vv + o[0] + o[1], fn: g2 => { OFF = o; fn(g2); OFF = [0, 0]; }, b }); };
-  // ağaçlar
+  const seed = (S.seed + v.id * 977) | 0, rnd = mul32(seed);
+  const G = { v, items: [], grass: [], flowers: [], noise: noiseCanvas(seed % 1000) };
+  for (let i = 0; i < 700; i++) { const px = rnd() * SC.W, py = rnd() * SC.H, l = 2 + rnd() * 3, c = rnd() < .5, dx = (rnd() - .5) * 2; G.grass.push([px, py, l, c, dx]); }
+  for (let i = 0; i < 60; i++) G.flowers.push([rnd() * SC.W, rnd() * SC.H, i % 4]);
+  const items = G.items, add = (u, vv, fn, b, o) => { o = o || (b && SH[b]) || [0, 0]; items.push({ key: u + vv + o[0] + o[1], fn: g2 => { OFF = o; fn(g2); OFF = [0, 0]; }, b }); };
   const tr = [];
   for (let i = 0; i < 8000 && tr.length < 240; i++) {
     const u = -20 + rnd() * 50, vv = -20 + rnd() * 54, p = Pq(u, vv);
@@ -2598,35 +2887,97 @@ function renderStatic(v, pw, ph) {
     if (occupied(u, vv) || tr.some(t => Math.hypot(t[0] - u, t[1] - vv) < .6)) continue;
     const r = rnd(); tr.push([u, vv, r < .3 ? 'servi' : r < .42 ? 'kavak' : 'mese', .8 + rnd() * .45, (rnd() * 1e9) | 0]);
   }
-  for (const [u, vv, k, sz, s] of tr) add(u, vv, g => tree(g, u, vv, k, sz, s), null);
+  for (const [u, vv, k, sz, s2] of tr) add(u, vv, g => tree(g, u, vv, k, sz, s2), null);
   walls(add, v.b.sur);
-  const B = { konak: bKonak, kervansaray: bKervansaray, medrese: bMedrese, divan: bDivan, kisla: bKisla, ambar: bAmbar, tophane: bTophane, ahir: bAhir, kereste: bKereste, tas: bTas, demir: bDemir, ciftlik: bCiftlik };
-  for (const b in B) if (v.b[b] > 0) B[b](add, v.b[b]);
+  const BF = { konak: bKonak, kervansaray: bKervansaray, medrese: bMedrese, divan: bDivan, kisla: bKisla, ambar: bAmbar, tophane: bTophane, ahir: bAhir, kereste: bKereste, tas: bTas, demir: bDemir, ciftlik: bCiftlik };
+  for (const b in BF) if (v.b[b] > 0) BF[b](add, v.b[b]);
   for (const q of v.bq) { const lot = LOTS[q.b]; if (lot && q.b !== 'sur' && q.b !== 'ciftlik') add(lot[0] + lot[2] / 2, lot[1] + lot[3] / 2 + .05, g => scaffold(g, lot, v.b[q.b]), q.b); }
-  // gölgeler
+  // gölgeler: bir kez, yumuşatılmış olarak
   MODE = 'shadow'; SHADOWS = [];
-  for (const it of items) it.fn(g);
+  const dummy = document.createElement('canvas').getContext('2d');
+  for (const it of items) it.fn(dummy);
   MODE = 'draw';
-  const shc = document.createElement('canvas'); shc.width = pw; shc.height = ph;
-  const sg = shc.getContext('2d'); sg.setTransform(sc, 0, 0, sc, 0, 0); sg.fillStyle = '#000';
+  const ss = 1.25, shc = document.createElement('canvas'); shc.width = Math.round(SC.W * ss); shc.height = Math.round(SC.H * ss);
+  const sg = shc.getContext('2d'); sg.setTransform(ss, 0, 0, ss, 0, 0); sg.fillStyle = '#000';
   for (const p of SHADOWS) { if (p.length < 3) continue; sg.beginPath(); p.forEach((q, i) => i ? sg.lineTo(q.x, q.y) : sg.moveTo(q.x, q.y)); sg.closePath(); sg.fill(); }
-  g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = .3; g.filter = 'blur(' + Math.max(1, sc * 1.6).toFixed(1) + 'px)'; g.drawImage(shc, 0, 0); g.restore();
-  // nesneler (arkadan öne)
+  G.shadow = document.createElement('canvas'); G.shadow.width = shc.width; G.shadow.height = shc.height;
+  const bg = G.shadow.getContext('2d'); bg.filter = 'blur(2px)'; bg.drawImage(shc, 0, 0);
   items.sort((a, b) => a.key - b.key);
-  for (const it of items) {
-    if (it.b) TRACK = { x0: 1e9, y0: 1e9, x1: -1e9, y1: -1e9 };
+  // taban resim + sınır kutuları, dokunma alanları, animasyon noktaları
+  const bs = Math.min(1.6, Math.max(.6, vi.cover * vi.dpr * .8));
+  G.base = document.createElement('canvas'); G.base.width = Math.round(SC.W * bs); G.base.height = Math.round(SC.H * bs); G.bs = G.base.width / SC.W;
+  const g = G.base.getContext('2d'); g.setTransform(G.bs, 0, 0, G.bs, 0, 0);
+  SC.anims = []; SC.wins = []; SC.hits = [];
+  paintStatic(g, G, null, true);
+  SC.anims.push({ k: 'birds' }, { k: 'clouds' });
+  return G;
+}
+function paintStatic(g, G, rect, measure) {
+  const v = G.v;
+  g.imageSmoothingEnabled = true; g.drawImage(G.noise, 0, 0, SC.W, SC.H);
+  g.lineWidth = .8;
+  for (const [px, py, l, c, dx] of G.grass) { if (rect && (px < rect.x0 - 4 || px > rect.x1 + 4 || py < rect.y0 - 6 || py > rect.y1 + 6)) continue; g.strokeStyle = c ? 'rgba(40,70,25,.35)' : 'rgba(170,190,110,.3)'; g.beginPath(); g.moveTo(px, py); g.lineTo(px + dx, py - l); g.stroke(); }
+  g.globalAlpha = .7;
+  for (const [x, y, k] of G.flowers) { g.fillStyle = ['#e8d36a', '#f2f0e8', '#c46a8a', '#8fa8e0'][k]; g.beginPath(); g.arc(x, y, .9, 0, 7); g.fill(); }
+  g.globalAlpha = 1;
+  decals(g, v);
+  g.save(); g.globalAlpha = .3; g.drawImage(G.shadow, 0, 0, SC.W, SC.H); g.restore();
+  for (const it of G.items) {
+    const bb = it.bb;
+    if (rect && bb && (bb.x1 < rect.x0 || bb.x0 > rect.x1 || bb.y1 < rect.y0 || bb.y0 > rect.y1)) continue;
+    if (measure) TRACK = { x0: 1e9, y0: 1e9, x1: -1e9, y1: -1e9 };
     it.fn(g);
-    if (it.b) mergeHit(it.b, TRACK);
-    TRACK = null;
+    if (measure) {
+      if (TRACK.x0 <= TRACK.x1) it.bb = { x0: TRACK.x0 - 8, y0: TRACK.y0 - 8, x1: TRACK.x1 + 8, y1: TRACK.y1 + 8 };
+      if (it.b) mergeHit(it.b, TRACK);
+      TRACK = null;
+    }
   }
-  if (v.b.sur > 0) { const a = Pq(WA, WA, 1), b2 = Pq(WB, WA, 0), c2 = Pq(WB, WB, 0), d2 = Pq(WA, WB, 0); SC.hits.push({ b: 'sur', nobadge: true, x0: d2.x, x1: b2.x, y0: a.y, y1: c2.y }); }
+  if (measure && v.b.sur > 0) { const a = Pq(WA, WA, 1), b2 = Pq(WB, WA, 0), c2 = Pq(WB, WB, 0), d2 = Pq(WA, WB, 0); SC.hits.push({ b: 'sur', nobadge: true, x0: d2.x, x1: b2.x, y0: a.y, y1: c2.y }); }
   // ışık: sol üstten sıcak güneş, kenarlarda hafif karartma
   const sun = g.createRadialGradient(SC.W * .15, -40, 20, SC.W * .2, 0, SC.W * .9);
   sun.addColorStop(0, 'rgba(255,226,160,.18)'); sun.addColorStop(1, 'rgba(255,226,160,0)'); g.fillStyle = sun; g.fillRect(0, 0, SC.W, SC.H);
   const vg = g.createRadialGradient(SC.W / 2, SC.H * .55, SC.H * .45, SC.W / 2, SC.H * .55, SC.W * .62);
   vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(10,15,25,.32)'); g.fillStyle = vg; g.fillRect(0, 0, SC.W, SC.H);
-  SC.anims.push({ k: 'birds' }, { k: 'clouds' });
+}
+function renderTile(G, L, i, j) {
+  const s = LEVELS[L], ts = TS / s, c = document.createElement('canvas'); c.width = c.height = TS + 2;
+  const g = c.getContext('2d'), x0 = i * ts, y0 = j * ts;
+  g.setTransform(s, 0, 0, s, -x0 * s + 1, -y0 * s + 1);
+  const keep = [SC.anims, SC.wins, SC.hits]; SC.anims = []; SC.wins = []; SC.hits = [];   // karo çizimi yan etki bırakmasın
+  try {
+    g.beginPath(); g.rect(x0 - 1 / s, y0 - 1 / s, ts + 2 / s, ts + 2 / s); g.clip();
+    g.fillStyle = '#56733a'; g.fillRect(x0 - 1 / s, y0 - 1 / s, ts + 2 / s, ts + 2 / s);
+    paintStatic(g, G, { x0: x0 - 2, y0: y0 - 2, x1: x0 + ts + 2, y1: y0 + ts + 2 }, false);
+  } finally { SC.anims = keep[0]; SC.wins = keep[1]; SC.hits = keep[2]; }
   return c;
+}
+// durağan katmanı ekrana basar; eksik karoları zaman bütçesiyle üretir
+function drawStatic(g, vi, pinching, panning) {
+  const G = SC.G, k = vi.k, d = vi.dpr, need = k * d;
+  g.setTransform(k * d, 0, 0, k * d, vi.ox * d, vi.oy * d); g.imageSmoothingEnabled = true;
+  let L = LEVELS.findIndex(x => x >= need * .92); if (L < 0) L = LEVELS.length - 1;
+  if (LEVELS[L] <= G.bs * 1.08) { g.drawImage(G.base, 0, 0, SC.W, SC.H); return; }
+  const x0 = Math.max(0, -vi.ox / k), y0 = Math.max(0, -vi.oy / k), x1 = Math.min(SC.W, (vi.r.width - vi.ox) / k), y1 = Math.min(SC.H, (vi.r.height - vi.oy) / k);
+  const cells = (LL, fn) => { const ts = TS / LEVELS[LL]; for (let j = Math.floor(y0 / ts); j <= Math.floor((y1 - .01) / ts); j++) for (let i = Math.floor(x0 / ts); i <= Math.floor((x1 - .01) / ts); i++) fn(i, j, ts); };
+  const put = (LL, i, j, ts, c) => { const e = 1 / LEVELS[LL]; g.drawImage(c, i * ts - e, j * ts - e, ts + 2 * e, ts + 2 * e); };
+  const missing = [];
+  cells(L, (i, j) => { if (!TILES.has(L + ':' + i + ':' + j)) missing.push([i, j]); });
+  if (missing.length) g.drawImage(G.base, 0, 0, SC.W, SC.H);
+  if (missing.length) for (let LL = L - 1; LL >= 0 && LEVELS[LL] > G.bs * 1.08; LL--) {   // eksikler için bir alt seviyede ne varsa
+    cells(LL, (i, j, ts) => { const c = TILES.get(LL + ':' + i + ':' + j); if (c) put(LL, i, j, ts, c); }); break;
+  }
+  cells(L, (i, j, ts) => { const key = L + ':' + i + ':' + j, c = TILES.get(key); if (c) { TILES.delete(key); TILES.set(key, c); put(L, i, j, ts, c); } });
+  if (!missing.length || pinching) return;
+  const ts = TS / LEVELS[L], cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  missing.sort((a, b) => Math.hypot((a[0] + .5) * ts - cx, (a[1] + .5) * ts - cy) - Math.hypot((b[0] + .5) * ts - cx, (b[1] + .5) * ts - cy));
+  const t0 = performance.now(), budget = panning ? 4 : 10;
+  for (const [i, j] of missing) {
+    const c = renderTile(G, L, i, j); TILES.set(L + ':' + i + ':' + j, c);
+    g.setTransform(k * d, 0, 0, k * d, vi.ox * d, vi.oy * d); put(L, i, j, ts, c);
+    if (performance.now() - t0 > budget) break;
+  }
+  while (TILES.size > TILE_MAX) TILES.delete(TILES.keys().next().value);
 }
 
 // ---------- hareketli katman ----------
@@ -2702,6 +3053,17 @@ function drawAnims(g, t, night, v) {
       const f = (Math.sin(t / 3200) + 1) / 2, x = a.a.x + (a.b.x - a.a.x) * f, y = a.a.y + (a.b.y - a.a.y) * f;
       g.fillStyle = '#5a4030'; g.fillRect(x - 5, y - 6, 10, 5); g.fillStyle = '#6f7f96'; g.beginPath(); g.ellipse(x, y - 6, 4.5, 2, 0, 0, 7); g.fill();
       g.fillStyle = '#222'; g.beginPath(); g.arc(x - 3, y, 1.6, 0, 7); g.arc(x + 3, y, 1.6, 0, 7); g.fill();
+    } else if (a.k === 'mill') {
+      const r = 20, ang = t / 1600;
+      g.save(); g.translate(a.x, a.y); g.scale(1, .82);
+      for (let i = 0; i < 4; i++) {
+        const q = ang + i * Math.PI / 2, cx = Math.cos(q), sy = Math.sin(q);
+        g.strokeStyle = '#5e3b1f'; g.lineWidth = 1.3; g.beginPath(); g.moveTo(0, 0); g.lineTo(cx * r, sy * r); g.stroke();
+        g.fillStyle = 'rgba(238,230,210,.9)'; g.beginPath(); g.moveTo(cx * 4, sy * 4); g.lineTo(cx * r, sy * r);
+        g.lineTo(cx * r - sy * 5, sy * r + cx * 5); g.lineTo(cx * 4 - sy * 4, sy * 4 + cx * 4); g.closePath(); g.fill();
+        g.strokeStyle = 'rgba(90,60,30,.5)'; g.lineWidth = .5; g.stroke();
+      }
+      g.fillStyle = '#3a2a1e'; g.beginPath(); g.arc(0, 0, 2, 0, 7); g.fill(); g.restore();
     } else if (a.k === 'birds') {
       for (let i = 0; i < 3; i++) {
         const x = ((t / 45 + i * 60) % (SC.W + 80)) - 40, y = 60 + i * 9 + Math.sin(t / 900 + i) * 6, f = Math.sin(t / 110 + i * 2) * 3;
@@ -2792,17 +3154,17 @@ function bodyRects(v) {
 }
 
 // ---------- kamera ----------
-SC.cam = SC.cam || { z: 1.55, x: 330, y: 525 }; SC.rs = 0; SC.idle = 0; SC.ptrs = new Map(); SC.sel = null;
+SC.cam = SC.cam || { z: 1.55, x: 330, y: 525 }; SC.idle = 0; SC.ptrs = new Map(); SC.sel = null;
 function viewInfo() {
   const cv = $('scene'); if (!cv) return null;
-  const r = cv.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const r = cv.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, 2.5);
   const cover = Math.max(r.width / SC.W, r.height / SC.H), k = cover * SC.cam.z;
   return { cv, r, dpr, cover, k, ox: r.width / 2 - SC.cam.x * k, oy: r.height / 2 - SC.cam.y * k };
 }
 function clampCam() {
   const vi = viewInfo(); if (!vi) return;
   const zmin = 1;
-  SC.cam.z = Math.max(zmin, Math.min(3.2, SC.cam.z));
+  SC.cam.z = Math.max(zmin, Math.min(4.5, SC.cam.z));
   const k = vi.cover * SC.cam.z, hw = vi.r.width / k / 2, hh = vi.r.height / k / 2;
   SC.cam.x = hw * 2 >= SC.W ? SC.W / 2 : Math.max(hw, Math.min(SC.W - hw, SC.cam.x));
   SC.cam.y = hh * 2 >= SC.H ? SC.H / 2 : Math.max(hh, Math.min(SC.H - hh, SC.cam.y));
@@ -2813,7 +3175,7 @@ function zoomAt(f, cx, cy) {
   const before = toLogical(cx, cy);
   SC.cam.z *= f; clampCam();
   const after = toLogical(cx, cy);
-  SC.cam.x += before.x - after.x; SC.cam.y += before.y - after.y; clampCam(); SC.idle = performance.now();
+  SC.cam.x += before.x - after.x; SC.cam.y += before.y - after.y; clampCam(); SC.idle = SC.zoomT = performance.now();
 }
 
 // ---------- etiketler ----------
@@ -2871,15 +3233,11 @@ function drawScene(t) {
   const W = Math.round(vi.r.width * vi.dpr), H = Math.round(vi.r.height * vi.dpr);
   if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; clampCam(); }
   const hr = SC.hour != null ? SC.hour : new Date().getHours(), night = hr >= 20 || hr < 6;
-  const want = vi.cover * vi.dpr * Math.min(SC.cam.z, 2.4);
-  const sig = v.id + '|' + JSON.stringify(v.b) + '|' + v.bq.map(q => q.b).join();
-  const busy = SC.ptrs.size > 0 || performance.now() - SC.idle < 220;
-  if (!SC.stat || sig !== SC.sig || (!busy && Math.abs(want - SC.rs) / want > .18)) {
-    SC.sig = sig; SC.rs = want; SC.stat = renderStatic(v, Math.round(SC.W * want), Math.round(SC.H * want));
-  }
+  const sig = v.id + '|' + S.seed + '|' + JSON.stringify(v.b) + '|' + v.bq.map(q => q.b).join() + '|' + S.player.color;
+  if (!SC.G || sig !== SC.sig) { SC.sig = sig; TILES.clear(); SC.G = buildStatic(v, vi); }
   g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = '#0c1422'; g.fillRect(0, 0, W, H);
-  const d = vi.dpr, s = vi.k * d / SC.rs;
-  g.setTransform(s, 0, 0, s, vi.ox * d, vi.oy * d); g.imageSmoothingEnabled = true; g.drawImage(SC.stat, 0, 0);
+  const d = vi.dpr, pinching = SC.ptrs.size >= 2 || performance.now() - (SC.zoomT || 0) < 140, panning = SC.ptrs.size === 1 && SC.moved;
+  drawStatic(g, vi, pinching, panning);
   g.setTransform(vi.k * d, 0, 0, vi.k * d, vi.ox * d, vi.oy * d);
   if (SC.bodySig !== sig) { SC.bodySig = sig; SC.body = bodyRects(v); }
   drawAnims(g, t, night, v);
@@ -3005,7 +3363,7 @@ $('view').addEventListener('click', e => {
       for (let i = 0; i < 3; i++) v.res[i] = Math.min(Math.max(c, v.res[i]), v.res[i] + q.r[i]);
       S.quests.claimed.push(q.id); return 'ok'; });
     if (r !== 'ok') return;
-    toast('Ödül ambara eklendi', 'good'); save(); liveKoy(); renderTop(); return;
+    Sfx.play('good'); toast('Ödül ambara eklendi', 'good'); save(); liveKoy(); renderTop(); return;
   }
   const qb = e.target.closest('[data-qb]'); if (qb) { selectBuilding(qb.dataset.qb); return; }
   const pop = e.target.closest('#pop'); if (!pop) return;
@@ -3014,7 +3372,7 @@ $('view').addEventListener('click', e => {
   if (e.target.closest('[data-pcancel]')) { act(() => C.cancelLast(cur(), now())); save(); liveKoy(); renderTop(); return; }
   if (e.target.closest('[data-pup]')) {
     const b = SC.sel, r = act(() => C.upgrade(cur(), b, now()));
-    if (r === 'ok') { toast(C.B[b].n + ' inşaatı başladı', 'info'); save(); liveKoy(); renderTop(); }
+    if (r === 'ok') { Sfx.play('build'); toast(C.B[b].n + ' inşaatı başladı', 'info'); save(); liveKoy(); renderTop(); }
   }
 });
 function selectBuilding(b) { SC.sel = b; const pop = $('pop'); if (pop) { pop.dataset.sig = ''; if (!b) pop.hidden = true; } livePop(); }
@@ -3189,28 +3547,28 @@ function openBuilding(b) {
     const ov = box.parentNode; ov.dataset.b = b; ov.dataset.sig = bSheetSig(b);
     box.addEventListener('click', e => {
       const up = e.target.closest('[data-up]');
-      if (up) { const r = act(() => C.upgrade(cur(), b, now())); if (r === 'ok') { toast(C.B[b].n + ' inşaatı başladı', 'info'); save(); sig = ''; render(); } return; }
+      if (up) { const r = act(() => C.upgrade(cur(), b, now())); if (r === 'ok') { Sfx.play('build'); toast(C.B[b].n + ' inşaatı başladı', 'info'); save(); sig = ''; render(); } return; }
       const cv0 = cur();
       const rsel = e.target.closest('.rsels[data-side] .rsel');
       if (rsel) { const side = rsel.parentNode.dataset.side, i = +rsel.dataset.i; if (side === 'g') mkDraft.gi = i; else mkDraft.wi = i; rsel.parentNode.querySelectorAll('.rsel').forEach(x => x.classList.toggle('on', x === rsel)); liveMarket(box.parentNode, cv0); return; }
       const mf = e.target.closest('[data-mkf]'); if (mf) { mkFilter = +mf.dataset.mkf; liveBSheet(); return; }
       if (e.target.closest('[data-mkcreate]')) {
         const gi = mkDraft.gi, gn = +$('mkGn').value, wi = mkDraft.wi, wn = +$('mkWn').value, r = act(() => C.createOffer(cur(), gi, gn, wi, wn, now()));
-        if (r === 'ok') { toast('Teklif pazara kondu', 'good'); mkDraft.gn = ''; mkDraft.wn = ''; save(); liveBSheet(); renderTop(); }
+        if (r === 'ok') { Sfx.play('coin'); toast('Teklif pazara kondu', 'good'); mkDraft.gn = ''; mkDraft.wn = ''; save(); liveBSheet(); renderTop(); }
         else toast({ same: 'Farklı iki kaynak seç', empty: 'Miktarları yaz', ratio: 'Oran en fazla 1:3 olabilir', res: 'Ambarda yeterli kaynak yok', merchants: 'Yeterli tüccar yok', limit: 'En fazla 6 teklif koyabilirsin', nobuild: 'Önce Kervansaray kur' }[r] || 'Teklif konamadı', 'bad');
         return;
       }
       const mc = e.target.closest('[data-mkcancel]'); if (mc) { const id = +mc.dataset.mkcancel; act(() => C.cancelOffer(id, now())); toast('Teklif geri çekildi', 'info'); save(); liveBSheet(); renderTop(); return; }
       const ma = e.target.closest('[data-mkaccept]');
-      if (ma) { const id = +ma.dataset.mkaccept, r = act(() => C.acceptOffer(cur(), id, now())); toast(r === 'ok' ? 'Takas yapıldı, kervanlar yolda' : { res: 'Ambarda yeterli kaynak yok', merchants: 'Yeterli tüccar yok', gone: 'Teklif artık yok' }[r] || 'Takas yapılamadı', r === 'ok' ? 'good' : 'bad'); save(); liveBSheet(); renderTop(); return; }
+      if (ma) { const id = +ma.dataset.mkaccept, r = act(() => C.acceptOffer(cur(), id, now())); if (r === 'ok') Sfx.play('coin'); toast(r === 'ok' ? 'Takas yapıldı, kervanlar yolda' : { res: 'Ambarda yeterli kaynak yok', merchants: 'Yeterli tüccar yok', gone: 'Teklif artık yok' }[r] || 'Takas yapılamadı', r === 'ok' ? 'good' : 'bad'); save(); liveBSheet(); renderTop(); return; }
       const rs = e.target.closest('[data-research]');
-      if (rs) { const id = rs.dataset.research, r = act(() => C.research(cur(), id, now())); if (r === 'ok') { toast(C.TECH[id].n + ' araştırması başladı', 'info'); save(); liveBSheet(); renderTop(); } else toast({ busy: 'Aynı anda tek araştırma yapılabilir', res: 'Kaynaklar yetmiyor', cap: 'Ambar bu maliyeti alamıyor', req: 'Önce gereksinimleri tamamla' }[r] || 'Araştırma başlatılamadı', 'bad'); return; }
+      if (rs) { const id = rs.dataset.research, r = act(() => C.research(cur(), id, now())); if (r === 'ok') { Sfx.play('research'); toast(C.TECH[id].n + ' araştırması başladı', 'info'); save(); liveBSheet(); renderTop(); } else toast({ busy: 'Aynı anda tek araştırma yapılabilir', res: 'Kaynaklar yetmiyor', cap: 'Ambar bu maliyeti alamıyor', req: 'Önce gereksinimleri tamamla' }[r] || 'Araştırma başlatılamadı', 'bad'); return; }
       const mx = e.target.closest('[data-smax]');
       if (mx) { const u = mx.dataset.smax, inp = $('sq-' + u); inp.value = C.maxTrain(cur(), u) || ''; drafts[u] = inp.value; liveBSheet(); return; }
       const tb = e.target.closest('[data-strain]');
       if (tb) {
         const u = tb.dataset.strain, inp = $('sq-' + u), n = +inp.value, r = act(() => C.train(cur(), u, n, now()));
-        if (r === 'ok') { toast(`${n} ${C.U[u].n} eğitime alındı`, 'info'); inp.value = ''; drafts[u] = ''; save(); liveBSheet(); renderTop(); }
+        if (r === 'ok') { Sfx.play('train'); toast(`${n} ${C.U[u].n} eğitime alındı`, 'info'); inp.value = ''; drafts[u] = ''; save(); liveBSheet(); renderTop(); }
         else toast(r === 'pop' ? 'Nüfus yetmiyor, Çiftliği yükselt' : r === 'res' ? 'Kaynaklar yetmiyor' : 'Eğitim başlatılamadı', 'bad');
       }
     });
@@ -3335,7 +3693,7 @@ $('view').addEventListener('click', e => {
   if (tb) {
     const u = tb.dataset.train, inp = $('q-' + u), n = +inp.value;
     const r = act(() => C.train(cur(), u, n, now()));
-    if (r === 'ok') { toast(`${n} ${C.U[u].n} eğitime alındı`, 'info'); inp.value = ''; drafts[u] = ''; save(); liveOrdu(); renderTop(); }
+    if (r === 'ok') { Sfx.play('train'); toast(`${n} ${C.U[u].n} eğitime alındı`, 'info'); inp.value = ''; drafts[u] = ''; save(); liveOrdu(); renderTop(); }
     else toast(r === 'pop' ? 'Nüfus yetmiyor, Çiftliği yükselt' : r === 'res' ? 'Kaynaklar yetmiyor' : 'Eğitim başlatılamadı', 'bad');
   }
 });
@@ -3632,6 +3990,8 @@ const MICON = {
 };
 const mvKind = m => (m.type === 'trade' && m.owner !== 'P' ? 'gift' : m.type === 'trade' || m.type === 'tradeback' ? m.type : m.owner !== 'P' ? 'inc' : m.type);
 function mvRelevant(m) { return m.owner === 'P' || (S.vil[m.to] && S.vil[m.to].owner === 'P'); }
+// çok oyunculuda başka oyuncuların seferleri: yalnızca yol çizgisi (asker sayısı ve figür gösterilmez)
+function mvOther(m) { return !!S.mp && !mvRelevant(m) && C.isHuman(m.owner) && (m.type === 'attack' || m.type === 'spy' || m.type === 'support'); }
 function mvGeom(m, T) {
   const a = S.vil[m.type === 'return' || m.type === 'tradeback' ? m.via : m.from], b = S.vil[m.to];
   const ax = (a.x + .5) * T - map.ox, ay = (a.y + .62) * T - map.oy, bx = (b.x + .5) * T - map.ox, by = (b.y + .62) * T - map.oy;
@@ -3763,6 +4123,7 @@ function drawMoves(g, T) {
   const t = now(), at = performance.now();
   const rel = S.moves.filter(mvRelevant);
   for (const m of rel) { const G = mvGeom(m, T), k = Math.min(1, Math.max(0, (t - m.depart) / (m.arrive - m.depart))); drawRoute(g, G, k, MCOL[mvKind(m)], T); }
+  for (const m of S.moves.filter(mvOther)) { const G = mvGeom(m, T), k = Math.min(1, Math.max(0, (t - m.depart) / (m.arrive - m.depart))); g.save(); g.globalAlpha = .8; drawRoute(g, G, k, C.ownerColor(m.owner), T); g.restore(); }
   for (const m of rel) if (mvKind(m) === 'inc' && m.type === 'attack') drawTargetAlert(g, mvGeom(m, T), at, T);
   return () => {
     for (const m of rel.slice().sort((a, b) => qpt(mvGeom(a, T), .5).y - qpt(mvGeom(b, T), .5).y)) {
@@ -3874,7 +4235,7 @@ function resSheet(target) {
     });
     $('rGo').onclick = () => {
       const vid = v.id, tid = target.id, res = read(), r = act(() => C.sendRes(C.vil(vid), C.vil(tid), res, now()));
-      if (r === 'ok') { toast('Kervan ' + target.name + ' köyüne yola çıktı', 'info'); closeSheet(); save(); renderTop(); }
+      if (r === 'ok') { Sfx.play('coin'); toast('Kervan ' + target.name + ' köyüne yola çıktı', 'info'); closeSheet(); save(); renderTop(); }
       else toast({ merchants: 'Yeterli tüccar yok', res: 'Ambarda yeterli kaynak yok', empty: 'Gönderilecek miktarı yaz', self: 'Aynı köye gönderemezsin' }[r] || 'Gönderilemedi', 'bad');
     };
     upd();
@@ -3905,7 +4266,7 @@ function sendSheet(target, type) {
     const go = $('sendGo');
     if (go) go.onclick = () => {
       const vid = v.id, tid = target.id, us = read(), r = act(() => C.send(C.vil(vid), C.vil(tid), us, type, now()));
-      if (r === 'ok') { toast(title + ' yola çıktı', 'info'); closeSheet(); save(); drawMap(); renderTop(); }
+      if (r === 'ok') { Sfx.play(type === 'attack' ? 'attack' : type === 'spy' ? 'spy' : 'march'); toast(title + ' yola çıktı', 'info'); closeSheet(); save(); drawMap(); renderTop(); }
       else toast({ own: 'Kendi köyüne saldıramazsın', notown: 'Destek sadece kendi köylerine', empty: 'Birlik seçmedin' }[r] || 'Gönderilemedi', 'bad');
     };
     upd();
@@ -3970,7 +4331,7 @@ function renderKlan() {
   chatRendered = { ch, last: 0 };
   $('chatForm').addEventListener('submit', e => {
     e.preventDefault(); const inp = $('chatIn'), txt = inp.value, r = act(() => C.playerSay(ch, txt, now()));
-    if (r === 'ok') { inp.value = ''; save(); liveChat(); }
+    if (r === 'ok') { Sfx.play('chat'); inp.value = ''; save(); liveChat(); }
   });
   liveChat();
 }
