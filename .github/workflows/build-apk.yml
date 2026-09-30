@@ -1,0 +1,52 @@
+name: APK derle
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Oyun dosyasını birleştir
+        run: node tools/build.js
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: APK derle
+        run: chmod +x gradlew && ./gradlew assembleDebug --no-daemon
+
+      - name: APK'yı adlandır
+        run: cp app/build/outputs/apk/debug/app-debug.apk uc-beyleri-${{ github.run_number }}.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: uc-beyleri-apk
+          path: uc-beyleri-${{ github.run_number }}.apk
+
+      - name: Sürüm olarak yayınla
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: surum-${{ github.run_number }}
+          name: Uç Beyleri — sürüm ${{ github.run_number }}
+          body: |
+            Telefona kurmak için aşağıdaki **uc-beyleri-${{ github.run_number }}.apk** dosyasını indir.
+            Değişiklik: ${{ github.event.head_commit.message }}
+          files: |
+            uc-beyleri-${{ github.run_number }}.apk
+            dist/uc-beyleri.html

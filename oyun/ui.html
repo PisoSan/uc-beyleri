@@ -1,0 +1,1314 @@
+<title>Uç Beyleri</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya+SC:wght@500;700;800&family=Alegreya+Sans:wght@400;500;700;800&display=swap">
+<style>
+/* Layout: phone column — header (village + resources), scrolling tab body, bottom tab bar.
+   Single deliberate look: night-blue Seljuk tile work — lapis ground, turquoise glaze, gilt accents. */
+:root{
+  --bg:#0f1829;
+  --panel:#16223a;
+  --panel-2:#1d2c4a;
+  --line:#2a3d62;
+  --text:#efe6d2;
+  --muted:#9aaac4;
+  --firuze:#3cb4a6;
+  --gold:#dcaa45;
+  --red:#d4583c;
+  --green:#6cc08b;
+  --display:'Alegreya SC', 'Palatino Linotype', Georgia, serif;
+  --body:'Alegreya Sans', 'Trebuchet MS', system-ui, sans-serif;
+  color-scheme:dark;
+}
+html,body{height:100%}
+body{background:var(--bg);color:var(--text);font-family:var(--body);font-size:15px;line-height:1.35;overflow:hidden;-webkit-tap-highlight-color:transparent}
+button{font:inherit;color:inherit}
+button:focus-visible,input:focus-visible,.tabbtn:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.num{font-variant-numeric:tabular-nums}
+#app{height:100%;display:flex;flex-direction:column;max-width:560px;margin:0 auto;background:var(--bg);position:relative}
+
+/* ---------- header ---------- */
+.top{background:var(--panel);border-bottom:1px solid var(--line);padding:8px 12px 8px;display:grid;gap:6px;
+  background-image:radial-gradient(circle at 0 0, rgba(60,180,166,.10), transparent 55%)}
+.bar1{display:flex;align-items:center;gap:8px;min-width:0}
+.vbtn{flex:1;min-width:0;display:flex;align-items:baseline;gap:6px;background:none;border:0;padding:2px 0;cursor:pointer;text-align:left}
+.vbtn .vname{font-family:var(--display);font-weight:700;font-size:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.01em}
+.vbtn .vco{color:var(--muted);font-size:13px;white-space:nowrap}
+.vbtn .car{color:var(--gold);font-size:12px}
+.ptsb{font-size:13px;color:var(--muted);white-space:nowrap}
+.ptsb b{color:var(--gold);font-size:15px}
+.icon-btn{width:34px;height:34px;border-radius:10px;border:1px solid var(--line);background:var(--panel-2);display:grid;place-items:center;cursor:pointer;flex:none}
+.icon-btn svg{width:18px;height:18px}
+.resbar{display:grid;grid-template-columns:repeat(3,minmax(0,1.12fr)) minmax(0,.88fr);gap:5px}
+.rc{background:var(--panel-2);border-radius:10px;padding:4px 5px;display:grid;grid-template-columns:auto 1fr;column-gap:5px;align-items:center;min-width:0}
+.rc svg{width:18px;height:18px;grid-row:span 2}
+.rc .v{font-weight:800;font-size:14.5px;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rc .s{font-size:11px;color:var(--muted);line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rc.full .v{color:var(--gold)}
+.alert{display:flex;align-items:center;gap:8px;background:rgba(212,88,60,.18);border:1px solid var(--red);color:#ffd6cc;border-radius:10px;padding:5px 10px;font-weight:700;font-size:14px;cursor:pointer;text-align:left}
+.alert .dot{width:8px;height:8px;border-radius:50%;background:var(--red);flex:none;animation:pulse 1.2s infinite}
+@keyframes pulse{50%{opacity:.25}}
+
+/* ---------- body ---------- */
+main{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain}
+main.flush{overflow:hidden;display:flex;flex-direction:column}
+.pad{padding:12px 12px 20px;display:grid;gap:12px}
+h2.sec{font-family:var(--display);font-size:17px;font-weight:700;margin:4px 0 0;color:var(--gold);letter-spacing:.03em}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:10px 12px;display:grid;gap:8px}
+.muted{color:var(--muted)}
+.small{font-size:13px}
+.chip{display:inline-flex;align-items:center;gap:3px;font-size:13px;white-space:nowrap}
+.chip svg{width:14px;height:14px}
+.chip.no{color:var(--red)}
+.chips{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center}
+.btn{border:0;border-radius:10px;padding:7px 12px;font-weight:800;cursor:pointer;background:var(--gold);color:#23190a;white-space:nowrap}
+.btn.sec{background:var(--panel-2);color:var(--text);border:1px solid var(--line)}
+.btn.red{background:var(--red);color:#fff}
+.btn.firuze{background:var(--firuze);color:#062421}
+.btn[disabled]{background:var(--panel-2);color:var(--muted);cursor:default;border:1px solid var(--line)}
+.bar{height:6px;border-radius:3px;background:var(--panel-2);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--firuze);width:0}
+
+/* village head */
+.vhead{display:flex;gap:12px;align-items:center}
+.crest{width:52px;height:52px;flex:none;color:var(--gold)}
+.vhead h1{margin:0;font-family:var(--display);font-size:24px;line-height:1.05;text-wrap:balance}
+.vhead .meta{font-size:13px;color:var(--muted)}
+.note{border-radius:12px;padding:8px 12px;font-size:13.5px;background:rgba(60,180,166,.12);border:1px solid rgba(60,180,166,.45)}
+.quest{border-color:rgba(220,170,69,.5);background:linear-gradient(135deg, rgba(220,170,69,.12), transparent 60%), var(--panel)}
+.quest .qh{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.quest .qh span{font-size:12px;color:var(--gold);letter-spacing:.08em;text-transform:uppercase;font-weight:800}
+.quest .qt{font-weight:700;font-size:16px}
+.qrow{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+
+/* queue */
+.qi{display:grid;grid-template-columns:1fr auto;gap:2px 8px;align-items:center}
+.qi .bar{grid-column:1 / -1}
+.qi b{font-weight:700}
+.linkbtn{background:none;border:0;color:var(--muted);text-decoration:underline;cursor:pointer;padding:0;font-size:13px}
+
+/* building rows */
+.blist{display:grid;gap:8px}
+.brow{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:10px;display:grid;grid-template-columns:40px minmax(0,1fr);gap:4px 10px}
+.brow.locked{opacity:.62}
+.bic{width:40px;height:40px;border-radius:10px;background:var(--panel-2);border:1px solid var(--line);display:grid;place-items:center;color:var(--firuze);grid-row:span 2}
+.bic svg{width:24px;height:24px}
+.bt{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.bt b{font-family:var(--display);font-size:17px;font-weight:700}
+.lv{font-size:12px;font-weight:800;color:#062421;background:var(--firuze);border-radius:6px;padding:0 6px}
+.lv.zero{background:var(--panel-2);color:var(--muted)}
+.bd{font-size:13px;color:var(--muted)}
+.bfoot{grid-column:2;display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:space-between}
+.why{font-size:12.5px;color:var(--muted);width:100%}
+
+.scene{margin:0;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#5a7a37;position:relative}
+#scene{display:block;width:100%;cursor:pointer;touch-action:manipulation}
+.scene figcaption{position:absolute;left:8px;bottom:6px;font-size:11.5px;background:rgba(15,24,41,.7);padding:1px 8px;border-radius:8px;color:var(--muted);pointer-events:none}
+.brow.hl{animation:hl 1.6s ease-out}
+@keyframes hl{0%{border-color:var(--gold);box-shadow:0 0 0 3px rgba(220,170,69,.35)}100%{border-color:var(--line);box-shadow:none}}
+
+.bsh{display:flex;gap:10px;align-items:center}
+.bic.sm{width:32px;height:32px;border-radius:8px;flex:none}
+.bic.sm svg{width:19px;height:19px}
+.blist2 button{align-items:center;justify-content:flex-start;gap:10px}
+.blist2 .bl{flex:1;display:grid;text-align:left}
+.req{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:13px}
+.req .ok{color:var(--green)} .req .no{color:var(--red)}
+.btn.wide{width:100%;padding:10px 12px;font-size:16px}
+.tbl td.up{color:var(--green);font-weight:700}
+.fort{border-color:rgba(220,170,69,.45)}
+.fstats{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.fstats div{background:var(--panel-2);border-radius:10px;padding:6px 8px;display:grid}
+.fstats span{font-size:12px;color:var(--muted)}
+.fstats b{font-size:18px}
+
+.tier{display:grid;gap:6px}
+.tier-h{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--firuze)}
+.tgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:6px}
+.tech{background:var(--panel-2);border:1px solid var(--line);border-radius:12px;padding:8px 10px;display:grid;gap:5px;align-content:start;min-width:0}
+.tech.has{border-color:rgba(60,180,166,.55)} .tech.busy{border-color:var(--gold)}
+.tech .tt{display:flex;justify-content:space-between;gap:6px;align-items:center}
+.pips{display:flex;gap:3px} .pips i{width:7px;height:7px;border-radius:2px;background:var(--line);display:block} .pips i.on{background:var(--firuze)}
+.tech .btn{justify-self:start;padding:5px 10px}
+.ctag{font-size:11px;font-weight:800;color:var(--firuze);border:1px solid rgba(60,180,166,.5);border-radius:5px;padding:0 4px}
+.seg{display:grid;grid-template-columns:repeat(3,1fr);background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:3px;gap:3px}
+.seg button{background:none;border:0;border-radius:9px;padding:7px 0;font-weight:800;font-size:14px;color:var(--muted);cursor:pointer;position:relative}
+.seg button.on{background:var(--panel-2);color:var(--gold)}
+.seg .dotn{position:absolute;top:4px;right:8px;width:7px;height:7px;border-radius:50%;background:var(--red)}
+.chatwrap{display:flex;flex-direction:column;min-height:0;flex:1}
+.chatlog{flex:1;min-height:0;overflow-y:auto;padding:10px 12px;display:flex;flex-direction:column;gap:6px}
+.msg{max-width:86%;background:var(--panel);border:1px solid var(--line);border-radius:12px 12px 12px 4px;padding:5px 10px}
+.msg.me{align-self:flex-end;background:rgba(60,180,166,.14);border-color:rgba(60,180,166,.4);border-radius:12px 12px 4px 12px}
+.msg.sys{align-self:center;background:none;border:0;color:var(--muted);font-size:12.5px;font-style:italic;text-align:center;max-width:100%}
+.msg .mh{display:flex;gap:6px;align-items:baseline;font-size:12px}
+.msg .mh b{font-size:13px}
+.msg .mt{font-size:14.5px;line-height:1.35;overflow-wrap:anywhere}
+.chatin{display:flex;gap:6px;padding:8px 12px;border-top:1px solid var(--line);background:var(--panel)}
+.chatin input{flex:1;min-width:0;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:8px 10px;color:var(--text);font:inherit}
+.klanhead{display:flex;gap:10px;align-items:center}
+.klanhead .shield{width:46px;height:52px;flex:none}
+.mrow{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:8px;align-items:center;padding:6px 0;border-top:1px solid var(--line)}
+.mrow:first-child{border-top:0}
+.form2{display:grid;grid-template-columns:minmax(0,1fr) 80px;gap:6px}
+.form2 input{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:8px 10px;color:var(--text);font:inherit;min-width:0}
+
+.vscreen{position:relative;flex:1;min-height:0;overflow:hidden;background:#0c1422}
+#scene{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+.hud-top{position:absolute;top:8px;left:10px;right:60px;display:flex;flex-wrap:wrap;gap:6px;pointer-events:none}
+.vtitle{background:rgba(15,24,41,.82);border:1px solid var(--line);border-radius:12px;padding:4px 10px;display:grid;line-height:1.15}
+.vtitle b{font-family:var(--display);font-size:17px}
+.vtitle span{font-size:11.5px;color:var(--muted)}
+.hchip{background:rgba(60,180,166,.2);border:1px solid rgba(60,180,166,.55);border-radius:10px;padding:5px 9px;font-size:12px;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
+.zoomctl{position:absolute;top:8px;right:10px;display:grid;gap:6px}
+.zoomctl button{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:rgba(15,24,41,.86);color:var(--text);font-size:22px;font-weight:700;display:grid;place-items:center;cursor:pointer}
+.zoomctl svg{width:18px;height:18px}
+.zoomctl button.off{color:var(--muted);border-style:dashed}
+.hud-bot{position:absolute;left:8px;right:8px;bottom:8px;display:grid;gap:6px;pointer-events:none}
+.hud-bot > *{pointer-events:auto}
+.qchip{display:flex;align-items:center;justify-content:space-between;gap:8px;background:rgba(15,24,41,.88);border:1px solid rgba(220,170,69,.45);border-radius:12px;padding:6px 10px;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
+.qchip.done{border-color:var(--green)}
+.qchip div:first-child{display:grid;min-width:0}
+.qchip span{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);font-weight:800}
+.qchip b{font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.qchips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}
+.qc{flex:none;min-width:130px;text-align:left;background:rgba(15,24,41,.88);border:1px solid var(--line);border-radius:12px;padding:5px 9px;display:grid;gap:2px;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
+.qc b{font-size:12.5px;white-space:nowrap} .qc span{font-size:12px;color:var(--firuze);font-weight:700}
+.qc.tq span{color:var(--gold)} .qc.idle{color:var(--muted);font-size:12.5px;cursor:default}
+.qc .bar{height:3px;display:block;border-radius:2px;background:var(--panel-2);overflow:hidden}
+.qc .bar i{display:block;height:100%;background:var(--firuze)}
+.hbtns{display:flex;gap:6px;justify-content:flex-end}
+.hbtns .btn{background:rgba(15,24,41,.88);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
+.hbtns .btn.firuze{background:var(--firuze);color:#062421}
+.pop{position:absolute;left:0;top:0;width:min(300px,calc(100% - 16px));background:rgba(22,34,58,.97);border:1px solid rgba(220,170,69,.55);border-radius:14px;padding:9px 11px;display:grid;gap:6px;box-shadow:0 10px 28px rgba(0,0,0,.45);z-index:5}
+.pop .ph{display:flex;align-items:center;gap:8px}
+.pop .pt{flex:1;display:grid;line-height:1.15}
+.pop .pt b{font-family:var(--display);font-size:18px}
+.pop .x{font-size:20px}
+.pst{font-size:12.5px;font-weight:700;color:var(--muted)} .pst.ok{color:var(--green)} .pst.build{color:var(--firuze)}
+.prow{display:grid;gap:3px}
+.prow div{display:flex;justify-content:space-between;gap:8px;font-size:12.5px}
+.prow span{color:var(--muted)} .prow em{font-style:normal;color:var(--green)}
+.pbtns{display:flex;gap:6px} .pbtns .btn{flex:1;padding:8px 8px}
+.pop .req{font-size:12px}
+
+.mkrow{display:grid;grid-template-columns:70px minmax(0,1fr) 84px;gap:6px;align-items:center}
+.rsels{display:flex;gap:4px;flex-wrap:wrap;min-width:0}
+.rsel{background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:4px 7px;font-size:12px;font-weight:700;color:var(--muted);cursor:pointer;white-space:nowrap}
+.rsel.on{border-color:var(--gold);color:var(--text);background:rgba(220,170,69,.14)}
+.mkf .rsel{padding:3px 7px;font-size:11.5px}
+.offer{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px 8px;align-items:center;padding:7px 0;border-top:1px solid var(--line)}
+.offer:first-of-type{border-top:0}
+.offer .ofw{grid-column:1/-1;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.offer .ofr{font-size:13px;display:flex;gap:5px;align-items:center;flex-wrap:wrap}
+.offer .ofr em{font-style:normal;font-weight:800;font-size:11.5px}
+@media (max-width:360px){.mkrow{grid-template-columns:1fr}}
+
+/* army */
+.ugrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.ucell{background:var(--panel-2);border-radius:10px;padding:5px 6px;min-width:0}
+.ucell .n{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ucell .c{font-weight:800;font-size:17px}
+.urow{border-top:1px solid var(--line);padding-top:8px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 8px;align-items:center}
+.urow:first-of-type{border-top:0;padding-top:0}
+.urow .nm{font-weight:700;font-size:16px}
+.urow .st{font-size:12px;color:var(--muted)}
+.urow .ctl{grid-column:1 / -1;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.urow .ctl .chips{width:100%}
+.urow .ctl input.qty{flex:1;min-width:60px;max-width:120px}
+.urow.locked{opacity:.55}
+input.qty{width:74px;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:6px 8px;color:var(--text);font:inherit;font-weight:700}
+.maxb{background:none;border:1px dashed var(--line);border-radius:8px;padding:5px 8px;color:var(--muted);cursor:pointer;font-size:13px}
+.mv{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:2px 8px;align-items:center;padding:6px 0;border-top:1px solid var(--line)}
+.mv:first-child{border-top:0}
+.tag{font-size:11px;font-weight:800;border-radius:6px;padding:1px 6px;text-transform:uppercase;letter-spacing:.04em}
+.tag.att{background:rgba(220,170,69,.2);color:var(--gold)}
+.tag.ret{background:rgba(108,192,139,.2);color:var(--green)}
+.tag.inc{background:rgba(212,88,60,.25);color:#ffb9a8}
+.tag.spy{background:rgba(60,180,166,.2);color:var(--firuze)}
+.tag.sup{background:rgba(154,170,196,.2);color:var(--muted)}
+.mv .who{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* map */
+.mapwrap{position:relative;flex:1;min-height:0}
+#map{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:grab;display:block}
+.mapcard{position:absolute;left:10px;right:10px;bottom:10px;background:rgba(22,34,58,.94);border:1px solid var(--line);border-radius:14px;padding:10px 12px;display:grid;gap:6px;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+.mapcard h3{margin:0;font-family:var(--display);font-size:19px;line-height:1.1}
+.mapbtns{position:absolute;top:10px;right:10px;display:grid;gap:6px}
+.mvpanel{position:absolute;top:10px;left:10px;width:min(205px,calc(100% - 70px));display:grid;gap:3px;z-index:3}
+.mvhead{display:flex;align-items:center;gap:6px;background:rgba(12,18,32,.9);border:1px solid var(--line);border-radius:9px;padding:4px 8px;cursor:pointer;color:var(--text);font:inherit;text-align:left}
+.mvhead span{font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--gold);flex:1;white-space:nowrap}
+.mvhead b{font-size:12px} .mvhead .mvinc{color:#ff7a66;font-size:11px} .mvhead i{font-style:normal;color:var(--muted);font-size:11px}
+.mvrow{display:grid;grid-template-columns:15px minmax(0,1fr) auto;gap:1px 6px;align-items:center;text-align:left;background:rgba(12,18,32,.88);border:0;border-left:3px solid #e8b64a;border-radius:8px;padding:3px 7px 3px 6px;cursor:pointer;color:var(--text);font:inherit}
+.mvrow svg{width:14px;height:14px;color:#e8b64a}
+.mvrow.spy{border-left-color:#3cb4a6} .mvrow.spy svg{color:#3cb4a6}
+.mvrow.support{border-left-color:#8fb0e8} .mvrow.support svg{color:#8fb0e8}
+.mvrow.return{border-left-color:#6cc08b} .mvrow.return svg{color:#6cc08b}
+.mvrow.inc{border-left-color:#ff5a44;background:rgba(80,18,14,.92)} .mvrow.inc svg{color:#ff7a66}
+.mvt{font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.mvt em{font-style:normal;font-weight:600;color:var(--muted);font-size:11px}
+.mvrow > b{font-size:12px}
+.mvbar{grid-column:1/-1;height:2px;border-radius:2px;background:rgba(255,255,255,.1);overflow:hidden;display:block}
+.mvbar i{display:block;height:100%;background:currentColor;width:0}
+.mvrow .mvbar{color:#e8b64a} .mvrow.spy .mvbar{color:#3cb4a6} .mvrow.support .mvbar{color:#8fb0e8} .mvrow.return .mvbar{color:#6cc08b} .mvrow.inc .mvbar{color:#ff5a44}
+.mvmore{font-size:10.5px;color:var(--muted);background:rgba(12,18,32,.8);border-radius:7px;padding:2px 7px;justify-self:start}
+.mapbtns .icon-btn{width:40px;height:40px;font-size:20px;font-weight:700}
+.tlist{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.tl{background:var(--panel-2);border-radius:12px;padding:4px 8px 8px;display:grid;justify-items:center;text-align:center}
+.tl canvas{max-width:100%}
+.legend{border:0;color:var(--text);cursor:pointer;font:inherit;position:absolute;top:10px;left:10px;display:flex;gap:10px;flex-wrap:wrap;font-size:12px;background:rgba(15,24,41,.8);border-radius:10px;padding:4px 8px;max-width:calc(100% - 70px)}
+.legend span{display:flex;align-items:center;gap:4px}
+.sw{width:10px;height:10px;border-radius:3px;display:inline-block}
+
+/* reports */
+.rep{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.rep > button{width:100%;background:none;border:0;padding:9px 12px;display:grid;grid-template-columns:10px minmax(0,1fr) auto;gap:2px 10px;align-items:center;text-align:left;cursor:pointer}
+.rep .st{width:10px;height:10px;border-radius:50%}
+.rep .tt{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rep.unread .tt::after{content:" •";color:var(--gold)}
+.rep .tm{font-size:12px;color:var(--muted);white-space:nowrap}
+.rep .sub{grid-column:2 / -1;font-size:12.5px;color:var(--muted)}
+.rdet{padding:0 12px 12px;display:grid;gap:8px}
+.tbl{width:100%;border-collapse:collapse;font-size:13.5px}
+.tbl th,.tbl td{padding:4px 6px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+.tbl th:first-child,.tbl td:first-child{text-align:left}
+.tbl th{color:var(--muted);font-weight:700;font-size:12px}
+.loss{color:var(--red)}
+.tblwrap{overflow-x:auto}
+
+/* ranking */
+.rank td,.rank th{padding:7px 6px}
+.rank tr.me td{color:var(--gold);font-weight:800}
+
+/* tabs */
+.tabs{display:grid;grid-template-columns:repeat(6,1fr);background:var(--panel);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px)}
+.tabbtn{background:none;border:0;padding:7px 0 6px;display:grid;justify-items:center;gap:2px;font-size:12px;font-weight:700;color:var(--muted);cursor:pointer;position:relative}
+.tabbtn svg{width:22px;height:22px}
+.tabbtn.on{color:var(--gold)}
+.tabbtn.on::before{content:"";position:absolute;top:0;left:25%;right:25%;height:2px;background:var(--gold);border-radius:0 0 2px 2px}
+.badge{position:absolute;top:3px;left:calc(50% + 6px);background:var(--red);color:#fff;border-radius:9px;font-size:10.5px;min-width:17px;height:17px;display:grid;place-items:center;padding:0 4px}
+
+/* overlays */
+.ov{position:absolute;inset:0;background:rgba(6,10,20,.66);display:flex;align-items:flex-end;justify-content:center;z-index:20}
+.ov.center{align-items:center;padding-inline:16px}
+.sheet{background:var(--panel);border:1px solid var(--line);border-bottom:0;border-radius:18px 18px 0 0;width:100%;max-height:88%;overflow-y:auto;padding:14px 16px calc(16px + env(safe-area-inset-bottom,0px));display:grid;gap:10px}
+.ov.center .sheet{border-radius:18px;border-bottom:1px solid var(--line);max-width:420px}
+.sheet h3{margin:0;font-family:var(--display);font-size:21px;line-height:1.1}
+.shead{display:flex;justify-content:space-between;align-items:start;gap:8px}
+.x{background:none;border:0;color:var(--muted);font-size:22px;line-height:1;cursor:pointer;padding:2px 4px}
+.sendrow{display:grid;grid-template-columns:minmax(0,1fr) 80px auto;gap:6px;align-items:center}
+.sum{background:var(--panel-2);border-radius:10px;padding:8px 10px;display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;font-size:13.5px}
+.sum b{display:block;font-size:15px}
+.vlist button{width:100%;display:flex;justify-content:space-between;gap:8px;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:9px 12px;cursor:pointer;text-align:left}
+.vlist button.on{border-color:var(--gold)}
+.vlist{display:grid;gap:6px}
+
+/* start */
+.start{position:absolute;inset:0;z-index:30;overflow-y:auto;background:
+  radial-gradient(ellipse at 50% -10%, rgba(60,180,166,.25), transparent 60%), var(--bg);display:grid;place-items:center;padding:24px 16px}
+.start .box{width:100%;max-width:400px;display:grid;gap:14px}
+.start h1{margin:0;font-family:var(--display);font-size:52px;line-height:.95;color:var(--gold);text-align:center;letter-spacing:.01em}
+.start .kicker{text-align:center;color:var(--firuze);letter-spacing:.2em;text-transform:uppercase;font-size:12px;font-weight:800}
+.start p{margin:0;color:var(--text);text-align:center;font-size:16px;line-height:1.45}
+.field{display:grid;gap:4px;font-size:13px;color:var(--muted);font-weight:700}
+.field input{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:9px 12px;color:var(--text);font:inherit;font-size:16px;font-weight:700}
+.speeds{display:grid;gap:6px}
+.speeds label{display:grid;grid-template-columns:auto 1fr;gap:0 10px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px 12px;cursor:pointer}
+.speeds label:has(input:checked){border-color:var(--gold)}
+.speeds input{grid-row:span 2;accent-color:var(--gold)}
+.speeds b{font-size:15px}
+.speeds span{font-size:12.5px;color:var(--muted)}
+.bigbtn{justify-self:center;border:0;border-radius:999px;background:var(--gold);color:#23190a;font-weight:800;font-size:19px;padding:10px 34px;cursor:pointer;box-shadow:0 4px 0 #9c7426}
+.bigbtn:active{transform:translateY(2px);box-shadow:0 2px 0 #9c7426}
+.star-row{display:flex;justify-content:center;color:var(--gold)}
+.star-row svg{width:64px;height:64px}
+
+/* toasts */
+.toasts{position:absolute;left:12px;right:12px;bottom:calc(72px + env(safe-area-inset-bottom,0px));display:grid;gap:6px;pointer-events:none;z-index:25}
+.toast{justify-self:center;background:rgba(10,16,30,.94);border:1px solid var(--line);border-left:4px solid var(--firuze);border-radius:10px;padding:6px 12px;font-weight:700;font-size:14px;max-width:100%;transition:opacity .3s}
+.toast.good{border-left-color:var(--green)} .toast.bad{border-left-color:var(--red)} .toast.info{border-left-color:var(--gold)}
+@media (prefers-reduced-motion: reduce){.alert .dot{animation:none}.bigbtn:active{transform:none}.toast{transition:none}}
+</style>
+
+<div id="app">
+  <header class="top" id="top" hidden>
+    <div class="bar1">
+      <button class="vbtn" id="vilBtn" aria-label="Köy değiştir"><span class="vname" id="vName">.</span><span class="vco num" id="vCo"></span><span class="car">▼</span></button>
+      <div class="ptsb num"><b id="vPts">0</b> puan</div>
+      <button class="icon-btn" id="setBtn" aria-label="Ayarlar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg></button>
+    </div>
+    <div class="resbar" id="resbar"></div>
+    <button class="alert" id="alert" hidden></button>
+  </header>
+  <main id="view"></main>
+  <nav class="tabs" id="tabs" hidden></nav>
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+</div>
+
+<script>
+/*CORE*/
+</script>
+<script>
+(() => {
+'use strict';
+const C = Core;
+const $ = id => document.getElementById(id);
+const SAVE = 'ucbeyleri-save-v1';
+const store = {
+  get() { try { return localStorage.getItem(SAVE); } catch (e) { return null; } },
+  set(v) { try { localStorage.setItem(SAVE, v); } catch (e) {} },
+  del() { try { localStorage.removeItem(SAVE); } catch (e) {} },
+};
+const now = () => Date.now();
+const fmt = n => Math.floor(n).toLocaleString('tr-TR');
+const fmtC = n => n >= 100000 ? (n / 1000).toFixed(n >= 1e6 ? 0 : 1).replace('.', ',').replace(',0', '') + 'B' : fmt(n);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+function dur(ms) {
+  let s = Math.max(0, Math.ceil(ms / 1000));
+  const d = Math.floor(s / 86400); s %= 86400; const h = Math.floor(s / 3600); s %= 3600; const m = Math.floor(s / 60); s %= 60;
+  if (d) return d + 'g ' + h + 'sa'; if (h) return h + 'sa ' + m + 'dk'; if (m) return m + 'dk ' + String(s).padStart(2, '0') + 'sn'; return s + 'sn';
+}
+function clock(t) {
+  const d = new Date(t), n = new Date(), hm = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  const day = x => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diff = Math.round((day(d) - day(n)) / 86400000);
+  if (diff === 0) return 'bugün ' + hm; if (diff === 1) return 'yarın ' + hm; if (diff === -1) return 'dün ' + hm;
+  return String(d.getDate()).padStart(2, '0') + '.' + String(d.getMonth() + 1).padStart(2, '0') + ' ' + hm;
+}
+
+// ---------- icons ----------
+const RI = [
+  '<svg viewBox="0 0 20 20" aria-hidden="true"><rect x="1.5" y="6.5" width="15" height="8" rx="4" fill="#9a6a3a"/><ellipse cx="15.5" cy="10.5" rx="3" ry="4" fill="#dcae6c"/><ellipse cx="15.5" cy="10.5" rx="1.4" ry="2" fill="#9a6a3a"/><path d="M4 9h7M5 12h6" stroke="#6e4a26" stroke-width="1" stroke-linecap="round"/></svg>',
+  '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 15l2-7 6-3 6 4-1 6-6 2z" fill="#a4a8ae"/><path d="M5 8l6 2 6-1M11 10l-1 7" stroke="#6d7279" stroke-width="1" fill="none"/></svg>',
+  '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 14l3-6h8l3 6z" fill="#7d93ad"/><path d="M6 8h8l-1.5-3h-5z" fill="#a8bdd4"/></svg>',
+];
+const POP_I = '<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="6" r="3.2" fill="#d9c9a3"/><path d="M4 17c0-4 2.7-6 6-6s6 2 6 6z" fill="#d9c9a3"/></svg>';
+const CLOCK_I = '<svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="#9aaac4" stroke-width="1.6"><circle cx="10" cy="10" r="7"/><path d="M10 6v4l3 2" stroke-linecap="round"/></svg>';
+const STAR = '<svg viewBox="0 0 48 48" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><rect x="10" y="10" width="28" height="28"/><rect x="10" y="10" width="28" height="28" transform="rotate(45 24 24)"/><circle cx="24" cy="24" r="6"/></svg>';
+const BI = {
+  konak: 'M4 20h16M6 20v-7h12v7M8 13a4 4 0 0 1 8 0M12 5v4M12 5l3 1.2-3 1.2M10 20v-3h4v3',
+  kereste: 'M3 9h13a3 3 0 0 1 0 6H3zM16 12h.01M3 9v6',
+  tas: 'M4 17l3-8 6-2 5 5-2 6zM7 9l6 3 5 0M13 12l-1 6',
+  demir: 'M5 19L15 9M9 5c5-1 9 3 10 8M15 9l1.5-1.5',
+  ambar: 'M4 20V10l8-5 8 5v10zM9 20v-6h6v6M9 14l6 6M15 14l-6 6',
+  ciftlik: 'M12 21V8M12 8c-2-1-3-3-3-5M12 8c2-1 3-3 3-5M12 13c-2-.5-4-2-4-4M12 13c2-.5 4-2 4-4M12 18c-2-.5-4-2-4-4M12 18c2-.5 4-2 4-4',
+  kisla: 'M6 21L18 3M15 3h3v3M4 10h7v5c0 2.5-3.5 4-3.5 4S4 17.5 4 15z',
+  sur: 'M3 20V10h3v2.5h3V10h3v2.5h3V10h3v2.5h3V20zM10 20v-4h4v4',
+  ahir: 'M7 4v7a5 5 0 0 0 10 0V4M5 4h4M15 4h4M8 8h1M15 8h1',
+  tophane: 'M3 18h13M6 18l9-11M15 7l3-2M13 5a2 2 0 1 0 4 0 2 2 0 1 0-4 0M5 20a2 2 0 1 0 0-4M14 20a2 2 0 1 0 0-4',
+  kervansaray: 'M3 20V9l9-5 9 5v11M3 20h18M9 20v-5a3 3 0 016 0v5M7 11h.01M17 11h.01',
+  divan: 'M6 4h11a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6a2 2 0 0 1 1-2zM9 9h7M9 13h7M9 17h4',
+};
+const bIcon = b => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${BI[b]}"/></svg>`;
+const TABS = [
+  ['koy', 'Köy', 'M4 20V11l8-6 8 6v9M9 20v-5h6v5'],
+  ['harita', 'Harita', 'M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2zM9 4v14M15 6v14'],
+  ['ordu', 'Ordu', 'M6 21L18 3M15 3h3v3M18 21L6 3M6 3h3M6 3v3'],
+  ['rapor', 'Raporlar', 'M6 3h9l4 4v14H6zM15 3v4h4M9 12h7M9 16h7'],
+  ['klan', 'Klan', 'M12 3l7 3v5c0 5-3.5 8-7 10-3.5-2-7-5-7-10V6zM9 12l2 2 4-4'],
+  ['sira', 'Sıralama', 'M4 20V12h4v8M10 20V6h4v14M16 20v-10h4v10'],
+];
+const costChips = (c, v) => c.map((x, i) => `<span class="chip num${v && v.res[i] < x ? ' no' : ''}">${RI[i]}${fmt(x)}</span>`).join('');
+
+// ---------- state ----------
+let S = null, tab = 'koy', sig = '', lastSave = 0, catching = false, awayLog = [], openRep = null;
+const drafts = {};
+const map = { ox: null, oy: null, T: 46, sel: null, drag: null };
+
+C.onNotify((kind, msg) => { if (catching) { awayLog.push([kind, msg]); return; } if (kind !== 'build' || S.speed < 50) toast(msg, kind); });
+
+function toast(msg, kind = 'info') {
+  const box = $('toasts'); if (box.children.length > 2) box.firstChild.remove();
+  const el = document.createElement('div'); el.className = 'toast ' + kind; el.textContent = msg; box.appendChild(el);
+  setTimeout(() => { el.style.opacity = 0; setTimeout(() => el.remove(), 320); }, 2800);
+}
+const cur = () => S.vil[S.cur];
+const myVillages = () => S.vil.filter(v => v.owner === 'P');
+
+function save() { if (!S) return; S.lastT = now(); store.set(JSON.stringify(S)); lastSave = now(); }
+
+// ---------- boot ----------
+function boot() {
+  const raw = store.get();
+  if (raw) {
+    try {
+      const st = JSON.parse(raw);
+      if (st && st.ver === 1) {
+        C.S = S = C.migrate(st);
+        const away = now() - S.lastT;
+        catching = true; awayLog = [];
+        C.processUntil(now());
+        catching = false;
+        showGame();
+        if (away > 60000 && awayLog.length) showAway(away);
+        return;
+      }
+    } catch (e) { /* bozuk kayıt: yeni oyun */ }
+  }
+  showStart();
+}
+
+function showStart() {
+  $('top').hidden = true; $('tabs').hidden = true; $('view').innerHTML = '';
+  const el = document.createElement('div'); el.className = 'start'; el.id = 'start';
+  el.innerHTML = `<div class="box">
+    <div class="star-row">${STAR}</div>
+    <div class="kicker">Anadolu · XIII. yüzyıl</div>
+    <h1>Uç Beyleri</h1>
+    <p>Uç boylarında küçük bir köyün beyisin. Kaynak topla, ordunu kur, terk edilmiş köyleri yağmala ve yedi komşu beylikle Anadolu'nun hâkimiyeti için yarış.</p>
+    <label class="field">Beyliğinin adı<input id="stName" maxlength="28" value="Kızılırmak Beyliği" autocomplete="off"></label>
+    <label class="field">İlk köyünün adı<input id="stVil" maxlength="22" value="Kızılcahamam" autocomplete="off"></label>
+    <div class="field">Dünya hızı
+      <div class="speeds">
+        <label><input type="radio" name="spd" value="1"><b>Gerçek zaman (1×)</b><span>Binalar saatler, fetih haftalar sürer.</span></label>
+        <label><input type="radio" name="spd" value="10" checked><b>Hızlı dünya (10×)</b><span>Her şey 10 kat hızlı. Birkaç günde fetih.</span></label>
+        <label><input type="radio" name="spd" value="100"><b>Deneme (100×)</b><span>Oyunu hızlıca denemek için.</span></label>
+      </div>
+    </div>
+    <div class="field">Oyun modu
+      <div class="speeds">
+        <label><input type="radio" name="tst" value="" checked><b>Normal</b><span>Sıfırdan başla.</span></label>
+        <label><input type="radio" name="tst" value="res"><b>Test: kaynaklar dolu</b><span>Ambar dolu başlar, istediğin an tek dokunuşla yeniden doldurursun.</span></label>
+        <label><input type="radio" name="tst" value="full"><b>Test: bütün madenler en üst seviye</b><span>Kereste, Taş, Demir ve Ambar 30. seviye, kaynaklar dolu.</span></label>
+        <label><input type="radio" name="tst" value="max"><b>Test: bütün binalar son seviye</b><span>Köydeki her bina en üst seviyede, kaynaklar dolu.</span></label>
+      </div>
+    </div>
+    <button class="bigbtn" id="stGo">Beyliği kur</button>
+  </div>`;
+  $('app').appendChild(el);
+  $('stGo').onclick = () => {
+    const name = $('stName').value.trim() || 'Kızılırmak Beyliği', village = $('stVil').value.trim() || 'Kızılcahamam';
+    const speed = +document.querySelector('input[name=spd]:checked').value;
+    const test = document.querySelector('input[name=tst]:checked').value || null;
+    C.S = S = C.newGame({ now: now(), speed, name, village, test });
+    el.remove(); save(); tab = 'koy'; map.ox = null; showGame();
+    toast('Beyliğin kuruldu. İlk görev seni bekliyor.', 'good');
+  };
+}
+
+function showGame() {
+  $('top').hidden = false; $('tabs').hidden = false;
+  renderTabs(); sig = ''; render();
+}
+
+function showAway(ms) {
+  const counts = {};
+  for (const [k, m] of awayLog) counts[k] = (counts[k] || 0) + 1;
+  const lines = awayLog.filter(([k]) => k !== 'build').slice(-8).map(([k, m]) => `<li class="${k === 'bad' ? 'loss' : ''}">${esc(m)}</li>`).join('');
+  sheet(`<div class="shead"><h3>Sen yokken</h3><button class="x" data-close aria-label="Kapat">×</button></div>
+    <div class="muted">${dur(ms)} geçti. Dünya senin yokluğunda da döndü.</div>
+    ${counts.build ? `<div>${counts.build} inşaat tamamlandı.</div>` : ''}
+    ${lines ? `<ul style="margin:0;padding-left:18px;display:grid;gap:3px">${lines}</ul>` : ''}
+    <button class="btn" data-close>Devam et</button>`);
+}
+
+// ---------- tabs ----------
+function renderTabs() {
+  $('tabs').innerHTML = TABS.map(([k, n, d]) => `<button class="tabbtn${tab === k ? ' on' : ''}" data-tab="${k}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d}"/></svg>${n}${k === 'rapor' ? '<span class="badge" id="repBadge" hidden>0</span>' : k === 'klan' ? '<span class="badge" id="chatBadge" hidden>0</span>' : ''}</button>`).join('');
+}
+$('tabs').addEventListener('click', e => {
+  const b = e.target.closest('[data-tab]'); if (!b) return;
+  tab = b.dataset.tab; renderTabs(); sig = ''; $('view').scrollTop = 0; render();
+});
+
+function render() {
+  if (!S) return;
+  C.processUntil(now());
+  renderTop();
+  const view = $('view');
+  view.classList.toggle('flush', tab === 'harita' || tab === 'klan' || tab === 'koy');
+  const s = tabSig();
+  if (s !== sig) { sig = s; ({ koy: renderKoy, harita: renderMap, ordu: renderOrdu, rapor: renderRapor, klan: renderKlan, sira: renderSira })[tab](); }
+  live();
+  if (S.over) showOver();
+}
+function tabSig() {
+  const v = cur();
+  const base = tab + '|' + S.cur + '|' + v.owner;
+  if (tab === 'koy') return base;
+  if (tab === 'ordu') return base + JSON.stringify(v.b);
+  if (tab === 'rapor') return base + S.reports.length + (S.reports[0] ? S.reports[0].id : '') + S.reports.filter(r => !r.read).length + '|' + openRep;
+  if (tab === 'sira') return base + C.ranking().map(r => r.id + r.pts + r.n).join();
+  if (tab === 'klan') return base + klanSub + '|' + JSON.stringify(C.clanList()) + (klanSub === 'bilgi' ? C.ranking().map(r => r.pts).join() : '');
+  if (tab === 'harita') return base;
+  return base;
+}
+
+// ---------- header ----------
+function renderTop() {
+  const v = cur(); C.syncRes(v, now());
+  $('vName').textContent = v.name;
+  $('vCo').textContent = `(${v.x}|${v.y})`;
+  $('vPts').textContent = fmt(C.vPoints(v));
+  const cap = C.cap(v);
+  let html = '';
+  for (let i = 0; i < 3; i++) {
+    const full = v.res[i] >= cap;
+    html += `<div class="rc${full ? ' full' : ''}" title="${C.RES_NAMES[i]}">${RI[i]}<span class="v num">${fmtC(v.res[i])}</span><span class="s num">+${fmtC(C.rateH(v, i))}/sa</span></div>`;
+  }
+  html += `<div class="rc" title="Nüfus">${POP_I}<span class="v num">${fmt(C.popUsed(v))}</span><span class="s num">/ ${fmt(C.popMax(v))}</span></div>`;
+  $('resbar').innerHTML = html;
+  const inc = S.moves.filter(m => m.owner !== 'P' && m.type === 'attack' && S.vil[m.to].owner === 'P').sort((a, b) => a.arrive - b.arrive);
+  const al = $('alert');
+  if (inc.length) {
+    al.hidden = false;
+    al.innerHTML = `<span class="dot"></span><span>${inc.length} saldırı geliyor · ilki ${esc(S.vil[inc[0].to].name)} köyüne <span class="num">${dur(inc[0].arrive - now())}</span> içinde</span>`;
+  } else al.hidden = true;
+  const cu = ['klan', 'genel'].reduce((a, ch) => a + S.chat[ch].filter(m => m.id > (S.chatSeen[ch] || 0) && m.from !== 'P').length, 0), cbd = $('chatBadge');
+  if (cbd) { cbd.hidden = !cu || tab === 'klan'; cbd.textContent = cu > 9 ? '9+' : cu; }
+  const unread = S.reports.filter(r => !r.read).length, bd = $('repBadge');
+  if (bd) { bd.hidden = !unread; bd.textContent = unread > 9 ? '9+' : unread; }
+}
+$('alert').onclick = () => { tab = 'ordu'; renderTabs(); sig = ''; render(); setTimeout(() => { const m = $('movesBox'); if (m) m.scrollIntoView({ behavior: 'smooth' }); }, 30); };
+$('vilBtn').onclick = () => {
+  const list = myVillages().map(v => `<button class="${v.id === S.cur ? 'on' : ''}" data-vil="${v.id}"><span><b>${esc(v.name)}</b> <span class="muted num">(${v.x}|${v.y})</span></span><span class="num muted">${fmt(C.vPoints(v))} puan</span></button>`).join('');
+  sheet(`<div class="shead"><h3>Köylerin</h3><button class="x" data-close aria-label="Kapat">×</button></div><div class="vlist">${list}</div>
+    <div class="muted small">Yeni köy kazanmak için Divan kur, Sancakbeyi yetiştir ve bir köyün bağlılığını sıfıra indir.</div>`, box => {
+    box.addEventListener('click', e => { const b = e.target.closest('[data-vil]'); if (!b) return; S.cur = +b.dataset.vil; closeSheet(); map.ox = null; sig = ''; render(); });
+  });
+};
+$('setBtn').onclick = () => {
+  sheet(`<div class="shead"><h3>Ayarlar</h3><button class="x" data-close aria-label="Kapat">×</button></div>
+    <div class="card small"><div><b>Beylik:</b> ${esc(S.player.name)}</div><div><b>Dünya hızı:</b> ${S.speed}×</div>
+    <div><b>Başlangıç:</b> ${clock(S.created)}</div>
+    <div><b>Acemi koruması:</b> ${now() < S.protectUntil ? dur(S.protectUntil - now()) + ' kaldı' : 'bitti'}</div></div>
+    <div class="muted small">Oyun bu cihazda kaydedilir. Uygulamayı kapatsan da dünya işlemeye devam eder; geri döndüğünde aradaki her şey hesaplanır.</div>
+    <section class="card"><b>Test araçları</b><div class="muted small">Oyunu denerken kullanman için. ${S.test ? 'Bu oyun test modunda.' : ''}</div>
+      <div class="chips"><button class="btn firuze" id="tFill">Kaynakları doldur</button><button class="btn sec" id="tMines">Madenleri en üst seviyeye çıkar</button><button class="btn" id="tMax">Bütün binaları son seviyeye çıkar</button></div></section>
+    <button class="btn red" id="resetBtn">Yeni oyun başlat</button>`, box => {
+    $('tFill').onclick = () => { C.fillRes(cur(), now()); S.test = S.test || 'res'; save(); renderTop(); toast('Ambar dolduruldu', 'good'); };
+    $('tMax').onclick = () => { C.maxAll(cur(), now()); S.test = 'max'; save(); closeSheet(); sig = ''; render(); toast('Bütün binalar son seviyede, ambar dolu', 'good'); };
+    $('tMines').onclick = () => { const v = cur(); C.syncRes(v, now()); for (const m of C.MINES) v.b[m] = C.B[m].max; v.b.ambar = C.B.ambar.max; v.b.ciftlik = Math.max(v.b.ciftlik, 20); S.test = 'full'; C.fillRes(v, now()); save(); sig = ''; render(); toast('Madenler ve Ambar 30. seviyede, kaynaklar dolu', 'good'); };
+    let armed = false;
+    $('resetBtn').onclick = () => {
+      if (!armed) { armed = true; $('resetBtn').textContent = 'Emin misin? Bütün ilerleme silinir'; return; }
+      store.del(); S = null; C.S = null; closeSheet(); showStart();
+    };
+  });
+};
+
+// ---------- quests ----------
+const maxB = b => Math.max(0, ...myVillages().map(v => v.b[b]));
+const tr = u => S.stats.trained[u] || 0;
+const QUESTS = [
+  { id: 'q1', t: 'Kereste Ocağını 2. seviyeye yükselt', ok: () => maxB('kereste') >= 2, r: [150, 150, 100] },
+  { id: 'q2', t: 'Taş Ocağını 2. seviyeye yükselt', ok: () => maxB('tas') >= 2, r: [150, 150, 100] },
+  { id: 'q3', t: 'Demir Madenini 2. seviyeye yükselt', ok: () => maxB('demir') >= 2, r: [150, 150, 150] },
+  { id: 'q4', t: 'Konağı 3. seviyeye yükselt', ok: () => maxB('konak') >= 3, r: [250, 250, 200] },
+  { id: 'q5', t: 'Kışla kur', ok: () => maxB('kisla') >= 1, r: [300, 250, 200] },
+  { id: 'q6', t: '10 Mızraklı eğit', ok: () => tr('mizrakli') >= 10, r: [300, 300, 300] },
+  { id: 'q7', t: 'Kışlayı 2. seviyeye çıkar ve 15 Baltacı eğit', ok: () => tr('baltaci') >= 15, r: [400, 350, 400] },
+  { id: 'q8', t: 'Terk edilmiş bir köye saldır ve kazan', ok: () => S.stats.barbWins >= 1, r: [500, 500, 500] },
+  { id: 'q9', t: 'Suru 2. seviyeye yükselt', ok: () => maxB('sur') >= 2, r: [400, 500, 300] },
+  { id: 'q10', t: 'Ambarı 6. seviyeye yükselt', ok: () => maxB('ambar') >= 6, r: [700, 700, 700] },
+  { id: 'q11', t: 'Ahır kur', ok: () => maxB('ahir') >= 1, r: [800, 800, 800] },
+  { id: 'q12', t: 'Bir köye çaşıt gönder', ok: () => S.stats.spies >= 1, r: [600, 600, 600] },
+  { id: 'q13', t: '10 Akıncı yetiştir', ok: () => tr('akinci') >= 10, r: [1200, 1000, 1500] },
+  { id: 'q14', t: 'Konağı 10. seviyeye yükselt', ok: () => maxB('konak') >= 10, r: [3000, 3000, 3000] },
+  { id: 'q15', t: 'Divan kur', ok: () => maxB('divan') >= 1, r: [6000, 6000, 6000] },
+  { id: 'q16', t: 'İlk köyünü fethet', ok: () => myVillages().length >= 2, r: [10000, 10000, 10000] },
+];
+const activeQuest = () => QUESTS.find(q => !S.quests.claimed.includes(q.id));
+const questState = () => { const q = activeQuest(); return q ? q.id + (q.ok() ? '1' : '0') : 'done'; };
+
+/*SCENE*/
+// ---------- KÖY ----------
+function renderKoy() {
+  const v = cur();
+  $('view').innerHTML = `<div class="vscreen">
+    <canvas id="scene" aria-label="${esc(v.name)} köyünün görünümü"></canvas>
+    <div class="hud-top"><div class="vtitle"><b>${esc(v.name)}</b><span class="num">(${v.x}|${v.y}) · Bağlılık <span id="hLoy">100</span></span></div><div id="hProt"></div></div>
+    <div class="zoomctl"><button id="zIn" aria-label="Yakınlaştır">+</button><button id="zOut" aria-label="Uzaklaştır">−</button><button id="lblT" aria-label="Bina isimlerini gizle" aria-pressed="true"></button><button id="zFit" aria-label="Köyün tamamını göster"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button></div>
+    <div class="pop" id="pop" hidden></div>
+    <div class="hud-bot"><div id="hQuest"></div><div id="hQueue" class="qchips"></div>
+      <div class="hbtns">${S.test ? '<button class="btn firuze" id="fillB">Kaynakları doldur</button>' : ''}<button class="btn sec" id="techB">Teknoloji</button><button class="btn sec" id="allB">Binalar</button></div></div>
+  </div>`;
+  $('allB').onclick = openBuildingList;
+  $('techB').onclick = () => openBuilding('medrese');
+  const fb = $('fillB'); if (fb) fb.onclick = () => { C.fillRes(cur(), now()); save(); renderTop(); toast('Ambar dolduruldu', 'good'); };
+  hudSig = {}; liveKoy();
+  sceneStart();
+}
+let hudSig = {};
+function setHTML(id, html) { const el = $(id); if (el && hudSig[id] !== html) { hudSig[id] = html; el.innerHTML = html; } }
+function liveKoy() {
+  const v = cur(), t = now(), q = activeQuest();
+  const hl = $('hLoy'); if (hl) hl.textContent = Math.floor(v.loy);
+  setHTML('hProt', t < S.protectUntil ? `<div class="hchip">Acemi koruması · <b class="num" data-end="${S.protectUntil}">${dur(S.protectUntil - t)}</b></div>` : '');
+  setHTML('hQuest', q ? `<div class="qchip${q.ok() ? ' done' : ''}"><div><span>Görev ${QUESTS.indexOf(q) + 1}/${QUESTS.length}</span><b>${esc(q.t)}</b></div>${q.ok() ? '<button class="btn firuze" data-claim>Ödülü al</button>' : `<div class="chips small">${costChips(q.r)}</div>`}</div>` : '');
+  let qh = v.bq.map((it, i) => `<button class="qc" data-qb="${it.b}"><b>${C.B[it.b].n} → ${it.lvl}</b><span class="num" data-end="${it.done}">${dur(it.done - t)}</span><i class="bar"><i data-s="${it.start}" data-e="${it.done}"></i></i></button>`).join('');
+  if (S.techq) qh += `<button class="qc tq" data-qb="medrese"><b>${C.TECH[S.techq.id].n} → ${S.techq.lvl}</b><span class="num" data-end="${S.techq.done}">${dur(S.techq.done - t)}</span><i class="bar"><i data-s="${S.techq.start}" data-e="${S.techq.done}"></i></i></button>`;
+  if (!v.bq.length) qh = `<div class="qc idle">İnşaat yok · binaya dokun</div>` + (S.techq ? qh : '');
+  setHTML('hQueue', qh);
+  livePop();
+}
+$('view').addEventListener('click', e => {
+  if (tab !== 'koy') return;
+  if (e.target.closest('[data-claim]')) {
+    const v = cur(), q = activeQuest(); if (!q || !q.ok()) return;
+    C.syncRes(v, now()); const c = C.cap(v);
+    for (let i = 0; i < 3; i++) v.res[i] = Math.min(Math.max(c, v.res[i]), v.res[i] + q.r[i]);
+    S.quests.claimed.push(q.id); toast('Ödül ambara eklendi', 'good'); save(); liveKoy(); renderTop(); return;
+  }
+  const qb = e.target.closest('[data-qb]'); if (qb) { selectBuilding(qb.dataset.qb); return; }
+  const pop = e.target.closest('#pop'); if (!pop) return;
+  if (e.target.closest('[data-popclose]')) { selectBuilding(null); return; }
+  if (e.target.closest('[data-pmore]')) { const b = SC.sel; openBuilding(b); return; }
+  if (e.target.closest('[data-pcancel]')) { C.cancelLast(cur(), now()); save(); liveKoy(); renderTop(); return; }
+  if (e.target.closest('[data-pup]')) {
+    const b = SC.sel, r = C.upgrade(cur(), b, now());
+    if (r === 'ok') { toast(C.B[b].n + ' inşaatı başladı', 'info'); save(); liveKoy(); renderTop(); }
+  }
+});
+function selectBuilding(b) { SC.sel = b; const pop = $('pop'); if (pop) { pop.dataset.sig = ''; if (!b) pop.hidden = true; } livePop(); }
+function popHTML(b) {
+  const v = cur(), B = C.B[b], l = v.b[b], nl = C.effLevel(v, b) + 1, max = nl > B.max, t = now(), inq = v.bq.filter(q => q.b === b);
+  const rows = bStatRows(v, b), last = v.bq[v.bq.length - 1];
+  let h = `<div class="ph"><div class="bic sm">${bIcon(b)}</div><div class="pt"><b>${B.n}</b><span class="muted small num">${l ? 'Seviye ' + l : 'Kurulmadı'}</span></div><button class="x" data-popclose aria-label="Kapat">×</button></div>`;
+  for (const q of inq) h += `<div class="pst build num">Sv. ${q.lvl} inşa ediliyor · <b data-end="${q.done}">${dur(q.done - t)}</b>${last === q ? ' · <button class="linkbtn" data-pcancel>iptal</button>' : ''}</div>`;
+  if (!inq.length) h += `<div class="pst ${l ? 'ok' : ''}">${l ? (max ? 'En üst seviyede' : 'Çalışıyor') : 'Boş arsa'}</div>`;
+  if (rows.length) h += `<div class="prow num">${rows.slice(0, 2).map(r => `<div><span>${r[0]}</span><b>${r[1]}${r[2] ? ` <em>→ ${r[2]}</em>` : ''}</b></div>`).join('')}</div>`;
+  if (b === 'sur' || b === 'konak') { const d = defense(v); h += `<div class="prow num"><div><span>Kale gücü (piyade / süvari)</span><b id="pDef">${fmt(d.inf)} / ${fmt(d.cav)}</b></div></div>`; }
+  if (!max) h += `<div class="chips small" data-pcost>${costChips(C.bCost(b, nl), v)}<span class="chip num">${CLOCK_I}${dur(C.bTime(b, nl, v.b.konak, 'P'))}</span></div>
+    ${reqList(v, b)}`;
+  h += `<div class="pbtns">${max ? '' : `<button class="btn" data-pup>${l || inq.length ? 'Sv. ' + nl + '’e yükselt' : 'İnşa et'}</button>`}<button class="btn sec" data-pmore>${C.REC_B.includes(b) && l ? 'Eğit ›' : b === 'medrese' && l ? 'Araştır ›' : b === 'kervansaray' && l ? 'Pazar ›' : 'Ayrıntılar ›'}</button></div><div class="why" data-pwhy></div>`;
+  return h;
+}
+function livePop() {
+  const pop = $('pop'); if (!pop || !SC.sel) return;
+  const b = SC.sel, v = cur(), sg = bSheetSig(b);
+  if (pop.dataset.sig !== sg) { pop.dataset.sig = sg; pop.innerHTML = popHTML(b); }
+  C.syncRes(v, now());
+  const btn = pop.querySelector('[data-pup]'), why = pop.querySelector('[data-pwhy]');
+  if (btn) {
+    const r = C.canUpgrade(v, b); btn.disabled = !r.ok;
+    const msg = r.ok ? '' : r.why === 'req' ? 'Önce kırmızı şartları tamamla.' : r.why === 'queue' ? 'İnşaat sırası dolu (en fazla 2).' : r.why === 'cap' ? 'Ambar bu maliyeti alamıyor.' : r.why === 'pop' ? 'Nüfus yetmiyor, Çiftliği yükselt.' : r.why === 'res' ? 'Kaynaklar ' + dur(C.timeToAfford(v, r.c)) + ' sonra yeterli.' : '';
+    if (why.textContent !== msg) why.textContent = msg;
+    const cc = pop.querySelector('[data-pcost]'); if (cc && r.c) cc.querySelectorAll('.chip').forEach((ch, i) => { if (i < 3) ch.classList.toggle('no', v.res[i] < r.c[i]); });
+  } else if (why) why.textContent = '';
+  const pd = $('pDef'); if (pd) { const d = defense(v); pd.textContent = fmt(d.inf) + ' / ' + fmt(d.cav); }
+}
+
+// ---------- bina penceresi ----------
+const pctUp = l => Math.round((Math.pow(1.037, l) - 1) * 100);
+const buildCut = l => Math.round((1 - Math.pow(.95, Math.max(0, l - 1))) * 100);
+const trainCut = l => Math.round((1 - Math.pow(.94, Math.max(0, l - 1))) * 100);
+function defense(v) {
+  let di = 0, dc = 0, n = 0;
+  for (const [u, c] of Object.entries(v.units)) { if (!c || C.U[u].cls === 'spy') continue; di += C.U[u].di * c; dc += C.U[u].dc * c; n += c; }
+  let g = 0; for (const [u, c] of Object.entries(v.guest || {})) { if (c > 0) { di += C.U[u].di * c; dc += C.U[u].dc * c; g += c; } }
+  const zr = 1 + C.TL('P', 'zirh') * C.TECH.zirh.e; di *= zr; dc *= zr;
+  const m = Math.pow(1.037, v.b.sur * (1 + C.TL('P', 'burc') * C.TECH.burc.e)), base = 20 + 40 * v.b.sur;
+  return { inf: (di + base) * m, cav: (dc + base) * m, n, g };
+}
+function bStatRows(v, b) {
+  const l = v.b[b], nl = C.effLevel(v, b) + 1, max = nl > C.B[b].max;
+  const fake = Object.assign({}, v, { b: Object.assign({}, v.b, { [b]: nl }) });
+  const nx = f => (max ? '—' : f);
+  if (b === 'konak') return [['İnşaat süresi', l ? '−%' + buildCut(l) : '—', nx('−%' + buildCut(nl))]];
+  if (C.MINES.includes(b)) { const i = C.MINES.indexOf(b); return [[C.RES_NAMES[i] + ' / saat', fmt(C.rateH(v, i)), nx(fmt(C.rateH(fake, i)))]]; }
+  if (b === 'ambar') return [['Kaynak sınırı', fmt(C.cap(v)), nx(fmt(C.cap(fake)))]];
+  if (b === 'ciftlik') return [['Nüfus sınırı', fmt(C.popMax(v)), nx(fmt(C.popMax(fake)))], ['Kullanılan nüfus', fmt(C.popUsed(v)), '']];
+  if (b === 'sur') return [['Savunma bonusu', l ? '+%' + pctUp(l) : '—', nx('+%' + pctUp(nl))], ['Sur savunması', fmt(20 + 40 * l), nx(fmt(20 + 40 * nl))]];
+  if (b === 'kervansaray') return [['Tüccar (1.000 taşır)', l ? C.merchantsFree(v) + ' / ' + l : '—', nx(String(nl))], ['Taşıma kapasitesi', fmt(l * C.CARRY), nx(fmt(nl * C.CARRY))]];
+  if (b === 'medrese') return [['Araştırma süresi', l ? '−%' + buildCut(l) : '—', nx('−%' + buildCut(nl))]];
+  if (C.REC_B.includes(b) && b !== 'divan') return [['Eğitim süresi', l ? '−%' + trainCut(l) : '—', nx('−%' + trainCut(nl))]];
+  return [];
+}
+function reqList(v, b) {
+  const req = C.reqFor(b, C.effLevel(v, b) + 1); if (!Object.keys(req).length) return '';
+  return `<div class="req">${Object.entries(req).map(([k, x]) => `<span class="${v.b[k] >= x ? 'ok' : 'no'}">${v.b[k] >= x ? '✓' : '✗'} ${C.B[k].n} ${x}</span>`).join('')}</div>`;
+}
+function rqHTML(v, rb) {
+  const t = now(); let end = t, h = '';
+  v.rq[rb].forEach((it, i) => {
+    const fin = i === 0 ? it.next + (it.n - 1) * it.each : end + it.n * it.each; end = fin;
+    h += `<div class="qi small"><div><b class="num">${it.n}× ${C.U[it.u].n}</b>${i === 0 ? ` <span class="muted num">· sıradaki <span data-end="${it.next}">${dur(it.next - t)}</span></span>` : ''}</div><div class="num muted" style="text-align:right">bitiş ${clock(fin)}</div></div>`;
+  });
+  return h;
+}
+function bSheetHTML(b) {
+  const v = cur(), B = C.B[b], l = v.b[b], nl = C.effLevel(v, b) + 1, max = nl > B.max, t = now();
+  const inq = v.bq.filter(q => q.b === b);
+  let h = `<div class="shead"><div class="bsh"><div class="bic">${bIcon(b)}</div><div><h3>${B.n}</h3>
+    <div class="small muted num">${l ? 'Seviye ' + l : 'Henüz kurulmadı'} · en fazla ${B.max}</div></div></div>
+    <button class="x" data-close aria-label="Kapat">×</button></div>
+    <div class="small">${B.d}</div>`;
+  for (const q of inq) h += `<div class="note num">Sv. ${q.lvl} inşa ediliyor · <b data-end="${q.done}">${dur(q.done - t)}</b> kaldı · ${clock(q.done)}</div>`;
+  const rows = bStatRows(v, b);
+  if (rows.length) h += `<div class="tblwrap"><table class="tbl num"><thead><tr><th></th><th>Şu an</th><th>${max ? '' : 'Sv. ' + nl}</th></tr></thead><tbody>${rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td class="up">${r[2]}</td></tr>`).join('')}</tbody></table></div>`;
+  if (b === 'sur' || b === 'konak') {
+    h += `<section class="card fort"><b>Kale gücü</b><div class="fstats num">
+      <div><span>Piyadeye karşı</span><b id="dInf">0</b></div><div><span>Süvariye karşı</span><b id="dCav">0</b></div>
+      <div><span>Köydeki asker</span><b id="dN">0</b></div><div><span>Sur</span><b>${l && b === 'sur' ? 'Sv. ' + l : 'Sv. ' + v.b.sur}</b></div></div>
+      <div class="muted small">Saldıranın gücü bu değeri geçerse köy düşer. Mızraklı süvariye, Okçu piyadeye karşı en iyisidir.</div></section>`;
+  }
+  if (b === 'divan') h += `<div class="small muted">Divan kurulunca Sancakbeyi yetiştirebilirsin. Sancakbeyiyle kazanılan her saldırı hedef köyün bağlılığını 20–35 düşürür; bağlılık sıfırlanınca köy senin olur.</div>`;
+  // yükseltme
+  if (max) h += `<div class="card"><b>En üst seviyede</b></div>`;
+  else h += `<section class="card"><div class="qrow"><b>${l || inq.length ? 'Sv. ' + nl + ' için' : 'İnşa etmek için'}</b><span class="chip num">${CLOCK_I}${dur(C.bTime(b, nl, v.b.konak, 'P'))}</span></div>
+    <div class="chips" data-cost="${b}">${costChips(C.bCost(b, nl), v)}${C.B[b].pop ? `<span class="chip num">${POP_I}${C.B[b].pop}</span>` : ''}</div>
+    ${reqList(v, b)}
+    <button class="btn wide" data-up="${b}">${l || inq.length ? 'Sv. ' + nl + '’e yükselt' : 'İnşa et'}</button><div class="why" data-why="${b}"></div></section>`;
+  if (b === 'medrese') h += techTreeHTML(v);
+  if (b === 'kervansaray' && l > 0) h += marketHTML(v);
+  // eğitim
+  if (C.REC_B.includes(b) && l > 0) {
+    h += `<h2 class="sec">Eğitim</h2><div id="srq">${rqHTML(v, b)}</div><section class="card">`;
+    for (const u of C.U_ORDER.filter(x => C.U[x].b === b)) {
+      const U = C.U[u], un = C.unitUnlocked(v, u);
+      h += `<div class="urow${un ? '' : ' locked'}"><div><div class="nm">${U.n} <span class="muted small num">· elde ${fmt(v.units[u] || 0)}</span></div><div class="st num">${U.d}. ${unitStats(u)}</div></div>
+        <div class="num small muted" style="text-align:right">${dur(C.uTime(u, l, 'P'))}<br>nüfus ${U.pop}</div>
+        <div class="ctl"><div class="chips">${costChips(U.c)}</div>
+        ${un ? `<input class="qty num" type="number" min="0" inputmode="numeric" id="sq-${u}" value="${drafts[u] || ''}" placeholder="0" aria-label="${U.n} sayısı">
+        <button class="maxb num" data-smax="${u}">maks 0</button><button class="btn" data-strain="${u}">Eğit</button>` : `<span class="muted small">${B.n} ${U.lv}. seviye gerekli</span>`}</div></div>`;
+    }
+    h += `</section>`;
+  }
+  return h;
+}
+function bSheetSig(b) { const v = cur(); return b + '|' + S.cur + '|' + JSON.stringify(v.b) + '|' + v.bq.map(q => q.b + q.lvl).join() + '|' + JSON.stringify(S.tech) + (S.techq ? S.techq.id : '') + (b === 'kervansaray' ? '|' + S.market.map(o => o.id).join() + '|' + mkFilter : ''); }
+// ---------- pazar ----------
+let mkFilter = -1, mkDraft = { gi: 0, gn: '', wi: 1, wn: '' };
+const resIco = i => RI[i].replace('<svg', '<svg style="width:15px;height:15px;vertical-align:-3px"');
+function marketHTML(v) {
+  const t = now(), free = C.merchantsFree(v), tot = C.merchantsTotal(v);
+  let h = `<h2 class="sec">Pazar</h2><div class="note small num">Boşta tüccar <b>${free} / ${tot}</b> · her tüccar 1.000 kaynak taşır. Takasta sen kendi payını gönderirsin, karşı tarafın kervanı sana gelir.</div>`;
+  // teklif ver
+  const opt = sel => [0, 1, 2].map(i => `<button class="rsel${sel === i ? ' on' : ''}" data-i="${i}">${resIco(i)} ${C.RES_NAMES[i]}</button>`).join('');
+  h += `<section class="card"><b>Teklif ver</b>
+    <div class="mkrow"><span class="muted small">Veriyorum</span><div class="rsels" data-side="g">${opt(mkDraft.gi)}</div><input class="qty num" id="mkGn" type="number" min="0" step="100" inputmode="numeric" placeholder="0" value="${mkDraft.gn}" aria-label="Verilen miktar"></div>
+    <div class="mkrow"><span class="muted small">İstiyorum</span><div class="rsels" data-side="w">${opt(mkDraft.wi)}</div><input class="qty num" id="mkWn" type="number" min="0" step="100" inputmode="numeric" placeholder="0" value="${mkDraft.wn}" aria-label="İstenen miktar"></div>
+    <div class="qrow"><span class="small muted" id="mkRatio"></span><button class="btn" data-mkcreate>Pazara koy</button></div></section>`;
+  const mine = S.market.filter(o => o.owner === 'P');
+  if (mine.length) h += `<section class="card"><b>Senin tekliflerin</b>${mine.map(o => `<div class="offer"><span class="ofr num">${resIco(o.give[0])} ${fmt(o.give[1])} <span class="muted">→</span> ${resIco(o.want[0])} ${fmt(o.want[1])}</span><span class="muted small">${esc(S.vil[o.vil].name)} · <span data-end="${o.exp}">${dur(o.exp - t)}</span></span><button class="btn sec" data-mkcancel="${o.id}">Geri çek</button></div>`).join('')}</section>`;
+  const others = S.market.filter(o => o.owner !== 'P' && (mkFilter < 0 || o.give[0] === mkFilter)).map(o => ({ o, d: C.tradeTime(S.vil[o.vil], v) })).sort((a, b) => a.d - b.d);
+  h += `<div class="qrow"><h2 class="sec" style="margin:0">Beylerin teklifleri</h2><div class="rsels mkf">${[[-1, 'Hepsi'], [0, C.RES_NAMES[0]], [1, C.RES_NAMES[1]], [2, C.RES_NAMES[2]]].map(([i, n]) => `<button class="rsel${mkFilter === i ? ' on' : ''}" data-mkf="${i}">${n}</button>`).join('')}</div></div>`;
+  if (!others.length) h += `<div class="card muted small">Şu an ${mkFilter < 0 ? '' : C.RES_NAMES[mkFilter].toLocaleLowerCase('tr') + ' veren '}teklif yok. Beyler fazla kaynaklarını saat başı pazara koyar.</div>`;
+  else h += `<section class="card">${others.map(({ o, d }) => {
+    const r = o.want[1] / o.give[1], lbl = r <= .9 ? ['Kârlı', 'var(--green)'] : r <= 1.1 ? ['Adil', 'var(--gold)'] : ['Pahalı', 'var(--red)'];
+    return `<div class="offer"><span class="ofw"><i class="sw" style="background:${C.ownerColor(o.owner)}"></i><b>${esc(C.ownerName(o.owner))}</b> <span class="muted small">${esc(S.vil[o.vil].name)} · ${dur(d)}</span></span>
+      <span class="ofr num"><span class="muted small">Verir</span> ${resIco(o.give[0])} <b>${fmt(o.give[1])}</b> <span class="muted small">İster</span> ${resIco(o.want[0])} <b>${fmt(o.want[1])}</b> <em style="color:${lbl[1]}">${lbl[0]}</em></span>
+      <button class="btn" data-mkaccept="${o.id}">Kabul et</button></div>`;
+  }).join('')}</section>`;
+  return h;
+}
+function liveMarket(ov, v) {
+  const g = +($('mkGn') || {}).value || 0, w = +($('mkWn') || {}).value || 0, el = $('mkRatio');
+  if (el) {
+    const need = Math.ceil(g / C.CARRY), free = C.merchantsFree(v);
+    el.innerHTML = !g || !w ? 'Miktarları yaz' : mkDraft.gi === mkDraft.wi ? '<span style="color:var(--red)">Farklı kaynak seç</span>' :
+      `Oran 1 : ${(w / g).toFixed(2).replace('.', ',')} · ${need} tüccar${need > free ? ' <span style="color:var(--red)">(yetmiyor)</span>' : ''}${g > v.res[mkDraft.gi] ? ' <span style="color:var(--red)">(ambarda yok)</span>' : ''}`;
+  }
+  for (const b of ov.querySelectorAll('[data-mkaccept]')) {
+    const o = S.market.find(x => x.id === +b.dataset.mkaccept);
+    b.disabled = !o || v.res[o.want[0]] < o.want[1] || Math.ceil(o.want[1] / C.CARRY) > C.merchantsFree(v);
+  }
+}
+const TECH_TIERS = [['Kademe I · Ekonomi', ['ocak', 'mimari']], ['Kademe II · Hazırlık', ['depo', 'talim']], ['Kademe III · Hareket', ['nal', 'kervan']], ['Kademe IV · Savaş', ['demirci', 'zirh']], ['Kademe V · Kale', ['burc']], ['Kademe VI · Fetih', ['sancak']]];
+function techTreeHTML(v) {
+  const t = now();
+  let h = `<h2 class="sec">Teknoloji ağacı</h2>`;
+  if (S.techq) h += `<div class="note num">${C.TECH[S.techq.id].n} ${S.techq.lvl}. seviye araştırılıyor · <b data-end="${S.techq.done}">${dur(S.techq.done - t)}</b> kaldı</div>`;
+  if (!v.b.medrese) return h + `<div class="muted small">Medrese kurulunca araştırma başlar.</div>`;
+  for (const [title, ids] of TECH_TIERS) {
+    h += `<div class="tier"><div class="tier-h">${title}</div><div class="tgrid">`;
+    for (const id of ids) {
+      const T = C.TECH[id], lv = S.tech[id] || 0, nl = lv + 1, max = nl > T.max, r = C.canResearch(v, id);
+      const reqs = Object.entries(T.req).map(([k, x]) => { const ok = k === 'medrese' ? v.b.medrese >= x : (S.tech[k] || 0) >= x; return `<span class="${ok ? 'ok' : 'no'}">${ok ? '✓' : '✗'} ${k === 'medrese' ? 'Medrese' : C.TECH[k].n} ${x}</span>`; }).join('');
+      const pips = Array.from({ length: T.max }, (_, i) => `<i class="${i < lv ? 'on' : ''}"></i>`).join('');
+      h += `<article class="tech${lv ? ' has' : ''}${S.techq && S.techq.id === id ? ' busy' : ''}"><div class="tt"><b>${T.n}</b><span class="pips">${pips}</span></div>
+        <div class="small muted">${T.d}</div>
+        ${max ? '<div class="small" style="color:var(--green)">Tamamlandı</div>' : `<div class="req">${reqs}</div>
+        <div class="chips">${costChips(C.techCost(id, nl), v)}<span class="chip num">${CLOCK_I}${dur(C.techTime(id, nl, v.b.medrese))}</span></div>
+        <button class="btn" data-research="${id}" ${r.ok ? '' : 'disabled'}>Sv. ${nl} araştır</button>`}</article>`;
+    }
+    h += `</div></div>`;
+  }
+  return h;
+}
+function openBuilding(b) {
+  sheet(bSheetHTML(b), box => {
+    const ov = box.parentNode; ov.dataset.b = b; ov.dataset.sig = bSheetSig(b);
+    box.addEventListener('click', e => {
+      const up = e.target.closest('[data-up]');
+      if (up) { const r = C.upgrade(cur(), b, now()); if (r === 'ok') { toast(C.B[b].n + ' inşaatı başladı', 'info'); save(); sig = ''; render(); } return; }
+      const cv0 = cur();
+      const rsel = e.target.closest('.rsels[data-side] .rsel');
+      if (rsel) { const side = rsel.parentNode.dataset.side, i = +rsel.dataset.i; if (side === 'g') mkDraft.gi = i; else mkDraft.wi = i; rsel.parentNode.querySelectorAll('.rsel').forEach(x => x.classList.toggle('on', x === rsel)); liveMarket(box.parentNode, cv0); return; }
+      const mf = e.target.closest('[data-mkf]'); if (mf) { mkFilter = +mf.dataset.mkf; liveBSheet(); return; }
+      if (e.target.closest('[data-mkcreate]')) {
+        const r = C.createOffer(cv0, mkDraft.gi, +$('mkGn').value, mkDraft.wi, +$('mkWn').value, now());
+        if (r === 'ok') { toast('Teklif pazara kondu', 'good'); mkDraft.gn = ''; mkDraft.wn = ''; save(); liveBSheet(); renderTop(); }
+        else toast({ same: 'Farklı iki kaynak seç', empty: 'Miktarları yaz', ratio: 'Oran en fazla 1:3 olabilir', res: 'Ambarda yeterli kaynak yok', merchants: 'Yeterli tüccar yok', limit: 'En fazla 6 teklif koyabilirsin', nobuild: 'Önce Kervansaray kur' }[r] || 'Teklif konamadı', 'bad');
+        return;
+      }
+      const mc = e.target.closest('[data-mkcancel]'); if (mc) { C.cancelOffer(+mc.dataset.mkcancel, now()); toast('Teklif geri çekildi', 'info'); save(); liveBSheet(); renderTop(); return; }
+      const ma = e.target.closest('[data-mkaccept]');
+      if (ma) { const r = C.acceptOffer(cv0, +ma.dataset.mkaccept, now()); toast(r === 'ok' ? 'Takas yapıldı, kervanlar yolda' : { res: 'Ambarda yeterli kaynak yok', merchants: 'Yeterli tüccar yok', gone: 'Teklif artık yok' }[r] || 'Takas yapılamadı', r === 'ok' ? 'good' : 'bad'); save(); liveBSheet(); renderTop(); return; }
+      const rs = e.target.closest('[data-research]');
+      if (rs) { const id = rs.dataset.research, r = C.research(cur(), id, now()); if (r === 'ok') { toast(C.TECH[id].n + ' araştırması başladı', 'info'); save(); liveBSheet(); renderTop(); } else toast({ busy: 'Aynı anda tek araştırma yapılabilir', res: 'Kaynaklar yetmiyor', cap: 'Ambar bu maliyeti alamıyor', req: 'Önce gereksinimleri tamamla' }[r] || 'Araştırma başlatılamadı', 'bad'); return; }
+      const mx = e.target.closest('[data-smax]');
+      if (mx) { const u = mx.dataset.smax, inp = $('sq-' + u); inp.value = C.maxTrain(cur(), u) || ''; drafts[u] = inp.value; liveBSheet(); return; }
+      const tb = e.target.closest('[data-strain]');
+      if (tb) {
+        const u = tb.dataset.strain, inp = $('sq-' + u), n = +inp.value, r = C.train(cur(), u, n, now());
+        if (r === 'ok') { toast(`${n} ${C.U[u].n} eğitime alındı`, 'info'); inp.value = ''; drafts[u] = ''; save(); liveBSheet(); renderTop(); }
+        else toast(r === 'pop' ? 'Nüfus yetmiyor, Çiftliği yükselt' : r === 'res' ? 'Kaynaklar yetmiyor' : 'Eğitim başlatılamadı', 'bad');
+      }
+    });
+    box.addEventListener('input', e => { if (e.target.id && e.target.id.startsWith('sq-')) { drafts[e.target.id.slice(3)] = e.target.value; liveBSheet(); } if (e.target.id === 'mkGn') mkDraft.gn = e.target.value; if (e.target.id === 'mkWn') mkDraft.wn = e.target.value; if (e.target.id === 'mkGn' || e.target.id === 'mkWn') liveMarket(box.parentNode, cur()); });
+    liveBSheet();
+  });
+}
+function openBuildingList() {
+  const v = cur();
+  const rows = C.B_ORDER.map(b => {
+    const l = v.b[b], inq = v.bq.some(q => q.b === b), r = C.canUpgrade(v, b), locked = !C.reqMet(v, C.reqFor(b, C.effLevel(v, b) + 1));
+    const st = inq ? '<span class="tag spy">İnşaatta</span>' : locked ? '<span class="tag sup">Kilitli</span>' : r.ok ? '<span class="tag ret">Yükseltilebilir</span>' : '';
+    return `<button data-open="${b}"><span class="bic sm">${bIcon(b)}</span><span class="bl"><b>${C.B[b].n}</b><span class="muted small num">${l ? 'Sv. ' + l : 'Yok'}</span></span>${st}</button>`;
+  }).join('');
+  sheet(`<div class="shead"><h3>Binalar</h3><button class="x" data-close aria-label="Kapat">×</button></div><div class="vlist blist2">${rows}</div>`, box => {
+    box.addEventListener('click', e => { const o = e.target.closest('[data-open]'); if (o) openBuilding(o.dataset.open); });
+  });
+}
+function liveBSheet() {
+  const ov = $('ov'); if (!ov || !ov.dataset.b) return;
+  const b = ov.dataset.b, v = cur();
+  if (!S.vil[S.cur] || v.owner !== 'P') { closeSheet(); return; }
+  const s = bSheetSig(b);
+  if (ov.dataset.sig !== s) { ov.dataset.sig = s; const box = ov.firstChild, top = box.scrollTop; box.innerHTML = bSheetHTML(b); box.scrollTop = top; }
+  C.syncRes(v, now());
+  const btn = ov.querySelector('[data-up]');
+  if (btn) {
+    const r = C.canUpgrade(v, b), why = ov.querySelector('[data-why]');
+    btn.disabled = !r.ok;
+    let msg = '';
+    if (!r.ok) msg = r.why === 'req' ? 'Önce gereksinimleri tamamla.' : r.why === 'queue' ? 'İnşaat sırası dolu (en fazla 2).' : r.why === 'cap' ? 'Ambar bu maliyeti alamıyor. Önce Ambarı yükselt.' : r.why === 'pop' ? 'Nüfus yetmiyor. Önce Çiftliği yükselt.' : r.why === 'res' ? 'Kaynaklar ' + dur(C.timeToAfford(v, r.c)) + ' sonra yeterli olacak.' : '';
+    if (why.textContent !== msg) why.textContent = msg;
+    const cc = ov.querySelector('[data-cost]');
+    if (cc && r.c) cc.querySelectorAll('.chip').forEach((ch, i) => { if (i < 3) ch.classList.toggle('no', v.res[i] < r.c[i]); });
+  }
+  const d = defense(v);
+  if ($('dInf')) { $('dInf').textContent = fmt(d.inf); $('dCav').textContent = fmt(d.cav); $('dN').textContent = fmt(d.n) + (d.g ? ' +' + fmt(d.g) + ' müttefik' : ''); }
+  for (const m of ov.querySelectorAll('[data-smax]')) {
+    const u = m.dataset.smax, n = C.maxTrain(v, u), txt = 'maks ' + fmt(n); if (m.textContent !== txt) m.textContent = txt;
+    const want = +($('sq-' + u).value) || 0, tb = ov.querySelector(`[data-strain="${u}"]`); if (tb) tb.disabled = !(want > 0 && want <= n);
+  }
+  for (const el of ov.querySelectorAll('[data-research]')) { const r = C.canResearch(v, el.dataset.research); el.disabled = !r.ok; }
+  if (b === 'kervansaray') liveMarket(ov, v);
+  const rq = $('srq'); if (rq) { const h = rqHTML(v, b); if (rq.dataset.h !== h) { rq.dataset.h = h; rq.innerHTML = h; } }
+}
+
+// ---------- ORDU ----------
+function unitStats(u) {
+  const U = C.U[u];
+  return `Sal ${U.a} · Sav ${U.di}/${U.dc} · ${(U.sp / S.speed).toFixed(U.sp / S.speed < 10 ? 1 : 0).replace('.', ',')} dk/kare${U.cr ? ' · Taşır ' + U.cr : ''}`;
+}
+function renderOrdu() {
+  const v = cur();
+  let html = `<div class="pad"><h2 class="sec">Köydeki birlikler</h2><div class="ugrid" id="homeUnits"></div>`;
+  for (const rb of C.REC_B) {
+    const B = C.B[rb], lvl = v.b[rb];
+    html += `<section class="card"><div class="bt"><b style="font-family:var(--display);font-size:18px">${B.n}</b><span class="lv${lvl ? '' : ' zero'} num">${lvl ? 'Sv. ' + lvl : 'Yok'}</span></div>`;
+    if (!lvl) { html += `<div class="muted small">${B.n} yok. Köy ekranından inşa edebilirsin.</div></section>`; continue; }
+    html += `<div id="rq-${rb}"></div>`;
+    for (const u of C.U_ORDER.filter(x => C.U[x].b === rb)) {
+      const U = C.U[u], un = C.unitUnlocked(v, u);
+      html += `<div class="urow${un ? '' : ' locked'}"><div><div class="nm">${U.n}</div><div class="st num">${U.d}. ${unitStats(u)}</div></div>
+        <div class="num small muted" style="text-align:right">${CLOCK_I.replace('<svg', '<svg style="width:13px;height:13px;vertical-align:-2px"')} ${dur(C.uTime(u, lvl, 'P'))}<br>nüfus ${U.pop}</div>
+        <div class="ctl"><div class="chips">${costChips(U.c)}</div>
+        ${un ? `<input class="qty num" type="number" min="0" inputmode="numeric" id="q-${u}" value="${drafts[u] || ''}" placeholder="0" aria-label="${U.n} sayısı">
+        <button class="maxb num" data-max="${u}">maks 0</button><button class="btn" data-train="${u}">Eğit</button>` : `<span class="muted small">${B.n} ${U.lv}. seviye gerekli</span>`}</div></div>`;
+    }
+    html += `</section>`;
+  }
+  html += `<h2 class="sec" id="movesBox">Hareketler</h2><section class="card" id="moves"></section></div>`;
+  $('view').innerHTML = html;
+}
+function liveOrdu() {
+  const v = cur(), t = now(); C.syncRes(v, t);
+  const home = $('homeUnits');
+  if (home) {
+    const out = {}; for (const m of S.moves) if (m.owner === 'P' && m.from === v.id && m.type !== 'support') for (const [u, n] of Object.entries(m.units)) out[u] = (out[u] || 0) + n;
+    const h = C.U_ORDER.filter(u => C.unitUnlocked(v, u) || v.units[u] || out[u]).map(u => `<div class="ucell"><div class="n">${C.U[u].n}</div><div class="c num">${fmt(v.units[u] || 0)}</div>${out[u] ? `<div class="muted" style="font-size:11.5px">+${fmt(out[u])} yolda</div>` : ''}</div>`).join('');
+    const html = h || '<div class="muted small" style="grid-column:1/-1">Henüz askerin yok. Kışla kurup eğitime başla.</div>';
+    if (home.innerHTML !== html) home.innerHTML = html;
+  }
+  for (const rb of C.REC_B) {
+    const box = $('rq-' + rb); if (!box) continue;
+    const q = v.rq[rb];
+    let end = t, html = '';
+    q.forEach((it, i) => {
+      const fin = i === 0 ? it.next + (it.n - 1) * it.each : end + it.n * it.each;
+      end = fin;
+      html += `<div class="qi small" style="margin-bottom:4px"><div><b class="num">${it.n}× ${C.U[it.u].n}</b>${i === 0 ? ` <span class="muted num">· sıradaki <span data-end="${it.next}">${dur(it.next - t)}</span></span>` : ''}</div><div class="num muted" style="text-align:right">bitiş ${clock(fin)}</div></div>`;
+    });
+    if (box.dataset.h !== html) { box.dataset.h = html; box.innerHTML = html; }
+  }
+  for (const b of document.querySelectorAll('[data-max]')) {
+    const u = b.dataset.max, n = C.maxTrain(v, u); const txt = 'maks ' + fmt(n);
+    if (b.textContent !== txt) b.textContent = txt;
+    const inp = $('q-' + u), want = +(inp && inp.value) || 0;
+    const tb = document.querySelector(`[data-train="${u}"]`); if (tb) tb.disabled = !(want > 0 && want <= n);
+  }
+  const mv = $('moves');
+  if (mv) {
+    const mine = S.moves.filter(m => (m.owner === 'P') || S.vil[m.to].owner === 'P').sort((a, b) => a.arrive - b.arrive);
+    const rows = mine.map(m => {
+      const inc = m.owner !== 'P';
+      const tag = inc ? (m.type === 'spy' ? '<span class="tag inc">Casus</span>' : '<span class="tag inc">Saldırı</span>')
+        : m.type === 'trade' ? '<span class="tag att">Kervan</span>' : m.type === 'tradeback' ? '<span class="tag ret">Kervan</span>' : m.type === 'return' ? '<span class="tag ret">Dönüş</span>' : m.type === 'spy' ? '<span class="tag spy">Keşif</span>' : m.type === 'support' ? '<span class="tag sup">Destek</span>' : '<span class="tag att">Saldırı</span>';
+      const fromV = S.vil[m.from], toV = S.vil[m.type === 'return' ? m.via : m.to];
+      const who = inc ? `${esc(fromV.name)} → ${esc(S.vil[m.to].name)}` : m.type === 'return' || m.type === 'tradeback' ? `${esc(toV.name)} → ${esc(fromV.name)}` : `${esc(fromV.name)} → ${esc(toV.name)}`;
+      const units = m.res ? m.res.map(fmt).join(' / ') + ' kaynak' : m.type === 'tradeback' ? m.merchants + ' tüccar' : inc ? '' : Object.entries(m.units).map(([u, n]) => `${n} ${C.U[u].n}`).join(', ');
+      const loot = m.type === 'return' && m.loot.some(x => x) ? ' · ganimet ' + m.loot.map(fmt).join('/') : '';
+      return `<div class="mv">${tag}<div class="who small">${who}<div class="muted" style="font-size:12px">${inc ? esc(C.ownerName(m.owner)) : units}${loot}</div></div><div class="num small" style="text-align:right"><span data-end="${m.arrive}">${dur(m.arrive - t)}</span><div class="muted" style="font-size:12px">${clock(m.arrive)}</div></div></div>`;
+    }).join('');
+    const html = rows || '<div class="muted small">Yolda asker yok. Haritadan bir köy seçip saldırı ya da keşif gönderebilirsin.</div>';
+    if (mv.dataset.h !== html) { mv.dataset.h = html; mv.innerHTML = html; }
+  }
+}
+$('view').addEventListener('input', e => { if (e.target.id && e.target.id.startsWith('q-')) { drafts[e.target.id.slice(2)] = e.target.value; liveOrdu(); } });
+$('view').addEventListener('click', e => {
+  if (tab !== 'ordu') return;
+  const mx = e.target.closest('[data-max]');
+  if (mx) { const u = mx.dataset.max, n = C.maxTrain(cur(), u); const inp = $('q-' + u); inp.value = n || ''; drafts[u] = inp.value; liveOrdu(); return; }
+  const tb = e.target.closest('[data-train]');
+  if (tb) {
+    const u = tb.dataset.train, inp = $('q-' + u), n = +inp.value;
+    const r = C.train(cur(), u, n, now());
+    if (r === 'ok') { toast(`${n} ${C.U[u].n} eğitime alındı`, 'info'); inp.value = ''; drafts[u] = ''; save(); liveOrdu(); renderTop(); }
+    else toast(r === 'pop' ? 'Nüfus yetmiyor, Çiftliği yükselt' : r === 'res' ? 'Kaynaklar yetmiyor' : 'Eğitim başlatılamadı', 'bad');
+  }
+});
+
+// ---------- HARİTA ----------
+function renderMap() {
+  $('view').innerHTML = `<div class="mapwrap"><canvas id="map" aria-label="Dünya haritası"></canvas>
+    <div class="mvpanel" id="mvpanel" hidden></div>
+    <div class="mapbtns"><button class="icon-btn" id="mzIn" aria-label="Yakınlaştır">+</button><button class="icon-btn" id="mzOut" aria-label="Uzaklaştır">−</button><button class="icon-btn" id="centerBtn" aria-label="Köyüne dön"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg></button><button class="icon-btn" id="tierBtn" aria-label="Güç kademeleri">◆</button></div>
+    <div class="mapcard" id="mapcard"></div></div>`;
+  const cv = $('map');
+  const ro = () => { const r = cv.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, 2); cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr); cv.getContext('2d').setTransform(dpr, 0, 0, dpr, 0, 0); if (map.ox === null) centerOn(cur()); drawMap(); };
+  ro();
+  cv.addEventListener('pointerdown', e => { cv.setPointerCapture(e.pointerId); map.drag = { x: e.clientX, y: e.clientY, ox: map.ox, oy: map.oy, moved: false }; cv.style.cursor = 'grabbing'; });
+  cv.addEventListener('pointermove', e => {
+    if (!map.drag) return; const dx = e.clientX - map.drag.x, dy = e.clientY - map.drag.y;
+    if (Math.abs(dx) + Math.abs(dy) > 6) map.drag.moved = true;
+    if (map.drag.moved) { map.ox = map.drag.ox - dx; map.oy = map.drag.oy - dy; clampMap(); drawMap(); }
+  });
+  cv.addEventListener('pointerup', e => {
+    const d = map.drag; map.drag = null; cv.style.cursor = 'grab'; if (!d || d.moved) return;
+    const r = cv.getBoundingClientRect(), x = Math.floor((e.clientX - r.left + map.ox) / map.T), y = Math.floor((e.clientY - r.top + map.oy) / map.T);
+    const v = S.vil.find(v => v.x === x && v.y === y); map.sel = v ? v.id : null; mapCard(); drawMap();
+  });
+  $('centerBtn').onclick = () => { centerOn(cur()); drawMap(); };
+  const mz = f => () => { const r = cv.getBoundingClientRect(), cxw = (map.ox + r.width / 2) / map.T, cyw = (map.oy + r.height / 2) / map.T; map.T = Math.max(30, Math.min(96, Math.round(map.T * f))); map.ox = cxw * map.T - r.width / 2; map.oy = cyw * map.T - r.height / 2; clampMap(); drawMap(); };
+  $('mzIn').onclick = mz(1.25); $('mzOut').onclick = mz(.8);
+  cv.addEventListener('wheel', e => { e.preventDefault(); mz(e.deltaY < 0 ? 1.12 : .9)(); }, { passive: false });
+  $('tierBtn').onclick = () => sheet(`<div class="shead"><h3>Güç kademeleri</h3><button class="x" data-close aria-label="Kapat">×</button></div><div class="muted small">Haritadaki kalelerin şekli puanlarına göre değişir. Altındaki elmaslar kademeyi, sayı toplam puanı gösterir. Gri ve yıkık kaleler terk edilmiş köylerdir.</div><div class="tlist">${tierLegendHTML()}</div>`, paintTierLegend);
+  $('mvpanel').addEventListener('click', e => { if (e.target.closest('[data-mvtoggle]')) { MV.open = !MV.open; liveMovePanel(); return; } const r = e.target.closest('[data-mv]'); if (r) focusMove(+r.dataset.mv); });
+  MV.sig = ''; MV.seen = new Map(S.moves.filter(mvRelevant).map(m => [m.id, m])); liveMovePanel();
+  mapCard();
+  if (!MV.raf) MV.raf = requestAnimationFrame(mapLoop);
+}
+function centerOn(v) { const cv = $('map'); if (!cv) return; const r = cv.getBoundingClientRect(); map.ox = (v.x + .5) * map.T - r.width / 2; map.oy = (v.y + .5) * map.T - r.height * .42; clampMap(); }
+function clampMap() { const cv = $('map'), r = cv.getBoundingClientRect(), W = C.WORLD * map.T; map.ox = Math.max(-60, Math.min(W - r.width + 60, map.ox)); map.oy = Math.max(-60, Math.min(W - r.height + 180, map.oy)); }
+const hash = (x, y) => { let h = x * 374761393 + y * 668265263 + S.seed; h = (h ^ (h >>> 13)) * 1274126177; return ((h ^ (h >>> 16)) >>> 0); };
+function drawMap() {
+  const cv = $('map'); if (!cv) return; const g = cv.getContext('2d'), r = cv.getBoundingClientRect(), T = map.T;
+  g.fillStyle = '#0c1422'; g.fillRect(0, 0, r.width, r.height);
+  const x0 = Math.max(0, Math.floor(map.ox / T)), y0 = Math.max(0, Math.floor(map.oy / T));
+  const x1 = Math.min(C.WORLD - 1, Math.ceil((map.ox + r.width) / T)), y1 = Math.min(C.WORLD - 1, Math.ceil((map.oy + r.height) / T));
+  const occ = new Set(S.vil.map(v => v.x + ',' + v.y));
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+    const h = hash(x, y), px = x * T - map.ox, py = y * T - map.oy;
+    const k = (h % 5);
+    g.fillStyle = ['#56733a', '#5b793d', '#607f40', '#587638', '#5d7b3c'][k]; g.fillRect(px, py, T + .5, T + .5);
+    if (occ.has(x + ',' + y)) continue;
+    const d = h % 23;
+    if (d < 3) { // ağaçlar
+      for (let i = 0; i < 3; i++) { const tx = px + T * (.25 + ((h >> (i * 3)) % 5) / 10), ty = py + T * (.3 + ((h >> (i * 4 + 1)) % 5) / 10); g.fillStyle = '#2f4a25'; g.beginPath(); g.arc(tx, ty, T * .14, 0, 7); g.fill(); g.fillStyle = '#3e5f2e'; g.beginPath(); g.arc(tx - 2, ty - 2, T * .09, 0, 7); g.fill(); }
+    } else if (d === 5 || d === 6) { // tepe
+      g.fillStyle = '#7b7152'; g.beginPath(); g.moveTo(px + T * .15, py + T * .8); g.lineTo(px + T * .45, py + T * .3); g.lineTo(px + T * .75, py + T * .8); g.fill();
+      g.fillStyle = '#958a66'; g.beginPath(); g.moveTo(px + T * .45, py + T * .3); g.lineTo(px + T * .55, py + T * .8); g.lineTo(px + T * .75, py + T * .8); g.fill();
+    } else if (d === 9) { g.fillStyle = '#8e8f86'; g.beginPath(); g.ellipse(px + T * .6, py + T * .55, T * .1, T * .07, 0, 0, 7); g.fill(); }
+  }
+  // 5'lik ızgara
+  g.strokeStyle = 'rgba(255,255,255,.07)'; g.lineWidth = 1;
+  for (let i = 0; i <= C.WORLD; i += 5) { g.beginPath(); g.moveTo(i * T - map.ox, -map.oy); g.lineTo(i * T - map.ox, C.WORLD * T - map.oy); g.stroke(); g.beginPath(); g.moveTo(-map.ox, i * T - map.oy); g.lineTo(C.WORLD * T - map.ox, i * T - map.oy); g.stroke(); }
+  g.strokeStyle = 'rgba(220,170,69,.35)'; g.strokeRect(-map.ox, -map.oy, C.WORLD * T, C.WORLD * T);
+  // hareketler (yollar altta, ordular kalelerin üstünde)
+  const armies = drawMoves(g, T);
+  // köyler
+  for (const v of S.vil.filter(v => !(v.x < x0 - 2 || v.x > x1 + 2 || v.y < y0 - 2 || v.y > y1 + 2)).sort((a, b) => a.y - b.y || a.x - b.x))
+    drawVillage(g, v, v.x * T - map.ox, v.y * T - map.oy, T);
+  armies();
+}
+/*MAPCASTLE*/
+/*MAPMOVES*/
+function mapCard() {
+  const box = $('mapcard'); if (!box) return;
+  const v = map.sel != null ? S.vil[map.sel] : null, me = cur();
+  if (!v) { box.innerHTML = `<div class="muted small">Bir köye dokun. Haritayı parmağınla kaydırabilirsin. Çerçeveli köyler senin.</div>`; box.dataset.sig = ''; return; }
+  const s = v.id + '|' + v.owner + '|' + S.cur; if (box.dataset.sig === s) return; box.dataset.sig = s;
+  const d = C.dist(me, v), own = v.owner === 'P';
+  const lastSpy = S.reports.find(r => r.to === v.id && r.spy && r.attOwner === 'P');
+  box.innerHTML = `<div class="shead"><div><h3>${esc(v.name)}</h3><div class="small"><i class="sw" style="background:${C.ownerColor(v.owner)}"></i> ${esc(C.ownerName(v.owner))}${C.clanOf(v.owner) ? ` <span class="ctag">${esc(C.clanOf(v.owner))}</span>` : ''} · <b style="color:var(--gold)">${TIERS[tierOf(C.vPoints(v))].n}</b> · <span class="num">${fmt(C.vPoints(v))} puan · (${v.x}|${v.y})</span></div></div><button class="x" id="mcClose" aria-label="Kapat">×</button></div>
+    <div class="small muted num">${own && v.id === S.cur ? 'Şu an yönettiğin köy.' : `${esc(me.name)} köyünden ${d.toFixed(1).replace('.', ',')} kare. Akıncıyla ${dur(C.travelTime(me, v, { akinci: 1 }))}, piyadeyle ${dur(C.travelTime(me, v, { mizrakli: 1 }))}.`}
+    ${lastSpy ? `<br>Son keşif (${clock(lastSpy.t)}): ${lastSpy.spy.res.map(fmt).join(' / ')} kaynak, sur ${lastSpy.spy.b.sur}.` : ''}</div>
+    <div class="chips">${own ? (v.id !== S.cur ? `<button class="btn sec" data-goto="${v.id}">Bu köye geç</button><button class="btn firuze" data-send="support">Destek gönder</button><button class="btn sec" data-res="1">Kaynak gönder</button>` : '')
+      : `<button class="btn" data-send="attack">Saldır</button><button class="btn firuze" data-send="spy">Çaşıt gönder</button><button class="btn sec" data-res="1">Kaynak gönder</button>`}</div>`;
+  $('mcClose').onclick = () => { map.sel = null; mapCard(); drawMap(); };
+}
+$('view').addEventListener('click', e => {
+  if (tab !== 'harita') return;
+  const g = e.target.closest('[data-goto]'); if (g) { S.cur = +g.dataset.goto; map.sel = null; sig = ''; render(); return; }
+  const s = e.target.closest('[data-send]'); if (s && map.sel != null) sendSheet(S.vil[map.sel], s.dataset.send);
+  if (e.target.closest('[data-res]') && map.sel != null) resSheet(S.vil[map.sel]);
+});
+function resSheet(target) {
+  const v = cur(), tot = C.merchantsTotal(v);
+  if (!tot) {
+    sheet(`<div class="shead"><h3>Kaynak gönder</h3><button class="x" data-close aria-label="Kapat">×</button></div>
+      <div>Kaynak göndermek için tüccar lazım. Tüccarlar <b>Kervansaray</b>'da yaşar; her seviye bir tüccar verir, her tüccar 1.000 kaynak taşır.</div>
+      <button class="btn" id="goKerv">Kervansaray'a git</button>`, () => { $('goKerv').onclick = () => { closeSheet(); tab = 'koy'; renderTabs(); sig = ''; render(); setTimeout(() => selectBuilding('kervansaray'), 50); }; });
+    return;
+  }
+  const rows = [0, 1, 2].map(i => `<div class="sendrow"><div class="chip num">${RI[i]}<b>${C.RES_NAMES[i]}</b></div>
+    <input class="qty num" type="number" min="0" step="100" inputmode="numeric" id="r-${i}" placeholder="0" aria-label="${C.RES_NAMES[i]}"><button class="maxb" data-rall="${i}">tümü</button></div>`).join('');
+  const ownerTxt = target.owner === 'P' ? 'Kendi köyün' : C.ownerName(target.owner) + (C.clanOf(target.owner) ? ' [' + C.clanOf(target.owner) + ']' : '');
+  sheet(`<div class="shead"><div><h3>Kaynak gönder: ${esc(target.name)}</h3><div class="muted small num">${esc(ownerTxt)} · (${target.x}|${target.y}) · ${esc(v.name)} köyünden</div></div><button class="x" data-close aria-label="Kapat">×</button></div>
+    <div class="note small num" id="mNote"></div>
+    ${rows}
+    <div class="chips"><button class="maxb" data-rsplit="1">Eşit dağıt (tüm tüccarlar)</button></div>
+    <div class="sum num" id="rSum"></div>
+    <button class="btn" id="rGo">Kervanı yola çıkar</button>
+    <div class="muted small">${target.owner === null ? 'Terk edilmiş köye gönderilen kaynak o köyün ambarına girer; yağmalayan alır.' : target.owner !== 'P' ? 'Başka beyliğe kaynak göndermek dostluğu artırır; klan davetini kabul etme ihtimalleri yükselir.' : 'Hedef köyün ambarı doluysa fazlası kaybolur.'}</div>`, box => {
+    const read = () => [0, 1, 2].map(i => Math.max(0, Math.floor(+$('r-' + i).value || 0)));
+    const upd = () => {
+      C.syncRes(v, now());
+      const free = C.merchantsFree(v), r = read(), sum = r[0] + r[1] + r[2], need = Math.ceil(sum / C.CARRY), tt = C.tradeTime(v, target);
+      $('mNote').innerHTML = `Boşta tüccar: <b>${free} / ${tot}</b> · en fazla <b>${fmt(free * C.CARRY)}</b> kaynak`;
+      const over = need > free, lack = r.some((x, i) => x > v.res[i]);
+      $('rSum').innerHTML = `<div>Toplam<b>${fmt(sum)}</b></div><div>Gereken tüccar<b style="color:${over ? 'var(--red)' : 'inherit'}">${need}</b></div><div>Yol süresi<b>${dur(tt)}</b></div><div>Varış<b>${clock(now() + tt)}</b></div>`;
+      $('rGo').disabled = !sum || over || lack;
+      $('rGo').textContent = lack ? 'Ambarda yeterli kaynak yok' : over ? 'Yeterli tüccar yok' : 'Kervanı yola çıkar';
+    };
+    box.addEventListener('input', upd);
+    box.addEventListener('click', e => {
+      const a = e.target.closest('[data-rall]');
+      if (a) { const i = +a.dataset.rall, r = read(), free = C.merchantsFree(v) * C.CARRY, others = r.reduce((x, y, j) => j === i ? x : x + y, 0); $('r-' + i).value = Math.max(0, Math.min(Math.floor(v.res[i]), free - others)); upd(); }
+      if (e.target.closest('[data-rsplit]')) { const cap = C.merchantsFree(v) * C.CARRY; let left = cap; const per = Math.floor(cap / 3); [0, 1, 2].forEach(i => { const x = Math.min(Math.floor(v.res[i]), per, left); $('r-' + i).value = x; left -= x; }); upd(); }
+    });
+    $('rGo').onclick = () => {
+      const r = C.sendRes(v, target, read(), now());
+      if (r === 'ok') { toast('Kervan ' + target.name + ' köyüne yola çıktı', 'info'); closeSheet(); save(); renderTop(); }
+      else toast({ merchants: 'Yeterli tüccar yok', res: 'Ambarda yeterli kaynak yok', empty: 'Gönderilecek miktarı yaz', self: 'Aynı köye gönderemezsin' }[r] || 'Gönderilemedi', 'bad');
+    };
+    upd();
+  });
+}
+function sendSheet(target, type) {
+  const v = cur();
+  const units = C.U_ORDER.filter(u => (type === 'spy' ? u === 'casus' : true) && (v.units[u] || 0) > 0);
+  const title = type === 'attack' ? 'Saldırı' : type === 'spy' ? 'Keşif' : 'Destek';
+  const rows = units.map(u => `<div class="sendrow"><div><b>${C.U[u].n}</b><div class="muted small num">elde ${fmt(v.units[u])}</div></div>
+    <input class="qty num" type="number" min="0" inputmode="numeric" id="s-${u}" placeholder="0" aria-label="${C.U[u].n}"><button class="maxb" data-all="${u}">tümü</button></div>`).join('');
+  sheet(`<div class="shead"><div><h3>${title}: ${esc(target.name)}</h3><div class="muted small num">${esc(C.ownerName(target.owner))} · (${target.x}|${target.y}) · ${esc(v.name)} köyünden</div></div><button class="x" data-close aria-label="Kapat">×</button></div>
+    ${rows || `<div class="muted">${type === 'spy' ? 'Bu köyde çaşıt yok. Ahır kurup çaşıt yetiştir.' : 'Bu köyde gönderilecek asker yok.'}</div>`}
+    ${rows ? `<div class="sum num" id="sendSum"></div><button class="btn${type === 'attack' ? '' : ' firuze'}" id="sendGo">${type === 'attack' ? 'Saldırıyı başlat' : type === 'spy' ? 'Çaşıtları gönder' : 'Desteği gönder'}</button>` : ''}
+    ${type === 'attack' && target.owner === null ? '<div class="muted small">İpucu: terk edilmiş köyler yağma için idealdir. Önce çaşıt göndermek savunmasını gösterir. Akıncılar en çok ganimeti taşır.</div>' : ''}`, box => {
+    const read = () => { const o = {}; for (const u of units) { const n = Math.floor(+$('s-' + u).value || 0); if (n > 0) o[u] = Math.min(n, v.units[u] || 0); } return o; };
+    const upd = () => {
+      const o = read(), sum = $('sendSum'); if (!sum) return;
+      if (!C.unitSum(o)) { sum.innerHTML = '<div style="grid-column:1/-1" class="muted">Göndermek istediğin birlik sayılarını yaz.</div>'; $('sendGo').disabled = true; return; }
+      const tt = C.travelTime(v, target, o); let cap = 0, att = 0; for (const [u, n] of Object.entries(o)) { cap += C.U[u].cr * n; att += C.U[u].a * n; }
+      sum.innerHTML = `<div>Yol süresi<b>${dur(tt)}</b></div><div>Varış<b>${clock(now() + tt)}</b></div>${type === 'attack' ? `<div>Saldırı gücü<b>${fmt(att)}</b></div><div>Taşıma<b>${fmt(cap)}</b></div>` : ''}`;
+      $('sendGo').disabled = false;
+    };
+    box.addEventListener('input', upd);
+    box.addEventListener('click', e => {
+      const a = e.target.closest('[data-all]'); if (a) { $('s-' + a.dataset.all).value = v.units[a.dataset.all] || 0; upd(); }
+    });
+    const go = $('sendGo');
+    if (go) go.onclick = () => {
+      const r = C.send(v, target, read(), type, now());
+      if (r === 'ok') { toast(title + ' yola çıktı', 'info'); closeSheet(); save(); drawMap(); renderTop(); }
+      else toast({ own: 'Kendi köyüne saldıramazsın', notown: 'Destek sadece kendi köylerine', empty: 'Birlik seçmedin' }[r] || 'Gönderilemedi', 'bad');
+    };
+    upd();
+  });
+}
+
+// ---------- RAPORLAR ----------
+function renderRapor() {
+  if (!S.reports.length) { $('view').innerHTML = `<div class="pad"><h2 class="sec">Raporlar</h2><div class="card muted">Henüz rapor yok. Saldırı ve keşiflerin sonuçları burada görünür. Köyüne yapılan saldırılar da buraya düşer.</div></div>`; return; }
+  const items = S.reports.map(r => {
+    const mine = r.attOwner === 'P';
+    const col = r.type === 'spy' ? (r.win ? 'var(--firuze)' : 'var(--red)') : (mine ? (r.win ? 'var(--green)' : 'var(--red)') : (r.win ? 'var(--red)' : 'var(--green)'));
+    const title = r.conquered ? (mine ? 'Fetih: ' + r.defName : r.defName + ' düştü') : (r.type === 'spy' ? 'Keşif: ' : mine ? 'Saldırı: ' : 'Savunma: ') + (mine ? r.defName : r.attName + ' → ' + r.defName);
+    const sub = mine ? (r.type === 'spy' ? (r.win ? 'Çaşıtlar bilgiyle döndü' : 'Çaşıtlar yakalandı') : r.win ? 'Zafer · ganimet ' + r.loot.map(fmt).join(' / ') : 'Yenilgi') : (r.win ? 'Köyün yağmalandı · kayıp ' + r.loot.map(fmt).join(' / ') : 'Saldırı püskürtüldü');
+    return `<div class="rep${r.read ? '' : ' unread'}"><button data-rep="${r.id}"><span class="st" style="background:${col}"></span><span class="tt">${esc(title)}</span><span class="tm num">${clock(r.t)}</span><span class="sub">${esc(sub)}${r.loy ? ` · bağlılık ${r.loy[0]} → ${r.loy[1]}` : ''}</span></button>${openRep === r.id ? repDetail(r) : ''}</div>`;
+  }).join('');
+  $('view').innerHTML = `<div class="pad"><div class="qrow"><h2 class="sec">Raporlar</h2><button class="linkbtn" id="readAll">Hepsini okundu say</button></div>${items}</div>`;
+  $('readAll').onclick = () => { S.reports.forEach(r => r.read = true); save(); sig = ''; render(); };
+}
+function unitTable(r) {
+  const us = C.U_ORDER.filter(u => (r.aUnits[u] || 0) || (r.dUnits && r.dUnits[u]));
+  const rows = us.map(u => `<tr><td>${C.U[u].n}</td><td>${r.aUnits[u] ? fmt(r.aUnits[u]) : '–'}${r.aLost[u] ? ` <span class="loss">−${fmt(r.aLost[u])}</span>` : ''}</td><td>${r.dUnits ? (r.dUnits[u] ? fmt(r.dUnits[u]) : '–') + (r.dLost[u] ? ` <span class="loss">−${fmt(r.dLost[u])}</span>` : '') : '?'}</td></tr>`).join('');
+  return `<div class="tblwrap"><table class="tbl num"><thead><tr><th>Birlik</th><th>${esc(r.attName)}</th><th>${esc(r.defName)}</th></tr></thead><tbody>${rows || '<tr><td colspan="3" class="muted">Savunmada kimse yoktu.</td></tr>'}</tbody></table></div>`;
+}
+function repDetail(r) {
+  let h = `<div class="rdet">`;
+  h += `<div class="small muted">${esc(C.ownerName(r.attOwner))} → ${esc(C.ownerName(r.defOwner))}${r.type !== 'spy' ? ` · şans ${r.luck >= 0 ? '+' : ''}${Math.round(r.luck * 100)}%` : ''}</div>`;
+  h += unitTable(r);
+  if (!r.dUnits) h += `<div class="small muted">Hiçbir askerin geri dönmedi, düşman ordusunu göremedin.</div>`;
+  if (r.wall[0] !== r.wall[1]) h += `<div class="small">Sur ${r.wall[0]} → ${r.wall[1]}</div>`;
+  if (r.loy) h += `<div class="small">Bağlılık ${r.loy[0]} → ${r.loy[1]}${r.conquered ? ' · <b style="color:var(--gold)">köy el değiştirdi</b>' : ''}</div>`;
+  if (r.type !== 'spy' && r.win) h += `<div class="chips small"><span class="muted">Ganimet:</span>${costChips(r.loot)}</div>`;
+  if (r.spy) {
+    h += `<div class="card" style="padding:8px 10px"><b>Keşif bilgisi</b><div class="chips">${costChips(r.spy.res)}</div>
+      <div class="small muted">${C.B_ORDER.filter(b => r.spy.b[b]).map(b => C.B[b].n + ' ' + r.spy.b[b]).join(' · ')}</div>
+      <div class="small">Bağlılık ${r.spy.loy}</div></div>`;
+  }
+  if (r.attOwner === 'P' && r.defOwner !== 'P') h += `<div><button class="btn sec" data-again="${r.to}">Haritada göster</button></div>`;
+  return h + `</div>`;
+}
+$('view').addEventListener('click', e => {
+  if (tab !== 'rapor') return;
+  const b = e.target.closest('[data-rep]');
+  if (b) { const id = +b.dataset.rep, r = S.reports.find(x => x.id === id); if (r) r.read = true; openRep = openRep === id ? null : id; save(); render(); return; }
+  const a = e.target.closest('[data-again]');
+  if (a) { map.sel = +a.dataset.again; tab = 'harita'; renderTabs(); sig = ''; map.ox = null; render(); setTimeout(() => { centerOn(S.vil[map.sel]); drawMap(); }, 0); }
+});
+
+// ---------- KLAN ----------
+let klanSub = 'bilgi', chatRendered = { ch: null, last: 0 };
+const SHIELD = tag => `<svg class="shield" viewBox="0 0 46 52" aria-hidden="true"><path d="M23 2l20 7v14c0 14-9 22-20 27C12 45 3 37 3 23V9z" fill="#16223a" stroke="#dcaa45" stroke-width="2"/><path d="M23 9l13 4.5v9.5c0 9-6 14.5-13 18-7-3.5-13-9-13-18v-9.5z" fill="#3cb4a6" opacity=".25"/><text x="23" y="30" text-anchor="middle" font-family="Alegreya SC, Georgia, serif" font-weight="800" font-size="13" fill="#dcaa45">${esc(tag)}</text></svg>`;
+function renderKlan() {
+  const view = $('view'); view.classList.add('flush');
+  const unread = ch => S.chat[ch].some(m => m.id > (S.chatSeen[ch] || 0) && m.from !== 'P');
+  const seg = `<div style="padding:10px 12px 0"><div class="seg">${[['bilgi', 'Klan'], ['klan', 'Klan sohbeti'], ['genel', 'Genel sohbet']].map(([k, n]) => `<button class="${klanSub === k ? 'on' : ''}" data-sub="${k}">${n}${k !== 'bilgi' && klanSub !== k && unread(k) ? '<span class="dotn"></span>' : ''}</button>`).join('')}</div></div>`;
+  if (klanSub === 'bilgi') { view.innerHTML = seg + `<div style="flex:1;overflow-y:auto">${klanInfoHTML()}</div>`; chatRendered = { ch: null, last: 0 }; return; }
+  const ch = klanSub;
+  if (ch === 'klan' && !S.clan) { view.innerHTML = seg + `<div class="pad"><div class="card muted">Klan sohbeti için önce bir klana katıl ya da kendi klanını kur.</div></div>`; return; }
+  view.innerHTML = seg + `<div class="chatwrap"><div class="note small" style="margin:8px 12px 0">Bu sürümde sohbetteki beyler bilgisayar tarafından yönetiliyor. Sunucu kurulunca burada gerçek oyuncular olacak.</div>
+    <div class="chatlog" id="chatlog"></div>
+    <form class="chatin" id="chatForm"><input id="chatIn" maxlength="200" autocomplete="off" placeholder="${ch === 'klan' ? '[' + esc(S.clan.tag) + '] klanına yaz' : 'Herkese yaz'}" aria-label="Mesaj"><button class="btn" type="submit">Gönder</button></form></div>`;
+  chatRendered = { ch, last: 0 };
+  $('chatForm').addEventListener('submit', e => {
+    e.preventDefault(); const inp = $('chatIn'), r = C.playerSay(ch, inp.value, now());
+    if (r === 'ok') { inp.value = ''; save(); liveChat(); }
+  });
+  liveChat();
+}
+function msgHTML(m) {
+  if (m.from === 'SYS') return `<div class="msg sys">${esc(m.text)} · ${clock(m.t)}</div>`;
+  const me = m.from === 'P', tag = C.clanOf(m.from);
+  return `<div class="msg${me ? ' me' : ''}"><div class="mh"><b style="color:${C.ownerColor(m.from)}">${esc(me ? S.player.name : C.ownerName(m.from))}</b>${tag && klanSub === 'genel' ? `<span class="ctag">${esc(tag)}</span>` : ''}<span class="muted num">${clock(m.t).replace('bugün ', '')}</span></div><div class="mt">${esc(m.text)}</div></div>`;
+}
+function liveChat() {
+  const log = $('chatlog'); if (!log || !chatRendered.ch) return;
+  const ch = chatRendered.ch, msgs = S.chat[ch], lastId = msgs.length ? msgs[msgs.length - 1].id : 0;
+  if (lastId === chatRendered.last) return;
+  const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 60 || !chatRendered.last;
+  log.innerHTML = msgs.length ? msgs.map(msgHTML).join('') : '<div class="msg sys">Henüz mesaj yok. İlk selamı sen ver.</div>';
+  chatRendered.last = lastId; S.chatSeen[ch] = lastId;
+  if (atBottom) log.scrollTop = log.scrollHeight;
+}
+function klanInfoHTML() {
+  const t = now(), clans = C.clanList(), free = S.beys.filter(b => !b.clan && S.vil.some(v => v.owner === b.id));
+  const pts = o => fmt(C.ownerPts(o));
+  const memberRows = ids => ids.map(o => `<div class="mrow"><i class="sw" style="background:${C.ownerColor(o)}"></i><span><b>${esc(o === 'P' ? S.player.name : C.ownerName(o))}</b>${o === 'P' ? ' <span class="muted small">(sen)</span>' : ''}</span><span class="num muted small">${pts(o)} puan</span></div>`).join('');
+  let h = '<div class="pad">';
+  if (S.clan) {
+    const mine = clans.find(c => c.mine);
+    h += `<section class="card"><div class="klanhead">${SHIELD(S.clan.tag)}<div><h2 class="sec" style="margin:0">${esc(S.clan.name)}</h2><div class="muted small num">[${esc(S.clan.tag)}] · ${mine.m.length}/${C.CLAN_MAX} üye · ${fmt(mine.m.reduce((a, o) => a + C.ownerPts(o), 0))} puan</div></div></div>
+      <div>${memberRows(mine.m)}</div>
+      <div class="muted small">Klan üyeleri birbirine saldırmaz. Köyüne saldırı geldiğinde müttefiklerin destek askeri gönderebilir.</div></section>`;
+    if (!S.clanJoinedAi && mine.m.length < C.CLAN_MAX) {
+      h += `<h2 class="sec">Davet et</h2><section class="card">${free.length ? free.map(b => `<div class="mrow"><i class="sw" style="background:${b.color}"></i><span><b>${esc(b.name)}</b><div class="muted small num">${pts(b.id)} puan${b.refusedUntil && t < b.refusedUntil ? ' · ' + dur(b.refusedUntil - t) + ' sonra tekrar' : ''}</div></span><button class="btn sec" data-invite="${b.id}" ${b.refusedUntil && t < b.refusedUntil ? 'disabled' : ''}>Davet et</button></div>`).join('') : '<div class="muted small">Klansız bey kalmadı.</div>'}</section>`;
+    }
+    h += `<button class="btn red" id="leaveClan" style="justify-self:start">Klandan ayrıl</button>`;
+  } else {
+    h += `<section class="card"><h2 class="sec" style="margin:0">Klan kur</h2><div class="muted small">Kendi klanını kur, klansız beyleri davet et.</div>
+      <form class="form2" id="clanForm"><input id="clanName" maxlength="24" placeholder="Klan adı" aria-label="Klan adı"><input id="clanTag" maxlength="4" placeholder="Kısaltma" aria-label="Klan kısaltması"><button class="btn" type="submit" style="grid-column:1/-1">Klanı kur</button></form></section>`;
+    h += `<h2 class="sec">Klanlar</h2>` + clans.map(c => `<section class="card"><div class="klanhead">${SHIELD(c.tag)}<div><b style="font-size:17px">${esc(c.name)}</b><div class="muted small num">[${esc(c.tag)}] · ${c.m.length}/${C.CLAN_MAX} üye · ${fmt(c.m.reduce((a, o) => a + C.ownerPts(o), 0))} puan</div></div></div><div>${memberRows(c.m)}</div>
+      <button class="btn sec" data-join="${c.tag}" style="justify-self:start">Katılma isteği gönder</button></section>`).join('');
+  }
+  return h + '</div>';
+}
+$('view').addEventListener('click', e => {
+  if (tab !== 'klan') return;
+  const sb = e.target.closest('[data-sub]'); if (sb) { klanSub = sb.dataset.sub; sig = ''; render(); return; }
+  const inv = e.target.closest('[data-invite]');
+  if (inv) { const b = S.beys.find(x => x.id === inv.dataset.invite), r = C.inviteBey(inv.dataset.invite, now());
+    toast(r === 'ok' ? b.name + ' klana katıldı!' : r === 'refused' ? b.name + ' davetini şimdilik reddetti. Güçlendikçe tekrar dene.' : r === 'full' ? 'Klan dolu' : 'Davet gönderilemedi', r === 'ok' ? 'good' : 'bad'); save(); sig = ''; render(); return; }
+  const j = e.target.closest('[data-join]');
+  if (j) { const r = C.joinClan(j.dataset.join, now()); toast(r === 'ok' ? 'Klana katıldın!' : r === 'weak' ? 'Klan üyeleri seni henüz yeterince güçlü bulmuyor. Puanını artır.' : r === 'full' ? 'Klan dolu' : 'Katılamadın', r === 'ok' ? 'good' : 'bad'); save(); sig = ''; render(); return; }
+  if (e.target.id === 'leaveClan') {
+    if (e.target.dataset.armed !== '1') { e.target.dataset.armed = '1'; e.target.textContent = 'Emin misin? Tekrar dokun'; return; }
+    C.leaveClan(now()); toast('Klandan ayrıldın', 'info'); save(); sig = ''; render();
+  }
+});
+$('view').addEventListener('submit', e => {
+  if (e.target.id !== 'clanForm') return;
+  e.preventDefault();
+  const r = C.createClan($('clanName').value, $('clanTag').value, now());
+  toast({ ok: 'Klan kuruldu!', name: 'Klan adı en az 3 harf olmalı', tag: 'Kısaltma 2–4 harf olmalı', taken: 'Bu kısaltma kullanılıyor' }[r] || 'Klan kurulamadı', r === 'ok' ? 'good' : 'bad');
+  if (r === 'ok') { save(); sig = ''; render(); }
+});
+
+// ---------- SIRALAMA ----------
+function renderSira() {
+  const rows = C.ranking().map((r, i) => `<tr class="${r.id === 'P' ? 'me' : ''}"><td>${i + 1}</td><td style="text-align:left"><i class="sw" style="background:${r.color}"></i> ${esc(r.name)}${C.clanOf(r.id) ? ` <span class="ctag">${esc(C.clanOf(r.id))}</span>` : ''}</td><td>${r.n}</td><td>${fmt(r.pts)}</td></tr>`).join('');
+  const barb = S.vil.filter(v => v.owner === null).length;
+  $('view').innerHTML = `<div class="pad"><h2 class="sec">Beylikler sıralaması</h2>
+    <section class="card"><div class="tblwrap"><table class="tbl rank num"><thead><tr><th>#</th><th style="text-align:left">Beylik</th><th>Köy</th><th>Puan</th></tr></thead><tbody>${rows}</tbody></table></div></section>
+    <div class="muted small">Haritada ${barb} terk edilmiş köy var. Puan, köylerindeki binaların seviyesinden gelir. Rakip beylikler de büyüyor ve boş köyleri fethediyor.</div></div>`;
+}
+
+// ---------- sheet ----------
+function sheet(html, mount) {
+  closeSheet();
+  const ov = document.createElement('div'); ov.className = 'ov'; ov.id = 'ov';
+  ov.innerHTML = `<div class="sheet" role="dialog" aria-modal="true">${html}</div>`;
+  ov.addEventListener('click', e => { if (e.target === ov || e.target.closest('[data-close]')) closeSheet(); });
+  $('app').appendChild(ov);
+  if (mount) mount(ov.firstChild);
+}
+function closeSheet() { const o = $('ov'); if (o) o.remove(); }
+let overShown = false;
+function showOver() {
+  if (overShown) return; overShown = true;
+  const r = C.ranking();
+  sheet(`<h3>Beyliğin düştü</h3><div>Son köyün de el değiştirdi. ${esc(r[0].name)} şu an Anadolu'nun en güçlü beyliği.</div>
+    <button class="btn" id="overNew">Yeni beylik kur</button>`, () => { $('overNew').onclick = () => { store.del(); S = null; C.S = null; overShown = false; closeSheet(); showStart(); }; });
+  $('ov').classList.add('center');
+}
+
+// ---------- canlı güncelleme ----------
+function live() {
+  const t = now();
+  for (const el of document.querySelectorAll('[data-end]')) el.textContent = dur(+el.dataset.end - t);
+  for (const el of document.querySelectorAll('[data-e]')) { const s = +el.dataset.s, e = +el.dataset.e; el.style.width = Math.min(100, Math.max(0, (t - s) / (e - s) * 100)) + '%'; }
+  liveBSheet();
+  if (tab === 'koy') liveKoy();
+  if (tab === 'klan') liveChat();
+  if (tab === 'ordu') liveOrdu();
+  else if (tab === 'harita') mapCard();
+}
+setInterval(() => {
+  if (!S || $('start')) return;
+  render();
+  if (now() - lastSave > 5000) save();
+}, 1000);
+document.addEventListener('visibilitychange', () => { if (document.hidden) save(); else if (S) { catching = true; awayLog = []; const t0 = S.lastT; C.processUntil(now()); catching = false; sig = ''; render(); if (now() - t0 > 60000 && awayLog.length) showAway(now() - t0); } });
+addEventListener('pagehide', save);
+addEventListener('resize', () => { if (tab === 'harita') { sig = ''; render(); } });
+
+window.__ub = { SC, viewInfo, selectBuilding, clampCam };
+boot();
+})();
+</script>

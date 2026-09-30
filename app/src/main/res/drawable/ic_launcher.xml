@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Uygulama simgesi: lacivert zemin üzerinde altın Selçuklu yıldızı -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#0F1829" android:pathData="M54,4a50,50 0,1 1,0 100a50,50 0,1 1,0 -100z" />
+    <path android:strokeColor="#DCAA45" android:strokeWidth="5" android:fillColor="#00000000"
+        android:pathData="M32,32 L76,32 L76,76 L32,76 Z" />
+    <path android:strokeColor="#DCAA45" android:strokeWidth="5" android:fillColor="#00000000"
+        android:pathData="M54,23 L85,54 L54,85 L23,54 Z" />
+    <path android:fillColor="#3CB4A6" android:pathData="M54,44a10,10 0,1 1,0 20a10,10 0,1 1,0 -20z" />
+</vector>
