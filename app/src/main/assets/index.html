@@ -1678,7 +1678,43 @@ async function raw(path, { method = 'GET', body, headers = {}, token } = {}) {
   if (!r.ok) { const err = new Error((data && (data.message || data.msg || data.error_description || data.error)) || ('HTTP ' + r.status)); err.status = r.status; err.code = data && data.code; throw err; }
   return data;
 }
-function keep(d) { auth = { access: d.access_token, refresh: d.refresh_token, exp: Date.now() + (d.expires_in || 3600) * 1000, uid: d.user && d.user.id }; ls.set(AUTH_K, auth); }
+function keep(d) {
+  const u = d.user || {}, name = (u.user_metadata && u.user_metadata.username) || (u.email && u.email.endsWith('@' + DOMAIN) ? u.email.split('@')[0] : null);
+  auth = { access: d.access_token, refresh: d.refresh_token, exp: Date.now() + (d.expires_in || 3600) * 1000, uid: u.id, user: name || (auth && auth.uid === u.id ? auth.user : null) || null };
+  ls.set(AUTH_K, auth);
+}
+// ---------- hesap: kullanıcı adı + şifre ----------
+const DOMAIN = 'ucbeyleri.app';
+const normUser = u => String(u || '').trim().toLowerCase().replace(/ç/g, 'c').replace(/ğ/g, 'g').replace(/ı/g, 'i').replace(/i̇/g, 'i').replace(/ö/g, 'o').replace(/ş/g, 's').replace(/ü/g, 'u').replace(/\s+/g, '_');
+const TR_ERR = { 'Invalid login credentials': 'Kullanıcı adı ya da şifre yanlış', 'Request rate limit reached': 'Çok fazla deneme yaptın, biraz bekle' };
+async function accountCall(body) {
+  const a = await session();
+  const r = await fetch(URL + '/functions/v1/account', { method: 'POST', headers: { apikey: KEY, Authorization: 'Bearer ' + a.access, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok || d.error) throw new Error(d.error || (r.status === 404 ? 'Hesap sistemi henüz sunucuya kurulmamış' : 'HTTP ' + r.status));
+  return d;
+}
+async function register(username, password) {
+  const u = normUser(username);
+  const d = await accountCall({ action: 'register', username: u, password });
+  // yeni bilgilerle oturumu tazele (kimlik aynı kalır)
+  keep(await raw('/auth/v1/token?grant_type=password', { method: 'POST', body: { email: u + '@' + DOMAIN, password } }));
+  auth.user = d.username || u; ls.set(AUTH_K, auth);
+  return auth.user;
+}
+const changePassword = password => accountCall({ action: 'password', password });
+async function login(username, password) {
+  const u = normUser(username);
+  if (!/^[a-z0-9_.]{3,20}$/.test(u)) throw new Error('Kullanıcı adı ya da şifre yanlış');
+  try { keep(await raw('/auth/v1/token?grant_type=password', { method: 'POST', body: { email: u + '@' + DOMAIN, password } })); }
+  catch (e) { throw new Error(TR_ERR[e.message] || e.message); }
+  auth.user = auth.user || u; ls.set(AUTH_K, auth);
+  return auth.user;
+}
+async function logout() {
+  try { if (auth && auth.access) await raw('/auth/v1/logout', { method: 'POST', token: auth.access }); } catch (e) {}
+  auth = null; ls.del(AUTH_K);
+}
 async function session() {
   if (auth && auth.access && Date.now() < auth.exp - 60000) return auth;
   if (auth && auth.refresh) {
@@ -1831,7 +1867,7 @@ const putStats = (world, name, stats) => rpc('put_stats', { p_world: world, p_na
 const globalStats = uid => rpc('global_stats', { p_uid: uid });
 async function leaveWorld(id) { const a = await session(); return api('/rest/v1/world_players?world_id=eq.' + id + '&user_id=eq.' + a.uid, { method: 'DELETE' }); }
 
-return { putStats, globalStats, registerPush, unregisterPush, queuePush, syncClock, get offset() { return offset; }, session, createWorld, joinWorld, load, save, version, myWorlds, players, leaveWorld, localize, delocalize, addHuman, normCode, get uid() { return auth && auth.uid; } };
+return { register, login, logout, changePassword, normUser, get account() { return auth && auth.user; }, get hasAuth() { return !!(auth && auth.refresh); }, putStats, globalStats, registerPush, unregisterPush, queuePush, syncClock, get offset() { return offset; }, session, createWorld, joinWorld, load, save, version, myWorlds, players, leaveWorld, localize, delocalize, addHuman, normCode, get uid() { return auth && auth.uid; } };
 })();
 
 </script>
@@ -2222,6 +2258,48 @@ function boot() {
   showStart();
 }
 
+// ---------- hesap: kullanıcı adı + şifre ----------
+function accHTML() {
+  const u = Net.account;
+  return u ? `<b>Hesabın</b><div class="small">Giriş yapıldı: <b style="color:var(--gold)">@${esc(u)}</b></div><div class="muted small">Başka bir telefonda bu kullanıcı adı ve şifreyle giriş yaparak aynı dünyalarda oynayabilirsin.</div><div class="chips"><button class="btn sec" data-acc="pass">Şifre değiştir</button><button class="btn sec" data-acc="out">Çıkış yap</button></div>`
+    : `<b>Hesap</b><div class="muted small">Şu an misafir olarak oynuyorsun; dünyaların sadece bu cihazda. Hesabını kaydet ki telefon değişse de beyliğin kaybolmasın.</div><div class="chips"><button class="btn firuze" data-acc="reg">Hesabını kaydet</button><button class="btn sec" data-acc="in">Giriş yap</button></div>`;
+}
+function accSheet(kind, done) {
+  const T = { reg: 'Hesabını kaydet', in: 'Giriş yap', pass: 'Şifre değiştir', out: 'Çıkış yap' }[kind];
+  if (kind === 'out') {
+    sheet(`<h3>Çıkış yapılsın mı?</h3><div class="muted">Dünyaların hesabında kayıtlı kalır. Tekrar girmek için kullanıcı adın ve şifren gerekir: <b>@${esc(Net.account || '')}</b></div><div class="chips"><button class="btn red" id="accGo">Çıkış yap</button><button class="btn sec" data-close>Vazgeç</button></div>`, () => {
+      $('accGo').onclick = async () => { if (MPX) { save(); MPX = null; S = null; C.S = null; } await Net.logout(); LS.set('ub-mode', { sp: true }); closeSheet(); toast('Çıkış yapıldı', 'info'); done && done(); };
+    });
+    $('ov').classList.add('center'); return;
+  }
+  const guestWarn = kind === 'in' && !Net.account && Net.hasAuth ? `<div class="note small">Dikkat: Bu cihazdaki misafir hesabından çıkılacak. Misafir hesabındaki dünyalara bir daha giremezsin; istersen önce <b>Hesabını kaydet</b>.</div>` : '';
+  sheet(`<div class="shead"><h3>${T}</h3><button class="x" data-close aria-label="Kapat">×</button></div>
+    ${kind === 'reg' ? '<div class="muted small">Mevcut dünyaların bu hesaba bağlanır. Kullanıcı adında harf, rakam, _ ve . kullanabilirsin (Türkçe harfler sadeleşir: ş→s).</div>' : ''}
+    ${guestWarn}
+    <form id="accForm" class="mpbox">
+      ${kind !== 'pass' ? `<label class="field">Kullanıcı adı<input id="accU" maxlength="20" autocomplete="username" autocapitalize="none" spellcheck="false"></label>` : ''}
+      <label class="field">${kind === 'pass' ? 'Yeni şifre' : 'Şifre'}<input id="accP" type="password" maxlength="72" autocomplete="${kind === 'in' ? 'current-password' : 'new-password'}"></label>
+      ${kind !== 'in' ? `<label class="field">Şifre (tekrar)<input id="accP2" type="password" maxlength="72" autocomplete="new-password"></label>` : ''}
+      <div class="mperr" id="accErr" hidden></div>
+      <button class="bigbtn" type="submit" id="accGo">${T}</button>
+    </form>`, () => {
+    $('accForm').onsubmit = async e => {
+      e.preventDefault();
+      const err = m => { const x = $('accErr'); x.textContent = m; x.hidden = false; };
+      const u = $('accU') ? $('accU').value : '', p = $('accP').value, p2 = $('accP2') ? $('accP2').value : p;
+      if (kind !== 'pass' && !/^[a-z0-9_.]{3,20}$/.test(Net.normUser(u))) return err('Kullanıcı adı 3-20 karakter olmalı; harf, rakam, _ ve . kullanılabilir');
+      if (p.length < 6) return err('Şifre en az 6 karakter olmalı');
+      if (p !== p2) return err('Şifreler aynı değil');
+      const go = $('accGo'); go.disabled = true; go.textContent = 'Bekle…';
+      try {
+        if (kind === 'reg') { const name = await Net.register(u, p); closeSheet(); toast('Hesabın kaydedildi: @' + name, 'good'); Sfx.play('good'); }
+        else if (kind === 'in') { if (MPX) { save(); MPX = null; S = null; C.S = null; } const name = await Net.login(u, p); LS.set('ub-mode', { sp: true }); closeSheet(); toast('Hoş geldin @' + name, 'good'); }
+        else { await Net.changePassword(p); closeSheet(); toast('Şifren değiştirildi', 'good'); }
+        done && done();
+      } catch (ex) { go.disabled = false; go.textContent = T; err(netErr(ex)); }
+    };
+  });
+}
 function showStart(err) {
   hideSplash();
   $('top').hidden = true; $('tabs').hidden = true; $('view').innerHTML = ''; setNet();
@@ -2262,7 +2340,7 @@ function showStart(err) {
         <button class="bigbtn" id="mpNew">Dünya kur</button></section>
       <section class="card mpbox"><b>Koda katıl</b><div class="mprow"><input id="mpCode" maxlength="6" placeholder="KOD" autocomplete="off" aria-label="Dünya kodu"><button class="btn" id="mpJoin">Katıl</button></div></section>
       <section class="card mpbox"><b>Dünyaların</b><div class="wlist" id="mpList"><div class="muted small">Yükleniyor…</div></div></section>
-      <div class="muted small" style="text-align:center">Hesabın bu cihaza bağlıdır. Uygulamanın verilerini silersen dünyalarına bu cihazdan giremezsin.</div>
+      <section class="card mpbox" id="accBox">${accHTML()}</section>
     </div>
   </div>`;
   $('app').appendChild(el);
@@ -2287,6 +2365,7 @@ function showStart(err) {
         : '<div class="muted small">Henüz bir dünyan yok. Kur ya da arkadaşının kodunu yaz.</div>';
     } catch (e) { if ($('mpList')) box.innerHTML = `<div class="mperr">${esc(netErr(e))}</div>`; }
   }
+  $('accBox').onclick = e => { const b = e.target.closest('[data-acc]'); if (b) accSheet(b.dataset.acc, () => showStart()); };
   $('mpList').onclick = e => { const b = e.target.closest('[data-world]'); if (!b) return; el.remove(); mpOpen({ id: b.dataset.world, hid: b.dataset.hid, code: b.dataset.code }); };
   $('mpNew').onclick = async () => {
     const { name, village } = names(); busy(true, 'Dünya kuruluyor…');
@@ -2658,12 +2737,14 @@ $('setBtn').onclick = () => {
       <div class="small">${S.beys.filter(b => b.human).length + 1} oyuncu: <b style="color:${S.player.color}">${esc(S.player.name)}</b>${S.beys.filter(b => b.human).map(b => `, <b style="color:${b.color}">${esc(b.name)}</b>`).join('')}</div>
       <div class="small muted">Bağlantı: ${{ ok: 'senkron', sync: 'kaydediliyor…', off: 'internet yok, tekrar deneniyor' }[MPX.net || 'ok']}</div>
       <div class="chips"><button class="btn firuze" id="mpShare">Kodu paylaş</button><button class="btn sec" id="mpMenu">Ana menü</button></div></section>
+      <section class="card" id="accBox2">${accHTML()}</section>
       <button class="btn red" id="mpLeave">Bu dünyadan ayrıl</button>` : `
     <div class="muted small">Oyun bu cihazda kaydedilir. Uygulamayı kapatsan da dünya işlemeye devam eder; geri döndüğünde aradaki her şey hesaplanır.</div>
     <button class="btn firuze" id="spMenu">Ana menü · Arkadaşlarla oyna</button>
     <section class="card"><b>Test araçları</b><div class="muted small">Oyunu denerken kullanman için. ${S.test ? 'Bu oyun test modunda.' : ''}</div>
       <div class="chips"><button class="btn firuze" id="tFill">Kaynakları doldur</button><button class="btn sec" id="tMines">Madenleri en üst seviyeye çıkar</button><button class="btn" id="tMax">Bütün binaları son seviyeye çıkar</button></div></section>
     <button class="btn red" id="resetBtn">Yeni oyun başlat</button>`}`, box => {
+    const ab = $('accBox2'); if (ab) ab.onclick = e => { const b = e.target.closest('[data-acc]'); if (!b) return; const k = b.dataset.acc; accSheet(k, () => { if (k === 'out' || k === 'in') showStart(); }); };
     const sb = (id, on, n) => { const b = $(id); b.textContent = n + ': ' + (on ? 'Açık' : 'Kapalı'); b.className = 'btn ' + (on ? 'firuze' : 'sec'); };
     box.querySelectorAll('[data-gq]').forEach(b => b.onclick = () => {
       const k = b.dataset.gq; if (k === gq()) return;
@@ -6740,6 +6821,7 @@ function sheet(html, mount) {
   ov.innerHTML = `<div class="sheet" role="dialog" aria-modal="true">${html}</div>`;
   ov.addEventListener('click', e => { if (ov.dataset.lock) return; if (e.target === ov || e.target.closest('[data-close]')) closeSheet(); });
   $('app').appendChild(ov);
+  if ($('start')) ov.style.zIndex = 90;   // başlangıç ekranının üstünde aç
   if (mount) mount(ov.firstChild);
 }
 function closeSheet() { const o = $('ov'); if (o) o.remove(); }

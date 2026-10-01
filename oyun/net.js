@@ -21,7 +21,43 @@ async function raw(path, { method = 'GET', body, headers = {}, token } = {}) {
   if (!r.ok) { const err = new Error((data && (data.message || data.msg || data.error_description || data.error)) || ('HTTP ' + r.status)); err.status = r.status; err.code = data && data.code; throw err; }
   return data;
 }
-function keep(d) { auth = { access: d.access_token, refresh: d.refresh_token, exp: Date.now() + (d.expires_in || 3600) * 1000, uid: d.user && d.user.id }; ls.set(AUTH_K, auth); }
+function keep(d) {
+  const u = d.user || {}, name = (u.user_metadata && u.user_metadata.username) || (u.email && u.email.endsWith('@' + DOMAIN) ? u.email.split('@')[0] : null);
+  auth = { access: d.access_token, refresh: d.refresh_token, exp: Date.now() + (d.expires_in || 3600) * 1000, uid: u.id, user: name || (auth && auth.uid === u.id ? auth.user : null) || null };
+  ls.set(AUTH_K, auth);
+}
+// ---------- hesap: kullanıcı adı + şifre ----------
+const DOMAIN = 'ucbeyleri.app';
+const normUser = u => String(u || '').trim().toLowerCase().replace(/ç/g, 'c').replace(/ğ/g, 'g').replace(/ı/g, 'i').replace(/i̇/g, 'i').replace(/ö/g, 'o').replace(/ş/g, 's').replace(/ü/g, 'u').replace(/\s+/g, '_');
+const TR_ERR = { 'Invalid login credentials': 'Kullanıcı adı ya da şifre yanlış', 'Request rate limit reached': 'Çok fazla deneme yaptın, biraz bekle' };
+async function accountCall(body) {
+  const a = await session();
+  const r = await fetch(URL + '/functions/v1/account', { method: 'POST', headers: { apikey: KEY, Authorization: 'Bearer ' + a.access, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok || d.error) throw new Error(d.error || (r.status === 404 ? 'Hesap sistemi henüz sunucuya kurulmamış' : 'HTTP ' + r.status));
+  return d;
+}
+async function register(username, password) {
+  const u = normUser(username);
+  const d = await accountCall({ action: 'register', username: u, password });
+  // yeni bilgilerle oturumu tazele (kimlik aynı kalır)
+  keep(await raw('/auth/v1/token?grant_type=password', { method: 'POST', body: { email: u + '@' + DOMAIN, password } }));
+  auth.user = d.username || u; ls.set(AUTH_K, auth);
+  return auth.user;
+}
+const changePassword = password => accountCall({ action: 'password', password });
+async function login(username, password) {
+  const u = normUser(username);
+  if (!/^[a-z0-9_.]{3,20}$/.test(u)) throw new Error('Kullanıcı adı ya da şifre yanlış');
+  try { keep(await raw('/auth/v1/token?grant_type=password', { method: 'POST', body: { email: u + '@' + DOMAIN, password } })); }
+  catch (e) { throw new Error(TR_ERR[e.message] || e.message); }
+  auth.user = auth.user || u; ls.set(AUTH_K, auth);
+  return auth.user;
+}
+async function logout() {
+  try { if (auth && auth.access) await raw('/auth/v1/logout', { method: 'POST', token: auth.access }); } catch (e) {}
+  auth = null; ls.del(AUTH_K);
+}
 async function session() {
   if (auth && auth.access && Date.now() < auth.exp - 60000) return auth;
   if (auth && auth.refresh) {
@@ -174,5 +210,5 @@ const putStats = (world, name, stats) => rpc('put_stats', { p_world: world, p_na
 const globalStats = uid => rpc('global_stats', { p_uid: uid });
 async function leaveWorld(id) { const a = await session(); return api('/rest/v1/world_players?world_id=eq.' + id + '&user_id=eq.' + a.uid, { method: 'DELETE' }); }
 
-return { putStats, globalStats, registerPush, unregisterPush, queuePush, syncClock, get offset() { return offset; }, session, createWorld, joinWorld, load, save, version, myWorlds, players, leaveWorld, localize, delocalize, addHuman, normCode, get uid() { return auth && auth.uid; } };
+return { register, login, logout, changePassword, normUser, get account() { return auth && auth.user; }, get hasAuth() { return !!(auth && auth.refresh); }, putStats, globalStats, registerPush, unregisterPush, queuePush, syncClock, get offset() { return offset; }, session, createWorld, joinWorld, load, save, version, myWorlds, players, leaveWorld, localize, delocalize, addHuman, normCode, get uid() { return auth && auth.uid; } };
 })();
