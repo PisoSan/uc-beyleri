@@ -78,12 +78,14 @@ function drawCaravan(g, m, G, k, T, t) {
   const kind = mvKind(m), col = MCOL[kind], p = qpt(G, k), tn = qtan(G, k), s = Math.max(3.6, T * .1), dir = tn.x >= 0 ? 1 : -1;
   const loaded = m.type === 'trade', n = Math.min(4, Math.max(1, m.merchants || 1));
   for (let i = 0; i < 5; i++) { const f = ((t / 1100 + i / 5) % 1), q = qpt(G, Math.max(0, k - .01 - f * .04)); g.fillStyle = `rgba(214,196,150,${.3 * (1 - f)})`; g.beginPath(); g.arc(q.x, q.y - s * .2, s * (.4 + f * 1.2), 0, 7); g.fill(); }
+  if (!map.three) {
   const pts = []; for (let i = 0; i < n; i++) pts.push({ x: p.x - tn.x * i * s * 2.6, y: p.y - tn.y * i * s * 2.6, i });
   pts.sort((a, b) => a.y - b.y);
   for (const q of pts) { g.save(); g.translate(q.x, q.y); g.scale(dir, 1); camel(g, 0, 0, s, t, q.i, loaded); g.restore(); }
   // kervanbaşı
   const hx = p.x + tn.x * s * 2, hy = p.y + tn.y * s * 2;
   g.save(); g.translate(hx, hy); g.scale(dir, 1); mvFigure(g, 0, 0, s * .9, false, kind === 'gift' ? C.ownerColor(m.owner) : '#8a5a32', t, 7, false); g.restore();
+  }
   const tot = m.res ? m.res.reduce((a, b) => a + b, 0) : 0, label = loaded ? fmtC(tot) : '';
   if (label) {
     g.font = `800 ${Math.max(9, Math.round(T * .2))}px system-ui, sans-serif`; const w = g.measureText(label).width + 16, bx = p.x, by = p.y + s * 1.1;
@@ -104,6 +106,7 @@ function drawArmy(g, m, G, k, T, t) {
     const f = ((t / 900 + i / 6) % 1), q = qpt(G, Math.max(0, k - .012 - f * .05));
     g.fillStyle = `rgba(214,196,150,${.38 * (1 - f)})`; g.beginPath(); g.arc(q.x + nx * Math.sin(i * 2) * s, q.y + ny * Math.sin(i * 2) * s - s * .3, s * (.5 + f * 1.4), 0, 7); g.fill();
   }
+  if (!map.three) {
   const slots = [[0, 0], [-1, 1], [-1, -1], [-2, 0], [-2, 2], [-2, -2]].slice(0, n);
   const pts = slots.map(([a, b], i) => ({ x: p.x + tn.x * a * s * 1.5 + nx * b * s * .9, y: p.y + tn.y * a * s * 1.5 + ny * b * s * .9, i })).sort((u, v) => u.y - v.y);
   for (const q of pts) { g.save(); g.translate(q.x, q.y); g.scale(dir, 1); mvFigure(g, 0, 0, s, isCav, uc, t, q.i, loot && q.i < 2); g.restore(); }
@@ -114,6 +117,7 @@ function drawArmy(g, m, G, k, T, t) {
   for (let i = 1; i <= 5; i++) g.lineTo(fx + dir * s * 2.2 * i / 5, fy - fh + Math.sin(t / 200 + i) * s * .15 * i / 5);
   for (let i = 5; i >= 0; i--) g.lineTo(fx + dir * s * 2.2 * i / 5, fy - fh + s * 1.3 - i * s * .08 + Math.sin(t / 200 + i) * s * .15 * i / 5);
   g.closePath(); g.fillStyle = uc; g.fill(); g.strokeStyle = 'rgba(0,0,0,.35)'; g.lineWidth = .6; g.stroke();
+  }
   // rozet
   const label = kind === 'inc' ? '?' : String(tot), bx = p.x, by = p.y + s * 1.2;
   g.font = `800 ${Math.max(9, Math.round(T * .2))}px system-ui, sans-serif`; const w = g.measureText(label).width + 16;

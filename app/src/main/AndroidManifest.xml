@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Sadece Google Fonts yazı tipini yüklemek için; internet yoksa oyun yine çalışır -->
+    <!-- Arkadaşlarla oynama (Supabase) için; tek kişilik mod internetsiz çalışır -->
     <uses-permission android:name="android.permission.INTERNET" />
 
     <application

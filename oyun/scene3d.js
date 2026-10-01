@@ -1404,6 +1404,39 @@ function mapLight(night) {
   MP.atmos.set(night, new T.Vector3(-8, 16, 5));
   MP.r.toneMappingExposure = night ? 1.2 : 1; MP.r.shadowMap.needsUpdate = true;
 }
+
+// ---------- haritada yürüyen 3B ordular ----------
+const TOK = { live: new Map(), tpl: {} };
+function tokTemplate(kind, col) {
+  const key = kind + col; if (TOK.tpl[key]) return TOK.tpl[key];
+  const keep = G; G = new T.Group(); OFF3 = [0, 0]; st.thumb = true;
+  const put = (o, x, z, ry = 0) => { o.position.set(x, 0, z); o.rotation.y = ry; G.add(o); };
+  if (kind === 'inf') { for (const [x, z] of [[0, 0], [-.16, .1], [-.16, -.1], [-.32, 0]]) { const f = foot(col, { helm: true }); const sp = new T.Mesh(new T.CylinderGeometry(.006, .006, .5, 4), colMat('#6e4a26')); sp.position.set(.06, .3, .03); f.add(sp); put(f, x, z, -Math.PI / 2); } }
+  else if (kind === 'cav') { for (const [x, z] of [[0, 0], [-.3, .12], [-.3, -.12]]) { const m = mount(col, '#6b3f22', false); const r = rider(col, { cap: '#b0302a' }); r.position.set(-.01, .37, 0); m.add(r); put(m, x, z); } }
+  else if (kind === 'car') { for (const [x, z] of [[0, 0], [-.34, .05]]) { const c = new T.Group(); OFF3 = [0, 0]; const g0 = G; G = c; camel(0, 0, 0); G = g0; c.children.forEach(o => o.rotation.y += Math.PI / 2 - .2); put(c, x, z); } put(foot('#8a5a32', {}), .22, .08, -Math.PI / 2); }
+  else { put(foot('#2b2b33', { cap: '#1d1d22' }), 0, 0, -Math.PI / 2); }
+  if (kind !== 'spy') { const pole = new T.Mesh(new T.CylinderGeometry(.007, .007, .62, 5), colMat('#3b2e22')); pole.position.set(.08, .31, 0); G.add(pole); const fl = new T.Mesh(FLAGG(), FLAGM[col] || (FLAGM[col] = new T.MeshStandardMaterial({ map: flagTex(col), side: T.DoubleSide, roughness: .9 }))); fl.position.set(.08, .62, 0); G.add(fl); }
+  st.thumb = false; mergeGroup(G, null); const g = G; G = keep; g.scale.setScalar(1.5);
+  return TOK.tpl[key] = g;
+}
+const _ray = new T.Raycaster(), _pl = new T.Plane(new T.Vector3(0, 1, 0), 0), _v = new T.Vector3();
+function unproj(x, y) { const r = MP.cv.getBoundingClientRect(); _ray.setFromCamera(new T.Vector2(x / r.width * 2 - 1, -(y / r.height) * 2 + 1), MP.cam); return _ray.ray.intersectPlane(_pl, _v) ? _v.clone() : null; }
+function mapTokens() {
+  const want = new Set(), t = now(), at = performance.now();
+  for (const m of S.moves.filter(mvRelevant)) {
+    const G2 = mvGeom(m, map.T), k = Math.min(1, Math.max(0, (t - m.depart) / (m.arrive - m.depart)));
+    const a = unproj(...Object.values(qpt(G2, k))), b = unproj(...Object.values(qpt(G2, Math.min(1, k + .02))));
+    if (!a || !b) continue;
+    let cav = 0, tot = 0; for (const [u, n] of Object.entries(m.units || {})) { tot += n; if (C.U[u] && C.U[u].cls === 'cav') cav += n; }
+    const kind = m.type === 'trade' || m.type === 'tradeback' ? 'car' : m.type === 'spy' ? 'spy' : cav > tot / 2 ? 'cav' : 'inf';
+    const kd = mvKind(m), col = kd === 'inc' || kd === 'gift' || (kd === 'support' && m.owner !== 'P') ? C.ownerColor(m.owner) : S.player.color;
+    let o = TOK.live.get(m.id);
+    if (!o || o.key !== kind + col) { if (o) MP.scene.remove(o.g); o = { g: tokTemplate(kind, col).clone(), key: kind + col }; MP.scene.add(o.g); TOK.live.set(m.id, o); }
+    o.g.position.set(a.x, Math.abs(Math.sin(at / 170 + m.id)) * .02, a.z); o.g.rotation.y = Math.atan2(-(b.z - a.z), b.x - a.x);
+    want.add(m.id);
+  }
+  for (const [id, o] of TOK.live) if (!want.has(id)) { MP.scene.remove(o.g); TOK.live.delete(id); }
+}
 function mapFrame() {
   if (!MP.cv || !S) return;
   { const nt = performance.now(); if (MP.last && nt - MP.last < 25) return; adapt(MP, nt); MP.last = nt; }
@@ -1415,6 +1448,7 @@ function mapFrame() {
   const hr = SC.hour != null ? SC.hour : new Date().getHours(); mapLight(hr >= 20 || hr < 6);
   const sv = map.sel != null ? S.vil[map.sel] : null;
   MP.selRing.visible = !!sv; if (sv) { MP.selRing.position.set(sv.x + .5, .04, sv.y + .5); MP.selRing.material.opacity = .55 + .4 * Math.sin(performance.now() / 250); }
+  try { mapTokens(); } catch (e) {}
   draw3(MP, W, H);
   // kaplama: güç plakaları, yollar ve ordular (2B çizimler 3B konumlara yansıtılır)
   const a = mapProj(MP.view.tx, MP.view.tz), b = mapProj(MP.view.tx + 1, MP.view.tz); map.T = Math.max(14, Math.hypot(b.x - a.x, b.y - a.y));
@@ -1462,6 +1496,7 @@ function showcase(cv) {
   requestAnimationFrame(loop);
 }
 
-return { ok: true, start, st, setView: o => { Object.assign(st.view, o); applyCam(); }, showcase, thumb, thumbKey,
+function focusB(b) { const bx = st.boxes && st.boxes[b]; if (!bx || !st.cam) return; const c = bx.getCenter(new T.Vector3()); Object.assign(st.view, { tx: c.x, tz: c.z + .6, dist: Math.min(st.view.dist, 13) }); applyCam(); st.lk = ''; }
+return { ok: true, start, st, focusB, setView: o => { Object.assign(st.view, o); applyCam(); }, showcase, thumb, thumbKey,
   map: { start: mapStart, frame: mapFrame, center: mapCenter, proj: mapProj, zoom: f => { MP.view.dist /= f; mapCam(); }, focus: (x, z) => { MP.view.tx = x; MP.view.tz = z + .4; mapCam(); }, st: MP } };
 })();

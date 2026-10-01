@@ -270,7 +270,7 @@ function newGame(opts) {
   const seed = opts.seed != null ? opts.seed : Math.floor(Math.random() * 1e9);
   const rnd = mulberry32(seed);
   const ri = (a, b) => a + Math.floor(rnd() * (b - a + 1));
-  S = { ver: 1, rs: seed ^ 0x5bd1e995, mp: !!opts.mp, market: [], tech: {}, techq: null, clan: null, chat: { genel: [], klan: [] }, chatq: [], chatSeen: { genel: 0, klan: 0 }, nextChat: t + 30000, seed, speed: opts.speed, created: t, lastT: t, protectUntil: t + 3 * 24 * HOUR / opts.speed,
+  S = { ver: 1, rs: seed ^ 0x5bd1e995, mp: !!opts.mp, extra: {}, invites: [], market: [], tech: {}, techq: null, clan: null, chat: { genel: [], klan: [] }, chatq: [], chatSeen: { genel: 0, klan: 0 }, nextChat: t + 30000, seed, speed: opts.speed, created: t, lastT: t, protectUntil: t + 3 * 24 * HOUR / opts.speed,
     nextAi: t + HOUR / opts.speed, uid: 100, player: { name: opts.name || 'Kızılırmak Beyliği', color: '#e3b341' },
     beys: [], vil: [], moves: [], reports: [], quests: { claimed: [] },
     stats: { trained: {}, barbWins: 0, spies: 0 }, cur: 0, over: false };
@@ -373,6 +373,7 @@ function migrate(st) {
     st.beys.forEach((b, i) => { const ac = AI_CLANS.find(c => c.m.includes('B' + i)); b.clan = ac ? ac.tag : null; b.clanName = ac ? ac.name : null; }); }
   if (st.techq === undefined) st.techq = null;
   if (st.rs == null) st.rs = (st.seed || 1) ^ 0x5bd1e995;
+  if (!st.extra) st.extra = {}; if (!st.invites) st.invites = [];
   for (const v of st.vil) { if (v.b.medrese == null) v.b.medrese = 0; if (v.b.kervansaray == null) v.b.kervansaray = 0; }
   return st;
 }
@@ -481,6 +482,7 @@ function battle(m, t) {
 
   if (A0 > 0 && A > D) {
     rep.win = true;
+    { const st = statsOf(m.owner); if (st && m.type === 'attack') st.wins = (st.wins || 0) + 1; }
     const r = Math.pow(D / A, 1.5);
     for (const [u, n] of Object.entries(att)) { if (u === 'casus') continue; const lost = Math.round(n * r); if (lost) { rep.aLost[u] = (rep.aLost[u] || 0) + lost; att[u] = n - lost; } }
     for (const [u, n] of Object.entries(dv.units)) { if (u === 'casus' || !n) continue; rep.dLost[u] = n; dv.units[u] = 0; }
@@ -511,6 +513,7 @@ function battle(m, t) {
         dv.units = {}; for (const [u, n] of Object.entries(att)) if (n > 0) dv.units[u] = n;
         dv.bq = []; for (const k of REC_B) dv.rq[k] = [];
         rep.conquered = true;
+        { const st = statsOf(m.owner); if (st) st.conq = (st.conq || 0) + 1; }
         say('genel', 'SYS', ownerName(m.owner) + ', ' + dv.name + ' köyünü fethetti.', t);
         hooks.notify(m.owner === 'P' ? 'good' : (prev === 'P' ? 'bad' : 'info'),
           m.owner === 'P' ? dv.name + ' artık senin!' : (prev === 'P' ? dv.name + ' düştü!' : ownerName(m.owner) + ', ' + dv.name + ' köyünü fethetti'));
@@ -550,6 +553,54 @@ function pushReport(rep) {
   if (rep.defOwner === 'P' && rep.attOwner !== 'P') hooks.notify(rep.win ? 'bad' : 'good', rep.defName + (rep.win ? ' yağmalandı' : ' saldırıyı püskürttü'));
   else if (rep.attOwner === 'P') hooks.notify(rep.win ? 'good' : 'bad', (rep.type === 'spy' ? 'Keşif: ' : 'Saldırı: ') + rep.defName + (rep.win ? ' — başarılı' : ' — başarısız'));
 }
+// ---------- savaş hesaplayıcı (durumu değiştirmez; savaş formülünün aynısı) ----------
+function simulate(att, def, wall, luck, aOwner = 'P', dOwner = null) {
+  att = Object.assign({}, att); def = Object.assign({}, def);
+  let Ai = 0, Ac = 0; for (const [u, n] of Object.entries(att)) { if (!n) continue; if (U[u].cls === 'cav') Ac += U[u].a * n; else if (U[u].cls === 'inf') Ai += U[u].a * n; }
+  const A0 = Ai + Ac, rams = att.mancinik || 0, wallEff = Math.max(0, (wall || 0) - Math.floor(rams / 3));
+  let Di = 0, Dc = 0; for (const [u, n] of Object.entries(def)) { if (!n || U[u].cls === 'spy') continue; Di += U[u].di * n; Dc += U[u].dc * n; }
+  const Dmix = A0 > 0 ? (Di * Ai + Dc * Ac) / A0 : Di;
+  const D = (Dmix * (1 + TX(dOwner, 'zirh')) + 20 + 40 * wallEff) * Math.pow(1.037, wallEff * (1 + TX(dOwner, 'burc')));
+  const A = A0 * (1 + luck) * (1 + TX(aOwner, 'demirci'));
+  const res = { win: A0 > 0 && A > D, A: Math.round(A), D: Math.round(D), aLost: {}, dLost: {}, aLeft: {}, dLeft: {}, wall: [wall || 0, wall || 0], carry: 0 };
+  if (res.win) {
+    const r = Math.pow(D / A, 1.5);
+    for (const [u, n] of Object.entries(att)) { if (!n || u === 'casus') continue; const l = Math.round(n * r); res.aLost[u] = l; res.aLeft[u] = n - l; }
+    for (const [u, n] of Object.entries(def)) if (n && u !== 'casus') res.dLost[u] = n;
+    if (rams > 0) res.wall[1] = wallEff;
+    for (const [u, n] of Object.entries(res.aLeft)) res.carry += U[u].cr * n * (1 + TX(aOwner, 'kervan'));
+  } else {
+    const r = A0 > 0 ? Math.pow(A / D, 1.5) : 0;
+    for (const [u, n] of Object.entries(att)) if (n && u !== 'casus') res.aLost[u] = n;
+    for (const [u, n] of Object.entries(def)) { if (!n || u === 'casus') continue; const l = Math.round(n * r); res.dLost[u] = l; res.dLeft[u] = n - l; }
+  }
+  res.carry = Math.floor(res.carry);
+  return res;
+}
+// ---------- gerçek oyunculara klan daveti ----------
+function inviteHuman(id, t) {
+  const b = beyOf(id); if (!S.clan) return 'noclan'; if (!b || !b.human) return 'taken'; if (b.clan) return 'taken';
+  S.invites = S.invites || [];
+  if (S.invites.some(x => x.owner === id && x.tag === S.clan.tag)) return 'dup';
+  if (clanList().find(c => c.tag === S.clan.tag).m.length >= CLAN_MAX) return 'full';
+  S.invites.push({ id: ++S.uid, tag: S.clan.tag, name: S.clan.name, from: 'P', owner: id, t });
+  say('klan', 'SYS', ownerName(id) + ' klana davet edildi.', t);
+  return 'ok';
+}
+function acceptInvite(id, t) {
+  const inv = (S.invites || []).find(x => x.id === id && x.owner === 'P'); if (!inv) return 'gone';
+  if (S.clan) return 'already';
+  const mem = S.beys.filter(b => b.clan === inv.tag); if (!mem.length) { S.invites = S.invites.filter(x => x !== inv); return 'none'; }
+  if (mem.length + 1 > CLAN_MAX) return 'full';
+  S.clan = { name: inv.name, tag: inv.tag, created: t }; S.clanJoinedAi = true;
+  if (S.clanChat) S.chat.klan = S.clanChat[inv.tag] = S.clanChat[inv.tag] || [];
+  S.invites = S.invites.filter(x => x.owner !== 'P');
+  say('klan', 'SYS', S.player.name + ' klana katıldı. Hoş geldin!', t);
+  say('genel', 'SYS', S.player.name + ', [' + inv.tag + '] klanına katıldı.', t);
+  return 'ok';
+}
+function declineInvite(id) { S.invites = (S.invites || []).filter(x => !(x.id === id && x.owner === 'P')); return 'ok'; }
+
 // ---------- kervan: kaynak gönderme ----------
 const CARRY = 1000, TRADE_SP = 12;
 function merchantsTotal(v) { return v.b.kervansaray || 0; }
@@ -862,7 +913,7 @@ const AI = (() => {
 
 return {
   HOUR, RES_NAMES, MINES, B, B_ORDER, U, U_ORDER, REC_B, WORLD, TECH, TECH_ORDER,
-  reqFor, isHuman, protectOf, mkVillage, clanOf, sameClan, clanList, ownerPts, createClan, inviteBey, joinClan, leaveClan, playerSay, CLAN_MAX, techCost, techTime, canResearch, research, migrate, medreseMax, TL,
+  reqFor, simulate, inviteHuman, acceptInvite, declineInvite, isHuman, protectOf, mkVillage, clanOf, sameClan, clanList, ownerPts, createClan, inviteBey, joinClan, leaveClan, playerSay, CLAN_MAX, techCost, techTime, canResearch, research, migrate, medreseMax, TL,
   get S() { return S; }, set S(x) { S = x; },
   onNotify(fn) { log = fn; },
   maxAll(v, t) { syncRes(v, t); for (const b of B_ORDER) v.b[b] = B[b].max; v.bq = []; const c = cap(v); v.res = [c, c, c]; },

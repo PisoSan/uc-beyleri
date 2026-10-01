@@ -331,6 +331,40 @@ input.qty{width:74px;background:var(--bg);border:1px solid var(--line);border-ra
 .bigbtn{justify-self:center;border:0;border-radius:999px;background:var(--gold);color:#23190a;font-weight:800;font-size:19px;padding:10px 34px;cursor:pointer;box-shadow:0 4px 0 #9c7426}
 .bigbtn:active{transform:translateY(2px);box-shadow:0 2px 0 #9c7426}
 .star-row{display:flex;justify-content:center;color:var(--gold)}
+#splash{position:fixed;inset:0;z-index:100;background:radial-gradient(circle at 50% 40%,#1c2b47,#0c1422 70%);display:grid;place-items:center;align-content:center;gap:10px;transition:opacity .45s}
+#splash svg{width:84px;height:84px;color:var(--gold);animation:spin 6s linear infinite}
+#splash b{font-family:var(--display);font-size:44px;color:var(--gold);letter-spacing:.02em}
+#splash span{color:var(--muted);font-weight:700}
+#splash.hide{opacity:0;pointer-events:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+.tutring{position:fixed;z-index:60;border:3px solid #ffd36b;border-radius:14px;box-shadow:0 0 0 9999px rgba(5,9,18,.45),0 0 22px rgba(255,211,107,.8);pointer-events:none;transition:all .25s;animation:tpulse 1.2s ease-in-out infinite}
+.tutring.nohole{box-shadow:0 0 0 9999px rgba(5,9,18,.45)}
+@keyframes tpulse{50%{border-color:#fff3c4}}
+.tutbox{position:fixed;z-index:61;left:12px;right:12px;max-width:420px;margin:0 auto;background:linear-gradient(180deg,#22345a,#16223a);border:1.5px solid var(--gold);border-radius:16px;padding:12px 14px;display:grid;gap:8px;box-shadow:0 12px 30px rgba(0,0,0,.55)}
+.tutbox .th{display:flex;align-items:center;gap:8px;font-family:var(--display);color:var(--gold);font-size:18px}
+.tutbox .th i{font-style:normal;font-family:var(--body);font-size:12px;color:var(--muted);margin-left:auto}
+.tutbox p{margin:0;font-size:15.5px;line-height:1.4}
+.tutbox .row{display:flex;gap:8px;justify-content:flex-end}
+.daygrid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
+.daygrid div{border:1px solid var(--line);border-radius:10px;padding:6px 2px;text-align:center;font-size:12px;font-weight:800;color:var(--muted);background:var(--panel-2)}
+.daygrid div.done{background:rgba(60,180,166,.18);color:var(--firuze);border-color:rgba(60,180,166,.5)}
+.daygrid div.now{background:rgba(220,170,69,.2);color:var(--gold);border-color:var(--gold);box-shadow:0 0 12px rgba(220,170,69,.4)}
+.daygrid div b{display:block;font-size:20px;line-height:1.1}
+.ach{display:grid;grid-template-columns:auto 1fr auto;gap:4px 10px;align-items:center;border-top:1px solid var(--line);padding:8px 0}
+.ach:first-child{border-top:0}
+.ach .ai{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:var(--panel-2);border:1px solid var(--line);font-size:17px;color:var(--muted)}
+.ach.ok .ai{background:rgba(220,170,69,.2);border-color:var(--gold);color:var(--gold)}
+.ach.got{opacity:.55}
+.ach .bar2{grid-column:2/3;height:5px;border-radius:3px;background:var(--line);overflow:hidden}
+.ach .bar2 i{display:block;height:100%;background:var(--firuze)}
+.gbadge{position:absolute;top:-5px;right:-5px;min-width:18px;height:18px;border-radius:9px;background:var(--red);color:#fff;font-size:11px;font-weight:800;display:grid;place-items:center;padding:0 4px}
+.hbtns .btn{position:relative}
+.simgrid{display:grid;grid-template-columns:1fr 70px 70px;gap:4px 8px;align-items:center}
+.simgrid input{width:100%;min-width:0;text-align:center}
+.simres{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.simres > div{border:1px solid var(--line);border-radius:10px;padding:6px;font-size:12.5px;background:var(--panel-2)}
+.simres > div.w{border-color:rgba(108,192,139,.6)} .simres > div.l{border-color:rgba(232,90,70,.6)}
+.simres b{display:block;font-size:14px}
 .seg.two{grid-template-columns:1fr 1fr}
 .mpbox{display:grid;gap:10px}
 .mprow{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center}
@@ -353,6 +387,7 @@ input.qty{width:74px;background:var(--bg);border:1px solid var(--line);border-ra
 @media (prefers-reduced-motion: reduce){.alert .dot{animation:none}.bigbtn:active{transform:none}.toast{transition:none}}
 </style>
 
+<div id="splash"><svg viewBox="0 0 48 48" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><rect x="10" y="10" width="28" height="28"/><rect x="10" y="10" width="28" height="28" transform="rotate(45 24 24)"/><circle cx="24" cy="24" r="6"/></svg><b>Uç Beyleri</b><span>Yükleniyor…</span></div>
 <div id="app">
   <header class="top" id="top" hidden>
     <div class="bar1">
@@ -391,7 +426,7 @@ const store = {
   set(v) { try { localStorage.setItem(SAVE, v); } catch (e) {} },
   del() { try { localStorage.removeItem(SAVE); } catch (e) {} },
 };
-const now = () => Date.now();
+const now = () => Date.now() + (typeof MPX !== 'undefined' && MPX ? Net.offset : 0);
 const fmt = n => Math.floor(n).toLocaleString('tr-TR');
 const fmtC = n => n >= 100000 ? (n / 1000).toFixed(n >= 1e6 ? 0 : 1).replace('.', ',').replace(',0', '') + 'B' : fmt(n);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -548,6 +583,7 @@ async function mpOpen(info, me) {
   MPX = { id: info.id, code: info.code, hid: info.hid, name: info.name || '', ver: 0, pending: [], pushing: false };
   const M = MPX;
   try {
+    try { await Net.syncClock(); } catch (e) {}
     let R = await Net.load(info.id);
     M.code = R.code; M.name = R.name;
     for (let i = 0; i < 8 && !R.W.beys.some(b => b.id === info.hid); i++) {
@@ -597,6 +633,7 @@ function boot() {
 }
 
 function showStart(err) {
+  hideSplash();
   $('top').hidden = true; $('tabs').hidden = true; $('view').innerHTML = ''; setNet();
   const old = $('start'); if (old) old.remove();
   const el = document.createElement('div'); el.className = 'start'; el.id = 'start';
@@ -706,7 +743,10 @@ function showCode(first) {
   });
 }
 
+function hideSplash() { const sp = $('splash'); if (!sp || sp.classList.contains('hide')) return; requestAnimationFrame(() => setTimeout(() => { sp.classList.add('hide'); setTimeout(() => sp.remove(), 500); }, 250)); }
 function showGame() {
+  hideSplash();
+  setTimeout(dailyPrompt, 600);
   $('top').hidden = false; $('tabs').hidden = false;
   renderTabs(); sig = ''; render();
 }
@@ -721,6 +761,164 @@ function showAway(ms) {
     ${lines ? `<ul style="margin:0;padding-left:18px;display:grid;gap:3px">${lines}</ul>` : ''}
     <button class="btn" data-close>Devam et</button>`);
 }
+
+
+// ============================================================
+//  ÖDÜLLER: günlük giriş ödülü ve başarımlar
+// ============================================================
+const X = () => (S.extra = S.extra || {});
+const dayNo = () => Math.floor((now() + 3 * 3600000) / 86400000);   // Türkiye saatiyle gün
+const DAY_MULT = [1, 1.25, 1.5, 1.9, 2.3, 2.8, 4.5];
+function dailyState() {
+  const d = X().daily || { last: -9, streak: 0 }, today = dayNo();
+  const claimed = d.last === today, next = claimed ? d.streak : (d.last === today - 1 ? d.streak % 7 + 1 : 1);
+  return { claimed, day: next, streak: d.streak };
+}
+function dailyAmount(day) { const k = Math.max(1, maxB('konak')); return Math.round((350 + 260 * k) * DAY_MULT[day - 1] / 10) * 10; }
+function giveRes(v, r) { C.syncRes(v, now()); const c = C.cap(v); for (let i = 0; i < 3; i++) v.res[i] = Math.min(Math.max(c, v.res[i]), v.res[i] + r[i]); }
+const ACH = [
+  { id: 'kon5', i: '⌂', n: 'İlk adım', d: 'Konağı 5. seviyeye çıkar', p: () => [maxB('konak'), 5], r: 600 },
+  { id: 'kon12', i: '⌂', n: 'Usta mimar', d: 'Konağı 12. seviyeye çıkar', p: () => [maxB('konak'), 12], r: 4000 },
+  { id: 'kon20', i: '⌂', n: 'Saray yapan', d: 'Konağı 20. seviyeye çıkar', p: () => [maxB('konak'), 20], r: 15000 },
+  { id: 'sur10', i: '▥', n: 'Taş kale', d: 'Suru 10. seviyeye çıkar', p: () => [maxB('sur'), 10], r: 5000 },
+  { id: 'win1', i: '⚔', n: 'İlk zafer', d: 'Bir saldırı kazan', p: () => [S.stats.wins || 0, 1], r: 800 },
+  { id: 'win25', i: '⚔', n: 'Akıncı beyi', d: '25 saldırı kazan', p: () => [S.stats.wins || 0, 25], r: 6000 },
+  { id: 'win100', i: '⚔', n: 'Gazi', d: '100 saldırı kazan', p: () => [S.stats.wins || 0, 100], r: 20000 },
+  { id: 'conq1', i: '⚑', n: 'Fatih', d: 'Bir köy fethet', p: () => [S.stats.conq || 0, 1], r: 12000 },
+  { id: 'conq3', i: '⚑', n: 'Cihangir', d: '3 köy fethet', p: () => [S.stats.conq || 0, 3], r: 30000 },
+  { id: 'army100', i: '♞', n: 'Ordu kur', d: '100 asker eğit', p: () => [Object.values(S.stats.trained || {}).reduce((a, b) => a + b, 0), 100], r: 1500 },
+  { id: 'army1k', i: '♞', n: 'Büyük ordu', d: '1.000 asker eğit', p: () => [Object.values(S.stats.trained || {}).reduce((a, b) => a + b, 0), 1000], r: 9000 },
+  { id: 'spy10', i: '◉', n: 'Gözcü', d: '10 kez çaşıt gönder', p: () => [S.stats.spies || 0, 10], r: 1500 },
+  { id: 'tech3', i: '✦', n: 'Âlim', d: 'Toplam 3 teknoloji seviyesi', p: () => [Object.values(S.tech || {}).reduce((a, b) => a + b, 0), 3], r: 2000 },
+  { id: 'tech15', i: '✦', n: 'Bilge', d: 'Toplam 15 teknoloji seviyesi', p: () => [Object.values(S.tech || {}).reduce((a, b) => a + b, 0), 15], r: 12000 },
+  { id: 'pts1k', i: '★', n: 'Yükselen beylik', d: '1.000 puana ulaş', p: () => [C.ownerPts('P'), 1000], r: 2500 },
+  { id: 'pts10k', i: '★', n: 'Güçlü beylik', d: '10.000 puana ulaş', p: () => [C.ownerPts('P'), 10000], r: 15000 },
+  { id: 'clan', i: '⛨', n: 'Kardeşlik', d: 'Bir klana katıl ya da kur', p: () => [S.clan ? 1 : 0, 1], r: 1000 },
+  { id: 'kerv5', i: '⚖', n: 'Tüccar', d: 'Kervansarayı 5. seviyeye çıkar', p: () => [maxB('kervansaray'), 5], r: 2500 },
+];
+const achGot = id => (X().ach || []).includes(id);
+const achReady = () => ACH.filter(a => { const [c, n] = a.p(); return c >= n && !achGot(a.id); });
+function rewardsBadge() { const n = achReady().length + (dailyState().claimed ? 0 : 1), b = $('rewBadge'); if (b) { b.hidden = !n; b.textContent = n; } return n; }
+function openRewards(sub) {
+  const html = () => {
+    const ds = dailyState(), amt = dailyAmount(ds.day);
+    let h = `<div class="shead"><h3>Ödüller</h3><button class="x" data-close aria-label="Kapat">×</button></div>
+      <div class="seg two"><button class="${sub === 'gun' ? 'on' : ''}" data-rsub="gun">Günlük ödül</button><button class="${sub === 'bas' ? 'on' : ''}" data-rsub="bas">Başarımlar${achReady().length ? ' (' + achReady().length + ')' : ''}</button></div>`;
+    if (sub === 'gun') {
+      h += `<div class="muted small">Her gün giriş yap, sandığı aç. Seri bozulmazsa ödül büyür; 7. gün en büyük sandık.</div><div class="daygrid">${[1, 2, 3, 4, 5, 6, 7].map(d => `<div class="${d < ds.day || (ds.claimed && d === ds.day) ? 'done' : d === ds.day && !ds.claimed ? 'now' : ''}"><b>${d === 7 ? '♛' : d}</b>${d === 7 ? '7. gün' : 'Gün'}</div>`).join('')}</div>
+        <section class="card"><div><b>${ds.claimed ? 'Bugünün sandığı açıldı' : ds.day + '. gün sandığı'}</b></div><div class="chips">${costChips([amt, amt, amt])}</div>
+        ${ds.claimed ? '<div class="muted small">Yarın yeni sandık seni bekliyor.</div>' : '<button class="btn firuze" id="dailyGo">Sandığı aç</button>'}</section>`;
+    } else {
+      h += `<section class="card">${ACH.map(a => { const [c, n] = a.p(), ok = c >= n, got = achGot(a.id); return `<div class="ach${got ? ' got' : ok ? ' ok' : ''}"><div class="ai">${a.i}</div><div><b>${a.n}</b><div class="muted small">${a.d} · ${fmt(Math.min(c, n))}/${fmt(n)}</div></div><div>${got ? '<span class="muted small">Alındı</span>' : ok ? `<button class="btn firuze" data-ach="${a.id}">Al</button>` : `<div class="chips small">${costChips([a.r, a.r, a.r])}</div>`}</div><div class="bar2"><i style="width:${Math.min(100, c / n * 100)}%"></i></div></div>`; }).join('')}</section>`;
+    }
+    return h;
+  };
+  sheet(html(), box => {
+    const re = () => { box.innerHTML = html(); rewardsBadge(); };
+    box.addEventListener('click', e => {
+      const sb = e.target.closest('[data-rsub]'); if (sb) { sub = sb.dataset.rsub; re(); return; }
+      if (e.target.id === 'dailyGo') {
+        const r = act(() => { const ds = dailyState(); if (ds.claimed) return 'no'; giveRes(cur(), [1, 1, 1].map(() => dailyAmount(ds.day))); X().daily = { last: dayNo(), streak: ds.day }; return 'ok'; });
+        if (r === 'ok') { Sfx.play('win'); toast('Sandık açıldı, kaynaklar ambarda', 'good'); save(); renderTop(); re(); }
+        return;
+      }
+      const a = e.target.closest('[data-ach]');
+      if (a) {
+        const id = a.dataset.ach, A = ACH.find(x => x.id === id);
+        const r = act(() => { const [c, n] = A.p(); if (c < n || achGot(id)) return 'no'; giveRes(cur(), [A.r, A.r, A.r]); X().ach = (X().ach || []).concat(id); return 'ok'; });
+        if (r === 'ok') { Sfx.play('good'); toast(A.n + ' başarımı: ödül ambara eklendi', 'good'); save(); renderTop(); re(); }
+      }
+    });
+  });
+}
+// ============================================================
+//  SAVAŞ HESAPLAYICI
+// ============================================================
+function openSim(target) {
+  const v = cur(), spy = target ? S.reports.find(r => r.to === target.id && r.spy && r.attOwner === 'P') : null;
+  const att = {}, def = {}; for (const u of C.U_ORDER) { att[u] = u === 'casus' ? 0 : (v.units[u] || 0); def[u] = spy ? (spy.spy.units[u] || 0) : 0; }
+  let wall = spy ? spy.spy.b.sur : 0;
+  const rows = () => C.U_ORDER.filter(u => u !== 'sancakbeyi').map(u => `<span>${C.U[u].n}</span><input class="qty num" type="number" min="0" inputmode="numeric" data-sa="${u}" value="${att[u] || ''}" placeholder="0"><input class="qty num" type="number" min="0" inputmode="numeric" data-sd="${u}" value="${def[u] || ''}" placeholder="0">`).join('');
+  const result = () => {
+    const out = [-.15, 0, .15].map(l => C.simulate(att, def, wall, l, 'P', target ? target.owner : null));
+    const lostTxt = o => Object.entries(o).filter(([, n]) => n > 0).map(([u, n]) => fmt(n) + ' ' + C.U[u].n.toLocaleLowerCase('tr')).join(', ') || 'yok';
+    let h = `<div class="simres">${out.map((r, i) => `<div class="${r.win ? 'w' : 'l'}"><span class="muted">${['Kötü şans', 'Ortalama', 'İyi şans'][i]}</span><b style="color:${r.win ? 'var(--green)' : 'var(--red)'}">${r.win ? 'Zafer' : 'Yenilgi'}</b>Kaybın: ${lostTxt(r.aLost)}${r.win ? `<br>Taşıma: ${fmt(r.carry)}` : `<br>Düşman kaybı: ${lostTxt(r.dLost)}`}${r.wall[1] !== r.wall[0] ? `<br>Sur ${r.wall[0]}→${r.wall[1]}` : ''}</div>`).join('')}</div>`;
+    const mid = out[1];
+    if (!mid.win && Object.values(att).some(n => n > 0)) {
+      let lo = 1, hi = 64; const sc = k => { const a = {}; for (const u in att) a[u] = Math.ceil((att[u] || 0) * k); return C.simulate(a, def, wall, 0, 'P', target ? target.owner : null).win; };
+      if (sc(hi)) { for (let i = 0; i < 20; i++) { const m = (lo + hi) / 2; if (sc(m)) hi = m; else lo = m; } h += `<div class="muted small">Ortalama şansla kazanmak için ordunun yaklaşık <b>${hi.toFixed(1).replace('.', ',')} katı</b> gerekir.</div>`; }
+    }
+    h += `<div class="muted small">Saldırı gücü ${fmt(mid.A)} · savunma gücü ${fmt(mid.D)}. Savaşta şans ±%15 oynar.</div>`;
+    return h;
+  };
+  sheet(`<div class="shead"><div><h3>Savaş hesaplayıcı</h3><div class="muted small">${target ? esc(target.name) + (spy ? ' · son keşif ' + clock(spy.t) : ' · keşif yok, savunmayı kendin yaz') : 'Ordunu ve rakibi yaz, sonucu gör'}</div></div><button class="x" data-close aria-label="Kapat">×</button></div>
+    <div class="simgrid"><b class="small">Birlik</b><b class="small" style="text-align:center">Saldıran</b><b class="small" style="text-align:center">Savunan</b>${rows()}<span>Sur seviyesi</span><span></span><input class="qty num" type="number" min="0" max="20" inputmode="numeric" id="simWall" value="${wall || ''}" placeholder="0"></div>
+    <div class="chips"><button class="btn sec" id="simMine">Köyümdeki askerler</button><button class="btn sec" id="simClr">Temizle</button></div>
+    <div id="simOut"></div>`, box => {
+    const upd = () => { $('simOut').innerHTML = result(); };
+    box.addEventListener('input', e => {
+      const a = e.target.dataset.sa, d = e.target.dataset.sd; const n = Math.max(0, Math.floor(+e.target.value || 0));
+      if (a) att[a] = n; if (d) def[d] = n; if (e.target.id === 'simWall') wall = Math.min(20, n); upd();
+    });
+    $('simMine').onclick = () => { for (const u of C.U_ORDER) { att[u] = u === 'casus' ? 0 : (v.units[u] || 0); const el = box.querySelector(`[data-sa="${u}"]`); if (el) el.value = att[u] || ''; } upd(); };
+    $('simClr').onclick = () => { for (const u of C.U_ORDER) { att[u] = 0; def[u] = 0; } wall = 0; box.querySelectorAll('input').forEach(i => i.value = ''); upd(); };
+    upd();
+  });
+}
+// ============================================================
+//  ÖĞRETİCİ: ilk oyunda adım adım rehber
+// ============================================================
+const TUT = [
+  { t: 'Hoş geldin Bey!', p: 'Uç boylarında küçük bir köyün var. Birkaç dakikada seni gezdireyim; istediğin an geçebilirsin.', btn: 'Başlayalım' },
+  { t: 'Kaynaklar', p: 'Üstte ambarındaki kereste, taş, demir ve nüfus yazar. Altındaki küçük sayı saatlik üretimdir.', el: '#resbar', btn: 'Anladım' },
+  { t: 'Madenler', p: 'Kaynakları madenler üretir. Köyde <b>Kereste Ocağı</b>na dokun.', bld: 'kereste', tab: 'koy', done: () => SC.sel === 'kereste' },
+  { t: 'Yükselt', p: 'Açılan pencerede <b>Yükselt</b>e bas. Ocak büyüdükçe daha çok kereste üretir.', el: '[data-pup]', tab: 'koy', done: () => cur().bq.some(q => q.b === 'kereste') || cur().b.kereste > 1 },
+  { t: 'İnşaat kuyruğu', p: 'Süren inşaatlar burada görünür. Aynı anda iki inşaat sıraya koyabilirsin.', el: '#hQueue', tab: 'koy', btn: 'Devam' },
+  { t: 'Görevler', p: 'Görevler seni adım adım büyütür. Tamamlayınca <b>Ödülü al</b>. Günlük sandık ve başarımlar da <b>Ödüller</b> düğmesinde.', el: '#hQuest', tab: 'koy', btn: 'Devam' },
+  { t: 'Dünya haritası', p: 'Şimdi komşularına bakalım. Alttaki <b>Harita</b> sekmesine dokun.', el: '[data-tab=harita]', done: () => tab === 'harita' },
+  { t: 'Terk edilmiş köyler', p: 'Gri, yıkık yerler terk edilmiş köylerdir; yağma için idealdir. Birine dokun.', tab: 'harita', done: () => map.sel != null && S.vil[map.sel] && S.vil[map.sel].owner === null },
+  { t: 'Saldırı', p: 'Saldırmak için askere ihtiyacın var: Kışla kurup <b>Ordu</b> sekmesinden eğitirsin. Saldırmadan önce <b>Hesapla</b> ile sonucu görebilirsin.', el: '#mapcard', tab: 'harita', btn: 'Anladım' },
+  { t: 'İyi şanslar', p: 'Komşu beyler de büyüyor. Acemi koruman bitmeden güçlen, surunu yükselt ve bir klana katıl. Yolun açık olsun Bey!', btn: 'Oyuna başla' },
+];
+let tutLast = '';
+function tutActive() { const x = X(); if (x.tut === 'done') return false; if (x.tut == null) { if ((S.quests.claimed || []).length || C.ownerPts('P') > 200) { x.tut = 'done'; return false; } x.tut = 0; } return true; }
+function tutSkip() { X().tut = 'done'; tutLast = ''; for (const id of ['tutbox', 'tutring']) { const e = $(id); if (e) e.remove(); } save(); }
+function tutNext() { X().tut = (X().tut | 0) + 1; if (X().tut >= TUT.length) tutSkip(); else { save(); tutTick(); } }
+function tutRect(st) {
+  if (st.el) { const e = document.querySelector(st.el); if (e) { const r = e.getBoundingClientRect(); if (r.width) return r; } return null; }
+  if (st.bld && tab === 'koy') {
+    const h = (SC.body || []).find(x => x.b === st.bld), cv = $('scene'); if (!h || !cv) return null;
+    const cr = cv.getBoundingClientRect();
+    if (use3D()) return { left: cr.left + h.x0, top: cr.top + h.y0, width: h.x1 - h.x0, height: h.y1 - h.y0 };
+    const vi = viewInfo(); return { left: cr.left + vi.ox + h.x0 * vi.k, top: cr.top + vi.oy + h.y0 * vi.k, width: (h.x1 - h.x0) * vi.k, height: (h.y1 - h.y0) * vi.k };
+  }
+  return null;
+}
+function tutTick() {
+  if (!S || $('start') || !tutActive()) return;
+  const i = X().tut | 0, st = TUT[i]; if (!st) { tutSkip(); return; }
+  if (st.done && st.done()) { tutNext(); return; }
+  const wrongTab = st.tab && tab !== st.tab;
+  let box = $('tutbox');
+  const key = i + '|' + wrongTab;
+  if (!box || tutLast !== key) {
+    tutLast = key; if (box) box.remove();
+    if (st.bld && !wrongTab) { if (use3D()) V3.focusB(st.bld); else { const h = (SC.body || []).find(x => x.b === st.bld); if (h) { SC.cam.x = (h.x0 + h.x1) / 2; SC.cam.y = (h.y0 + h.y1) / 2 + 60; clampCam(); } } }
+    box = document.createElement('div'); box.id = 'tutbox'; box.className = 'tutbox';
+    box.innerHTML = `<div class="th">${esc(st.t)}<i>${i + 1}/${TUT.length}</i></div><p>${wrongTab ? `Önce alttaki <b>${{ koy: 'Köy', harita: 'Harita' }[st.tab]}</b> sekmesine geç.` : st.p}</p><div class="row"><button class="linkbtn" id="tutSkipB">Rehberi geç</button>${st.btn && !wrongTab ? `<button class="btn firuze" id="tutGo">${st.btn}</button>` : ''}</div>`;
+    document.body.appendChild(box);
+    $('tutSkipB').onclick = tutSkip; const g = $('tutGo'); if (g) g.onclick = () => { Sfx.play('tap'); tutNext(); };
+  }
+  let ring = $('tutring'); const r = wrongTab ? tutRect({ el: '[data-tab=' + st.tab + ']' }) : tutRect(st);
+  if (r) {
+    if (!ring) { ring = document.createElement('div'); ring.id = 'tutring'; ring.className = 'tutring'; document.body.appendChild(ring); }
+    const pad = 6; Object.assign(ring.style, { left: r.left - pad + 'px', top: r.top - pad + 'px', width: r.width + pad * 2 + 'px', height: r.height + pad * 2 + 'px' });
+    const below = r.top + r.height / 2 < innerHeight * .5; box.style.top = below ? Math.min(innerHeight - box.offsetHeight - 10, r.top + r.height + 18) + 'px' : ''; box.style.bottom = below ? '' : Math.min(innerHeight - 80, innerHeight - r.top + 18) + 'px';
+  } else { if (ring) ring.remove(); box.style.top = ''; box.style.bottom = '96px'; }
+}
+setInterval(() => { try { tutTick(); rewardsBadge(); } catch (e) {} }, 400);
+// günde bir kez sandık hatırlatması (öğretici bittikten sonra)
+function dailyPrompt() { if (!S) return; if (X().tut !== 'done') return; if (dailyState().claimed || X().dailyAsked === dayNo()) return; X().dailyAsked = dayNo(); setTimeout(() => { if (!$('ov') && S && !$('start')) openRewards('gun'); }, 1200); }
 
 // ---------- tabs ----------
 function renderTabs() {
@@ -871,9 +1069,10 @@ function renderKoy() {
     <div class="zoomctl"><button id="zIn" aria-label="Yakınlaştır">+</button><button id="zOut" aria-label="Uzaklaştır">−</button><button id="lblT" aria-label="Bina isimlerini gizle" aria-pressed="true"></button><button id="zFit" aria-label="Köyün tamamını göster"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button></div>
     <div class="pop" id="pop" hidden></div>
     <div class="hud-bot"><div id="hQuest"></div><div id="hQueue" class="qchips"></div>
-      <div class="hbtns">${S.test ? '<button class="btn firuze" id="fillB">Kaynakları doldur</button>' : ''}<button class="btn sec" id="techB">Teknoloji</button><button class="btn sec" id="allB">Binalar</button></div></div>
+      <div class="hbtns">${S.test ? '<button class="btn firuze" id="fillB">Kaynakları doldur</button>' : ''}<button class="btn sec" id="rewB">Ödüller<span class="gbadge" id="rewBadge" hidden></span></button><button class="btn sec" id="techB">Teknoloji</button><button class="btn sec" id="allB">Binalar</button></div></div>
   </div>`;
   $('allB').onclick = openBuildingList;
+  $('rewB').onclick = () => openRewards('gun');
   $('techB').onclick = () => openBuilding('medrese');
   const fb = $('fillB'); if (fb) fb.onclick = () => { C.fillRes(cur(), now()); save(); renderTop(); toast('Ambar dolduruldu', 'good'); };
   hudSig = {}; liveKoy();
@@ -1161,7 +1360,7 @@ function unitStats(u) {
 }
 function renderOrdu() {
   const v = cur();
-  let html = `<div class="pad"><h2 class="sec">Köydeki birlikler</h2><div class="ugrid" id="homeUnits"></div>`;
+  let html = `<div class="pad"><div class="qrow"><h2 class="sec">Köydeki birlikler</h2><button class="btn sec" id="simB">Savaş hesaplayıcı</button></div><div class="ugrid" id="homeUnits"></div>`;
   for (const rb of C.REC_B) {
     const B = C.B[rb], lvl = v.b[rb];
     html += `<section class="card"><div class="bt"><b style="font-family:var(--display);font-size:18px">${B.n}</b><span class="lv${lvl ? '' : ' zero'} num">${lvl ? 'Sv. ' + lvl : 'Yok'}</span></div>`;
@@ -1179,6 +1378,7 @@ function renderOrdu() {
   }
   html += `<h2 class="sec" id="movesBox">Hareketler</h2><section class="card" id="moves"></section></div>`;
   $('view').innerHTML = html;
+  $('simB').onclick = () => openSim(null);
 }
 function liveOrdu() {
   const v = cur(), t = now(); C.syncRes(v, t);
@@ -1323,7 +1523,7 @@ function mapCard() {
     <div class="small muted num">${own && v.id === S.cur ? 'Şu an yönettiğin köy.' : `${esc(me.name)} köyünden ${d.toFixed(1).replace('.', ',')} kare. Akıncıyla ${dur(C.travelTime(me, v, { akinci: 1 }))}, piyadeyle ${dur(C.travelTime(me, v, { mizrakli: 1 }))}.`}
     ${lastSpy ? `<br>Son keşif (${clock(lastSpy.t)}): ${lastSpy.spy.res.map(fmt).join(' / ')} kaynak, sur ${lastSpy.spy.b.sur}.` : ''}</div>
     <div class="chips">${own ? (v.id !== S.cur ? `<button class="btn sec" data-goto="${v.id}">Bu köye geç</button><button class="btn firuze" data-send="support">Destek gönder</button><button class="btn sec" data-res="1">Kaynak gönder</button>` : '')
-      : `<button class="btn" data-send="attack">Saldır</button><button class="btn firuze" data-send="spy">Çaşıt gönder</button><button class="btn sec" data-res="1">Kaynak gönder</button>`}</div>`;
+      : `<button class="btn" data-send="attack">Saldır</button><button class="btn sec" data-sim="1">Hesapla</button><button class="btn firuze" data-send="spy">Çaşıt gönder</button><button class="btn sec" data-res="1">Kaynak gönder</button>`}</div>`;
   $('mcClose').onclick = () => { map.sel = null; mapCard(); drawMap(); };
 }
 $('view').addEventListener('click', e => {
@@ -1331,6 +1531,7 @@ $('view').addEventListener('click', e => {
   const g = e.target.closest('[data-goto]'); if (g) { S.cur = +g.dataset.goto; map.sel = null; sig = ''; render(); return; }
   const s = e.target.closest('[data-send]'); if (s && map.sel != null) sendSheet(S.vil[map.sel], s.dataset.send);
   if (e.target.closest('[data-res]') && map.sel != null) resSheet(S.vil[map.sel]);
+  if (e.target.closest('[data-sim]') && map.sel != null) openSim(S.vil[map.sel]);
 });
 function resSheet(target) {
   const v = cur(), tot = C.merchantsTotal(v);
@@ -1492,11 +1693,15 @@ function klanInfoHTML() {
     h += `<section class="card"><div class="klanhead">${SHIELD(S.clan.tag)}<div><h2 class="sec" style="margin:0">${esc(S.clan.name)}</h2><div class="muted small num">[${esc(S.clan.tag)}] · ${mine.m.length}/${C.CLAN_MAX} üye · ${fmt(mine.m.reduce((a, o) => a + C.ownerPts(o), 0))} puan</div></div></div>
       <div>${memberRows(mine.m)}</div>
       <div class="muted small">Klan üyeleri birbirine saldırmaz. Köyüne saldırı geldiğinde müttefiklerin destek askeri gönderebilir.</div></section>`;
+    const freeH = S.beys.filter(b => b.human && !b.clan && S.vil.some(v => v.owner === b.id));
+    if (MPX && freeH.length && mine.m.length < C.CLAN_MAX) h += `<h2 class="sec">Oyuncuları davet et</h2><section class="card">${freeH.map(b => { const sent = (S.invites || []).some(x => x.owner === b.id && x.tag === S.clan.tag); return `<div class="mrow"><i class="sw" style="background:${b.color}"></i><span><b>${esc(b.name)}</b> <span class="ctag">OYUNCU</span><div class="muted small num">${pts(b.id)} puan</div></span><button class="btn sec" data-hinvite="${b.id}" ${sent ? 'disabled' : ''}>${sent ? 'Davet gitti' : 'Davet et'}</button></div>`; }).join('')}</section>`;
     if (!S.clanJoinedAi && mine.m.length < C.CLAN_MAX) {
       h += `<h2 class="sec">Davet et</h2><section class="card">${free.length ? free.map(b => `<div class="mrow"><i class="sw" style="background:${b.color}"></i><span><b>${esc(b.name)}</b><div class="muted small num">${pts(b.id)} puan${b.refusedUntil && t < b.refusedUntil ? ' · ' + dur(b.refusedUntil - t) + ' sonra tekrar' : ''}</div></span><button class="btn sec" data-invite="${b.id}" ${b.refusedUntil && t < b.refusedUntil ? 'disabled' : ''}>Davet et</button></div>`).join('') : '<div class="muted small">Klansız bey kalmadı.</div>'}</section>`;
     }
     h += `<button class="btn red" id="leaveClan" style="justify-self:start">Klandan ayrıl</button>`;
   } else {
+    const inv = (S.invites || []).filter(x => x.owner === 'P');
+    if (inv.length) h += `<h2 class="sec">Gelen davetler</h2>` + inv.map(x => `<section class="card"><div class="klanhead">${SHIELD(x.tag)}<div><b style="font-size:17px">${esc(x.name)}</b><div class="muted small">${esc(C.ownerName(x.from))} seni klana çağırıyor</div></div></div><div class="chips"><button class="btn firuze" data-iacc="${x.id}">Katıl</button><button class="btn sec" data-idec="${x.id}">Reddet</button></div></section>`).join('');
     h += `<section class="card"><h2 class="sec" style="margin:0">Klan kur</h2><div class="muted small">Kendi klanını kur, klansız beyleri davet et.</div>
       <form class="form2" id="clanForm"><input id="clanName" maxlength="24" placeholder="Klan adı" aria-label="Klan adı"><input id="clanTag" maxlength="4" placeholder="Kısaltma" aria-label="Klan kısaltması"><button class="btn" type="submit" style="grid-column:1/-1">Klanı kur</button></form></section>`;
     h += `<h2 class="sec">Klanlar</h2>` + clans.map(c => `<section class="card"><div class="klanhead">${SHIELD(c.tag)}<div><b style="font-size:17px">${esc(c.name)}</b><div class="muted small num">[${esc(c.tag)}] · ${c.m.length}/${C.CLAN_MAX} üye · ${fmt(c.m.reduce((a, o) => a + C.ownerPts(o), 0))} puan</div></div></div><div>${memberRows(c.m)}</div>
@@ -1511,6 +1716,12 @@ $('view').addEventListener('click', e => {
   if (inv) { const b = S.beys.find(x => x.id === inv.dataset.invite);
     const iid = inv.dataset.invite, r = act(() => C.inviteBey(iid, now()));
     toast(r === 'ok' ? b.name + ' klana katıldı!' : r === 'refused' ? b.name + ' davetini şimdilik reddetti. Güçlendikçe tekrar dene.' : r === 'full' ? 'Klan dolu' : 'Davet gönderilemedi', r === 'ok' ? 'good' : 'bad'); save(); sig = ''; render(); return; }
+  const hi = e.target.closest('[data-hinvite]');
+  if (hi) { const id = hi.dataset.hinvite, r = act(() => C.inviteHuman(id, now())); toast(r === 'ok' ? 'Davet gönderildi' : r === 'full' ? 'Klan dolu' : 'Davet gönderilemedi', r === 'ok' ? 'good' : 'bad'); save(); sig = ''; render(); return; }
+  const ia = e.target.closest('[data-iacc]');
+  if (ia) { const id = +ia.dataset.iacc, r = act(() => C.acceptInvite(id, now())); toast(r === 'ok' ? 'Klana katıldın!' : r === 'full' ? 'Klan dolu' : 'Davet artık geçerli değil', r === 'ok' ? 'good' : 'bad'); if (r === 'ok') Sfx.play('good'); save(); sig = ''; render(); return; }
+  const idc = e.target.closest('[data-idec]');
+  if (idc) { const id = +idc.dataset.idec; act(() => C.declineInvite(id)); save(); sig = ''; render(); return; }
   const j = e.target.closest('[data-join]');
   if (j) { const tg = j.dataset.join, r = act(() => C.joinClan(tg, now())); toast(r === 'ok' ? 'Klana katıldın!' : r === 'weak' ? 'Klan üyeleri seni henüz yeterince güçlü bulmuyor. Puanını artır.' : r === 'full' ? 'Klan dolu' : 'Katılamadın', r === 'ok' ? 'good' : 'bad'); save(); sig = ''; render(); return; }
   if (e.target.id === 'leaveClan') {
@@ -1574,6 +1785,20 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) save(
 addEventListener('pagehide', save);
 addEventListener('resize', () => { if (tab === 'harita') { sig = ''; render(); } });
 
+// Android geri tuşu: önce açık pencereyi kapat, sonra ana sekmeye dön, en son çıkışı sor
+window.__back = () => {
+  try {
+    if ($('tutbox')) { tutSkip(); return true; }
+    if ($('ov')) { const x = $('ov').querySelector('[data-close]'); closeSheet(); return true; }
+    if (SC.sel) { selectBuilding(null); return true; }
+    if (S && tab !== 'koy') { tab = 'koy'; renderTabs(); sig = ''; render(); return true; }
+    sheet(`<h3>Oyundan çıkılsın mı?</h3><div class="muted">İlerlemen kayıtlı. Dünya sen yokken de dönmeye devam eder.</div><div class="chips"><button class="btn red" id="exitYes">Çık</button><button class="btn sec" data-close>Oyuna dön</button></div>`, () => {
+      $('exitYes').onclick = () => { try { save(); } catch (e) {} if (window.UB && UB.exit) UB.exit(); };
+    });
+    $('ov').classList.add('center');
+    return true;
+  } catch (e) { return false; }
+};
 window.__ub = { SC, viewInfo, selectBuilding, clampCam, V3 };
 boot();
 })();

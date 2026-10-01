@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.os.Bundle;
 import android.view.View;
 import android.view.WindowManager;
+import android.webkit.JavascriptInterface;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -29,6 +30,10 @@ public class MainActivity extends Activity {
         webView.setWebViewClient(new WebViewClient());
         webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
 
+        // oyun içinden "Çık" denince uygulamayı kapatmak için
+        webView.addJavascriptInterface(new Object() {
+            @JavascriptInterface public void exit() { runOnUiThread(() -> finish()); }
+        }, "UB");
         setContentView(webView);
         webView.loadUrl("file:///android_asset/index.html");
     }
@@ -45,6 +50,14 @@ public class MainActivity extends Activity {
                     | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
                     | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
         }
+    }
+
+    // Geri tuşu: önce oyun kendisi karar verir (pencereyi kapatır, sekmeye döner, çıkışı sorar)
+    @Override
+    public void onBackPressed() {
+        webView.evaluateJavascript("(window.__back && window.__back()) ? 'y' : 'n'", v -> {
+            if (v == null || !v.contains("y")) MainActivity.super.onBackPressed();
+        });
     }
 
     @Override

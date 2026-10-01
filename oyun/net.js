@@ -65,7 +65,7 @@ function localize(W, hid) {
   S.player = { name: me.name, color: me.color };
   S.tech = me.tech || {}; S.techq = me.techq || null;
   S.clan = me.clan ? { name: me.clanName, tag: me.clan, created: me.clanAt || 0 } : null; S.clanJoinedAi = !!me.clanJoinedAi;
-  S.stats = me.stats || { trained: {}, barbWins: 0, spies: 0 };
+  S.stats = me.stats || { trained: {}, barbWins: 0, spies: 0 }; S.extra = me.extra || {}; S.invites = S.invites || [];
   S.protectUntil = me.protectUntil || 0; S.reports = me.reports || []; S.quests = me.quests || { claimed: [] };
   S.cur = me.cur != null && S.vil[me.cur] && S.vil[me.cur].owner === 'P' ? me.cur : (S.vil.find(v => v.owner === 'P') || { id: 0 }).id;
   S.clanChat = S.clanChat || {}; if (S.clan) S.clanChat[S.clan.tag] = S.clanChat[S.clan.tag] || [];
@@ -79,12 +79,12 @@ function delocalize(S0) {
   const S = JSON.parse(JSON.stringify(S0)), m = S._me;
   const me = { id: m.hid, human: true, uid: m.uid, name: S.player.name, color: S.player.color, aggr: 0, lastHitP: 0,
     clan: S.clan ? S.clan.tag : null, clanName: S.clan ? S.clan.name : null, clanAt: S.clan ? S.clan.created : 0, clanJoinedAi: !!S.clanJoinedAi,
-    tech: S.tech, techq: S.techq, stats: S.stats, protectUntil: S.protectUntil, reports: S.reports, quests: S.quests, cur: S.cur };
+    tech: S.tech, techq: S.techq, stats: S.stats, extra: S.extra, protectUntil: S.protectUntil, reports: S.reports, quests: S.quests, cur: S.cur };
   swapIds(S, 'P', m.hid);
   if (S.clan) S.clanChat[S.clan.tag] = S.chat.klan;
   S.chat = { genel: S.chat.genel, klan: [] };
   S.beys.splice(Math.min(m.idx, S.beys.length), 0, me);
-  for (const k of ['_me', 'player', 'tech', 'techq', 'clan', 'clanJoinedAi', 'stats', 'protectUntil', 'reports', 'quests', 'cur', 'chatSeen', 'over', 'pendingRes', 'pendingSupport']) delete S[k];
+  for (const k of ['_me', 'player', 'tech', 'techq', 'clan', 'clanJoinedAi', 'stats', 'extra', 'protectUntil', 'reports', 'quests', 'cur', 'chatSeen', 'over', 'pendingRes', 'pendingSupport']) delete S[k];
   return S;
 }
 // yeni oyuncuya haritada boş bir köy verir (diğer oyunculardan ve beylerden uzakta)
@@ -156,7 +156,16 @@ async function myWorlds() {
     .sort((x, y) => String(y.updated).localeCompare(String(x.updated)));
 }
 async function players(id) { return api('/rest/v1/world_players?select=hid,name,joined_at&world_id=eq.' + id + '&order=joined_at'); }
+// sunucu saati: en kısa gidiş-dönüşlü ölçümden saat farkı (fonksiyon yoksa 0 kalır)
+let offset = 0, bestRtt = Infinity;
+async function syncClock() {
+  for (let i = 0; i < 3; i++) {
+    try { const t0 = Date.now(), sv = await rpc('server_now', {}), t1 = Date.now(); if (typeof sv === 'number' && t1 - t0 < bestRtt) { bestRtt = t1 - t0; offset = Math.round(sv - (t0 + t1) / 2); } }
+    catch (e) { return offset; }
+  }
+  return offset;
+}
 async function leaveWorld(id) { const a = await session(); return api('/rest/v1/world_players?world_id=eq.' + id + '&user_id=eq.' + a.uid, { method: 'DELETE' }); }
 
-return { session, createWorld, joinWorld, load, save, version, myWorlds, players, leaveWorld, localize, delocalize, addHuman, normCode, get uid() { return auth && auth.uid; } };
+return { syncClock, get offset() { return offset; }, session, createWorld, joinWorld, load, save, version, myWorlds, players, leaveWorld, localize, delocalize, addHuman, normCode, get uid() { return auth && auth.uid; } };
 })();
