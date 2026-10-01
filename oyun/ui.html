@@ -354,6 +354,7 @@ input.qty{width:74px;background:var(--bg);border:1px solid var(--line);border-ra
 .start .kicker{text-align:center;color:var(--firuze);letter-spacing:.2em;text-transform:uppercase;font-size:12px;font-weight:800}
 .start p{margin:0;color:var(--text);text-align:center;font-size:16px;line-height:1.45}
 .field{display:grid;gap:4px;font-size:13px;color:var(--muted);font-weight:700}
+.field select{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:9px 12px;color:var(--text);font:inherit;font-size:16px;font-weight:700}
 .field input{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:9px 12px;color:var(--text);font:inherit;font-size:16px;font-weight:700}
 .speeds{display:grid;gap:6px}
 .speeds label{display:grid;grid-template-columns:auto 1fr;gap:0 10px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px 12px;cursor:pointer}
@@ -1779,14 +1780,26 @@ function resSheet(target) {
     upd();
   });
 }
-function sendSheet(target, type) {
-  const v = cur();
-  const units = C.U_ORDER.filter(u => (type === 'spy' ? u === 'casus' : true) && (v.units[u] || 0) > 0);
+function sendSheet(target, type, fromId) {
+  const fit = u => type === 'spy' ? u === 'casus' : true;
+  const cnt = x => C.U_ORDER.filter(fit).reduce((a, u) => a + (x.units[u] || 0), 0);
+  const mine = S.vil.filter(x => x.owner === 'P' && x.id !== target.id);
+  // kaynak köy: seçilen, yoksa şu anki köy; şu anki köyde uygun asker yoksa en çok askeri olan köy
+  let v = fromId != null && S.vil[fromId] && S.vil[fromId].owner === 'P' ? S.vil[fromId] : cur();
+  // savaşan asker (sancakbeyi hariç) az olan köy seçiliyse en kalabalık köyden başla
+  const fight = x => C.U_ORDER.filter(u => fit(u) && (type === 'spy' || u !== 'sancakbeyi')).reduce((a, u) => a + (x.units[u] || 0), 0);
+  if (fromId == null) { const best = mine.slice().sort((a, b) => fight(b) - fight(a))[0]; if (best && (v.id === target.id || v.owner !== 'P' || fight(v) * 5 < fight(best))) v = best; }
+  const units = C.U_ORDER.filter(u => fit(u) && (v.units[u] || 0) > 0);
+  const away = {}; for (const m of S.moves) if (m.owner === 'P' && (m.from === v.id || m.to === v.id) && m.type !== 'trade' && m.type !== 'tradeback') for (const [u, n] of Object.entries(m.units || {})) if (fit(u)) away[u] = (away[u] || 0) + n;
+  const awayTxt = Object.entries(away).filter(([u]) => !(v.units[u] > 0)).map(([u, n]) => fmt(n) + ' ' + C.U[u].n).join(', ');
+  const pick = mine.length > 1 ? `<label class="field">Hangi köyden?<select id="sendFrom">${mine.map(x => `<option value="${x.id}" ${x.id === v.id ? 'selected' : ''}>${esc(x.name)} · ${fmt(cnt(x))} asker</option>`).join('')}</select></label>` : '';
   const title = type === 'attack' ? 'Saldırı' : type === 'spy' ? 'Keşif' : 'Destek';
   const rows = units.map(u => `<div class="sendrow"><div><b>${C.U[u].n}</b><div class="muted small num">elde ${fmt(v.units[u])}</div></div>
     <input class="qty num" type="number" min="0" inputmode="numeric" id="s-${u}" placeholder="0" aria-label="${C.U[u].n}"><button class="maxb" data-all="${u}">tümü</button></div>`).join('');
   sheet(`<div class="shead"><div><h3>${title}: ${esc(target.name)}</h3><div class="muted small num">${esc(C.ownerName(target.owner))} · (${target.x}|${target.y}) · ${esc(v.name)} köyünden</div></div><button class="x" data-close aria-label="Kapat">×</button></div>
+    ${pick}
     ${rows || `<div class="muted">${type === 'spy' ? 'Bu köyde çaşıt yok. Ahır kurup çaşıt yetiştir.' : 'Bu köyde gönderilecek asker yok.'}</div>`}
+    ${awayTxt ? `<div class="muted small">Yolda olduğu için gönderilemez: ${awayTxt}</div>` : ''}
     ${rows ? `<div class="sum num" id="sendSum"></div><button class="btn${type === 'attack' ? '' : ' firuze'}" id="sendGo">${type === 'attack' ? 'Saldırıyı başlat' : type === 'spy' ? 'Çaşıtları gönder' : 'Desteği gönder'}</button>` : ''}
     ${type === 'attack' && target.owner === null ? '<div class="muted small">İpucu: terk edilmiş köyler yağma için idealdir. Önce çaşıt göndermek savunmasını gösterir. Akıncılar en çok ganimeti taşır.</div>' : ''}`, box => {
     const read = () => { const o = {}; for (const u of units) { const n = Math.floor(+$('s-' + u).value || 0); if (n > 0) o[u] = Math.min(n, v.units[u] || 0); } return o; };
@@ -1797,6 +1810,7 @@ function sendSheet(target, type) {
       sum.innerHTML = `<div>Yol süresi<b>${dur(tt)}</b></div><div>Varış<b>${clock(now() + tt)}</b></div>${type === 'attack' ? `<div>Saldırı gücü<b>${fmt(att)}</b></div><div>Taşıma<b>${fmt(cap)}</b></div>` : ''}`;
       $('sendGo').disabled = false;
     };
+    const sf = $('sendFrom'); if (sf) sf.onchange = () => sendSheet(target, type, +sf.value);
     box.addEventListener('input', upd);
     box.addEventListener('click', e => {
       const a = e.target.closest('[data-all]'); if (a) { $('s-' + a.dataset.all).value = v.units[a.dataset.all] || 0; upd(); }
