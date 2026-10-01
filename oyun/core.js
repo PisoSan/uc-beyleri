@@ -103,6 +103,7 @@ const beyOf = o => (o && o !== 'P' ? S.beys.find(x => x.id === o) : null);
 const isHuman = o => o === 'P' || !!(beyOf(o) || {}).human;
 const protectOf = o => (o === 'P' ? S.protectUntil : ((beyOf(o) || {}).human ? beyOf(o).protectUntil || 0 : 0));
 function statsOf(o) { if (o === 'P') return S.stats; const b = beyOf(o); if (!b || !b.human) return null; return b.stats || (b.stats = { trained: {}, barbWins: 0, spies: 0 }); }
+const addSt = (o, k, n) => { const st = statsOf(o); if (st && n) st[k] = (st[k] || 0) + n; };
 const lastVillage = o => S.vil.filter(v => v.owner === o).length < 2;
 const beyShort = o => (o === 'P' ? S.player.name : ownerName(o).replace('oğulları', ''));
 function createClan(name, tag, t) {
@@ -549,7 +550,7 @@ function migrate(st) {
   if (st.techq === undefined) st.techq = null;
   if (st.rs == null) st.rs = (st.seed || 1) ^ 0x5bd1e995;
   if (!st.extra) st.extra = {}; if (!st.invites) st.invites = []; if (!st.rel) st.rel = []; if (!st.dipl) st.dipl = []; if (!st.clanMeta) st.clanMeta = {};
-  for (const v of st.vil) { if (v.b.medrese == null) v.b.medrese = 0; if (v.b.kervansaray == null) v.b.kervansaray = 0; }
+  for (const v of st.vil) { if (v.guest) { for (const [u, n] of Object.entries(v.guest)) if (n > 0) v.units[u] = (v.units[u] || 0) + n; delete v.guest; } if (v.b.medrese == null) v.b.medrese = 0; if (v.b.kervansaray == null) v.b.kervansaray = 0; }
   return st;
 }
 function canUpgrade(v, b) {
@@ -607,11 +608,11 @@ function send(from, to, units, type, t) {
   if (!unitSum(clean)) return 'empty';
   if (from.id === to.id) return 'self';
   if (type === 'spy' && Object.keys(clean).some(u => u !== 'casus')) return 'spyonly';
-  if (type === 'support' && to.owner !== from.owner) return 'notown';
+  if (type === 'support' && to.owner === null) return 'barb';
   if (type === 'attack' && to.owner === from.owner) return 'own';
   if (type === 'attack' && sameClan(to.owner, from.owner)) return 'ally';
   if (type !== 'support' && (relOwners(from.owner, to.owner) === 'ittifak' || relOwners(from.owner, to.owner) === 'nap')) return 'pact';
-  if (isHuman(to.owner) && from.owner !== to.owner && t < protectOf(to.owner)) return 'protected';
+  if (type !== 'support' && isHuman(to.owner) && from.owner !== to.owner && t < protectOf(to.owner)) return 'protected';
   for (const [u, k] of Object.entries(clean)) from.units[u] -= k;
   const dur = travelTime(from, to, clean);
   S.moves.push({ id: ++S.uid, type, owner: from.owner, from: from.id, to: to.id, units: clean, loot: [0, 0, 0], depart: t, arrive: t + dur });
@@ -649,8 +650,9 @@ function battle(m, t) {
   const wallEff = Math.max(0, dv.b.sur - Math.floor(rams / 3));
   let Di = 0, Dc = 0;
   for (const [u, n] of Object.entries(dv.units)) { if (U[u].cls === 'spy') continue; Di += U[u].di * n; Dc += U[u].dc * n; }
-  for (const [u, n] of Object.entries(dv.guest || {})) { Di += U[u].di * n; Dc += U[u].dc * n; }
-  if (dv.guest && unitSum(dv.guest)) rep.guest = Object.assign({}, dv.guest);
+  const supAll = supUnits(dv);
+  for (const [u, n] of Object.entries(supAll)) { if (U[u].cls === 'spy') continue; Di += U[u].di * n; Dc += U[u].dc * n; }
+  if (unitSum(supAll)) rep.guest = supAll;
   const Dmix = A0 > 0 ? (Di * Ai + Dc * Ac) / A0 : Di;
   const D = (Dmix * (1 + TX(dv.owner, 'zirh')) + 20 + 40 * wallEff) * Math.pow(1.037, wallEff * (1 + TX(dv.owner, 'burc')));
   const luck = R() * 0.3 - 0.15; rep.luck = luck;
@@ -662,7 +664,7 @@ function battle(m, t) {
     const r = Math.pow(D / A, 1.5);
     for (const [u, n] of Object.entries(att)) { if (u === 'casus') continue; const lost = Math.round(n * r); if (lost) { rep.aLost[u] = (rep.aLost[u] || 0) + lost; att[u] = n - lost; } }
     for (const [u, n] of Object.entries(dv.units)) { if (u === 'casus' || !n) continue; rep.dLost[u] = n; dv.units[u] = 0; }
-    dv.guest = {};
+    rep.supLost = supLose(dv, 1);
     if (rams > 0) { dv.b.sur = wallEff; rep.wall = [rep.wall[0], wallEff]; }
     // ganimet
     let capy = 0; for (const [u, n] of Object.entries(att)) capy += U[u].cr * n * (1 + TX(m.owner, 'kervan'));
@@ -681,7 +683,6 @@ function battle(m, t) {
       const before = dv.loy; let drop = 0;
       for (let i = 0; i < att.sancakbeyi; i++) drop += 20 + R() * 15 + TX(m.owner, 'sancak');
       dv.loy = Math.max(0, dv.loy - drop); rep.loy = [Math.floor(before), Math.floor(dv.loy)];
-      if (dv.loy <= 0 && isHuman(dv.owner) && lastVillage(dv.owner)) { dv.loy = 1; rep.loy[1] = 1; }   // oyuncunun son köyü fethedilmez
       if (dv.loy <= 0) {
         const prev = dv.owner;
         att.sancakbeyi--;
@@ -693,7 +694,10 @@ function battle(m, t) {
         say('genel', 'SYS', ownerName(m.owner) + ', ' + dv.name + ' köyünü fethetti.', t);
         hooks.notify(m.owner === 'P' ? 'good' : (prev === 'P' ? 'bad' : 'info'),
           m.owner === 'P' ? dv.name + ' artık senin!' : (prev === 'P' ? dv.name + ' düştü!' : ownerName(m.owner) + ', ' + dv.name + ' köyünü fethetti'));
-        if (prev === 'P' && !S.mp) { if (S.cur === dv.id) { const mine = S.vil.find(x => x.owner === 'P'); if (mine) S.cur = mine.id; } if (!S.vil.some(x => x.owner === 'P')) S.over = true; }
+        addSt(prev, 'lostVil', 1);
+        if (prev && isHuman(prev) && !S.vil.some(x => x.owner === prev)) { addSt(prev, 'fell', 1); say('genel', 'SYS', ownerName(prev) + ' beyliği son köyünü de kaybetti.', t); }
+        if (prev === 'P') { if (S.cur === dv.id) { const mine = S.vil.find(x => x.owner === 'P'); if (mine) S.cur = mine.id; } if (!S.vil.some(x => x.owner === 'P')) S.over = true; }
+        warBattle(rep, t); battleStats(rep);
         pushReport(rep);
         return;
       }
@@ -703,11 +707,21 @@ function battle(m, t) {
     for (const [u, n] of Object.entries(att)) { if (u === 'casus' || !n) continue; rep.aLost[u] = (rep.aLost[u] || 0) + n; att[u] = 0; }
     const r = A0 > 0 ? Math.pow(A / D, 1.5) : 0;
     for (const [u, n] of Object.entries(dv.units)) { if (u === 'casus' || !n) continue; const lost = Math.round(n * r); if (lost) { rep.dLost[u] = lost; dv.units[u] = n - lost; } }
-    if (dv.guest) for (const u in dv.guest) dv.guest[u] -= Math.round(dv.guest[u] * r);
+    rep.supLost = supLose(dv, r);
     const survivors = unitSum(att);
     if (!survivors && isHuman(m.owner) && !spyOk) rep.dUnits = null;   // kimse dönmedi, rakibi göremedik
   }
   finishBattle(m, rep, att, dv, t);
+}
+function battleStats(rep) {
+  if (rep.type === 'spy') return;
+  const dl = unitSum(rep.dLost || {}), al = unitSum(rep.aLost || {});
+  let sl = 0; for (const x of rep.supLost || []) { const n = unitSum(x.u); sl += n; addSt(x.owner, 'lost', n); }
+  addSt(rep.attOwner, 'kills', dl + sl); addSt(rep.attOwner, 'lost', al); addSt(rep.attOwner, 'attacks', 1);
+  addSt(rep.attOwner, 'loot', (rep.loot || [0, 0, 0]).reduce((a, b) => a + b, 0));
+  addSt(rep.defOwner, 'kills', al); addSt(rep.defOwner, 'lost', dl);
+  if (!rep.win) addSt(rep.defOwner, 'defWins', 1);
+  for (const x of rep.supLost || []) if (x.owner !== rep.defOwner) addSt(x.owner, 'kills', Math.round(al * unitSum(x.u) / Math.max(1, dl + sl)));
 }
 function finishBattle(m, rep, att, dv, t) {
   const back = {}; for (const [u, n] of Object.entries(att)) if (n > 0) back[u] = n;
@@ -716,6 +730,7 @@ function finishBattle(m, rep, att, dv, t) {
     S.moves.push({ id: ++S.uid, type: 'return', owner: m.owner, from: m.from, to: m.from, via: m.to, units: back, loot: rep.loot.slice(), depart: t, arrive: t + travelTime(dv, from, back) });
   }
   warBattle(rep, t);
+  battleStats(rep);
   pushReport(rep);
 }
 function pushReport(rep) {
@@ -730,6 +745,65 @@ function pushReport(rep) {
   if (rep.defOwner === 'P' && rep.attOwner !== 'P') hooks.notify(rep.win ? 'bad' : 'good', rep.defName + (rep.win ? ' yağmalandı' : ' saldırıyı püskürttü'));
   else if (rep.attOwner === 'P') hooks.notify(rep.win ? 'good' : 'bad', (rep.type === 'spy' ? 'Keşif: ' : 'Saldırı: ') + rep.defName + (rep.win ? ' — başarılı' : ' — başarısız'));
 }
+// ---------- başka köylerdeki destek askerleri ----------
+// v.sup = [{ owner, from (köy no), units }]
+function addSup(v, owner, from, units) {
+  v.sup = v.sup || [];
+  let e = v.sup.find(x => x.owner === owner && x.from === from);
+  if (!e) { e = { owner, from, units: {} }; v.sup.push(e); }
+  for (const [u, n] of Object.entries(units)) if (n > 0) e.units[u] = (e.units[u] || 0) + n;
+}
+function supUnits(v) { const o = {}; for (const e of v.sup || []) for (const [u, n] of Object.entries(e.units)) if (n > 0) o[u] = (o[u] || 0) + n; return o; }
+function supLose(v, r) {
+  const lost = [];
+  for (const e of v.sup || []) {
+    const l = {}; for (const [u, n] of Object.entries(e.units)) { const k = r >= 1 ? n : Math.round(n * r); if (k > 0) { l[u] = k; e.units[u] = n - k; } }
+    if (unitSum(l)) lost.push({ owner: e.owner, u: l });
+  }
+  v.sup = (v.sup || []).filter(e => unitSum(e.units) > 0);
+  return lost;
+}
+function supHome(owner, prefer, near) {
+  const p = vil(prefer); if (p && p.owner === owner) return p;
+  return S.vil.filter(x => x.owner === owner).sort((a, b) => dist(a, near) - dist(b, near))[0] || null;
+}
+// kendi destek askerlerini geri çek (o = 'P' ya da köyün sahibi askerleri geri yollar)
+function recallSup(vid, owner, from, t, by) {
+  const v = vil(vid); if (!v || !v.sup) return 'none';
+  const e = v.sup.find(x => x.owner === owner && x.from === from); if (!e) return 'none';
+  const who = by || 'P';
+  if (who !== owner && who !== v.owner) return 'perm';
+  const home = supHome(owner, from, v); if (!home) return 'nohome';
+  v.sup = v.sup.filter(x => x !== e);
+  const units = Object.fromEntries(Object.entries(e.units).filter(([, n]) => n > 0)); if (!unitSum(units)) return 'none';
+  S.moves.push({ id: ++S.uid, type: 'return', owner, from: home.id, to: home.id, via: v.id, units, loot: [0, 0, 0], depart: t, arrive: t + travelTime(v, home, units) });
+  return 'ok';
+}
+// köysüz kalan oyuncu bu dünyada yeniden başlar: diğerlerinden uzak boş bir köy
+function respawn(t, name) {
+  if (S.vil.some(v => v.owner === 'P')) return 'alive';
+  const occupied = S.vil.filter(v => v.owner !== null);
+  let best = null, bs = Infinity;
+  for (const v of S.vil) {
+    if (v.owner !== null || S.moves.some(m => m.to === v.id && m.type === 'attack')) continue;
+    const near = occupied.length ? Math.min(...occupied.map(o => dist(o, v))) : 9;
+    if (near < 3) continue;
+    const sc = Math.abs(near - 5) * 2 + dist(v, { x: 12, y: 12 }) * .3;
+    if (sc < bs) { bs = sc; best = v; }
+  }
+  if (!best) best = S.vil.find(v => v.owner === null);
+  if (!best) return 'full';
+  const nv = mkVillage(best.id, best.x, best.y, String(name || best.name).slice(0, 22), 'P',
+    { konak: 1, kereste: 1, tas: 1, demir: 1, ambar: 1, ciftlik: 1 }, {}, [500, 500, 400], t);
+  S.vil[best.id] = nv;
+  S.moves = S.moves.filter(m => m.to !== best.id || m.type === 'return' || m.type === 'tradeback');
+  S.cur = best.id; S.over = false;
+  S.protectUntil = t + 24 * HOUR / S.speed;
+  addSt('P', 'restarts', 1);
+  say('genel', 'SYS', S.player.name + ' küllerinden doğdu: ' + nv.name + ' köyünde yeniden sancak açtı.', t);
+  return 'ok';
+}
+
 // ---------- savaş hesaplayıcı (durumu değiştirmez; savaş formülünün aynısı) ----------
 function simulate(att, def, wall, luck, aOwner = 'P', dOwner = null) {
   att = Object.assign({}, att); def = Object.assign({}, def);
@@ -893,7 +967,11 @@ function arrive(m, t) {
   }
   if (m.type === 'support') {
     if (to.owner === m.owner) { for (const [u, n] of Object.entries(m.units)) to.units[u] = (to.units[u] || 0) + n; }
-    else if (sameClan(to.owner, m.owner)) { to.guest = to.guest || {}; for (const [u, n] of Object.entries(m.units)) to.guest[u] = (to.guest[u] || 0) + n; hooks.notify('good', ownerName(m.owner) + ' destek askerleri ' + to.name + ' köyüne ulaştı'); }
+    else if (to.owner !== null) {
+      addSup(to, m.owner, m.from, m.units);
+      if (to.owner === 'P') hooks.notify('good', ownerName(m.owner) + ' destek askerleri ' + to.name + ' köyüne ulaştı');
+      else if (m.owner === 'P') hooks.notify('good', 'Destek askerlerin ' + to.name + ' köyüne ulaştı');
+    }
     else S.moves.push({ id: ++S.uid, type: 'return', owner: m.owner, from: m.from, to: m.from, via: m.to, units: m.units, loot: [0, 0, 0], depart: t, arrive: t + travelTime(to, from, m.units) });
     return;
   }
@@ -976,7 +1054,7 @@ const AI = (() => {
   const OFF = ['baltaci', 'akinci', 'sipahi', 'mancinik'];
   function offPower(units) { let a = 0; for (const u of OFF) a += U[u].a * (units[u] || 0); return a; }
   function defPower(v) {
-    let di = 0, dc = 0; for (const [u, n] of Object.entries(v.units)) { if (U[u].cls === 'spy') continue; di += U[u].di * n; dc += U[u].dc * n; }
+    let di = 0, dc = 0; for (const [u, n] of Object.entries(Object.assign({}, supUnits(v), v.units))) { if (U[u].cls === 'spy') continue; di += U[u].di * n; dc += U[u].dc * n; }
     return ((di + dc) / 2 + 20 + 40 * v.b.sur) * Math.pow(1.037, v.b.sur);
   }
   function pickBuild(v) {
@@ -1074,8 +1152,7 @@ const AI = (() => {
       if (!best) continue;
       const units = {}; for (const u of OFF) if (v.units[u] > 0) units[u] = v.units[u];
       // oyuncunun son köyü fethedilmez: yağmalanabilir ama beylik yok olmaz
-      const pLast = isHuman(best.owner) && lastVillage(best.owner);
-      if ((v.units.sancakbeyi || 0) > 0 && off > defPower(best) * 2 && !pLast && (best.owner === null || bey.aggr > .6)) units.sancakbeyi = 1;
+      if ((v.units.sancakbeyi || 0) > 0 && off > defPower(best) * 2 && (best.owner === null || bey.aggr > .6)) units.sancakbeyi = 1;
       if (send(v, best, units, 'attack', t) === 'ok') { if (isHuman(best.owner)) { bey.lastHitP = t; allySupport(best, bey.id, t); } return; }
     }
   }
@@ -1094,7 +1171,7 @@ const AI = (() => {
 
 return {
   HOUR, RES_NAMES, MINES, B, B_ORDER, U, U_ORDER, REC_B, WORLD, TECH, TECH_ORDER,
-  reqFor, simulate, RANKS, RELS, DIPK, members, leaderOf, rankOf, canDo, cmeta, setRank, kickMember, setDesc, relOf, relEntry, relOwners, clanPts, clanName, humanDecider, declareWar, proposeRel, answerRel, cancelRel, breakRel, inviteHuman, acceptInvite, declineInvite, isHuman, protectOf, mkVillage, clanOf, sameClan, clanList, ownerPts, createClan, inviteBey, joinClan, leaveClan, playerSay, CLAN_MAX, techCost, techTime, canResearch, research, migrate, medreseMax, TL,
+  reqFor, simulate, statsOf, addSup, supUnits, recallSup, respawn, RANKS, RELS, DIPK, members, leaderOf, rankOf, canDo, cmeta, setRank, kickMember, setDesc, relOf, relEntry, relOwners, clanPts, clanName, humanDecider, declareWar, proposeRel, answerRel, cancelRel, breakRel, inviteHuman, acceptInvite, declineInvite, isHuman, protectOf, mkVillage, clanOf, sameClan, clanList, ownerPts, createClan, inviteBey, joinClan, leaveClan, playerSay, CLAN_MAX, techCost, techTime, canResearch, research, migrate, medreseMax, TL,
   get S() { return S; }, set S(x) { S = x; },
   onNotify(fn) { log = fn; },
   maxAll(v, t) { syncRes(v, t); for (const b of B_ORDER) v.b[b] = B[b].max; v.bq = []; const c = cap(v); v.res = [c, c, c]; },

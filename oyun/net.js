@@ -169,7 +169,10 @@ async function syncClock() {
 const registerPush = token => rpc('register_push', { p_token: token });
 const unregisterPush = token => rpc('unregister_push', { p_token: token });
 const queuePush = (world, hid, delaySec, title, body, tag, ch) => rpc('queue_push', { p_world: world, p_hid: hid, p_delay: Math.max(0, Math.round(delaySec)), p_title: title, p_body: body, p_tag: tag, p_ch: ch || 'saldiri' });
+// istatistikler: bu dünyadaki sayılar sunucuda saklanır, tüm dünyaların toplamı oyuncu kartında gösterilir
+const putStats = (world, name, stats) => rpc('put_stats', { p_world: world, p_name: name, p_stats: stats });
+const globalStats = uid => rpc('global_stats', { p_uid: uid });
 async function leaveWorld(id) { const a = await session(); return api('/rest/v1/world_players?world_id=eq.' + id + '&user_id=eq.' + a.uid, { method: 'DELETE' }); }
 
-return { registerPush, unregisterPush, queuePush, syncClock, get offset() { return offset; }, session, createWorld, joinWorld, load, save, version, myWorlds, players, leaveWorld, localize, delocalize, addHuman, normCode, get uid() { return auth && auth.uid; } };
+return { putStats, globalStats, registerPush, unregisterPush, queuePush, syncClock, get offset() { return offset; }, session, createWorld, joinWorld, load, save, version, myWorlds, players, leaveWorld, localize, delocalize, addHuman, normCode, get uid() { return auth && auth.uid; } };
 })();

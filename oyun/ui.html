@@ -156,6 +156,25 @@ h2.sec{font-family:var(--display);font-size:17px;font-weight:700;margin:4px 0 0;
 .clog{font-size:13px;display:grid;gap:3px}
 .clog div{display:flex;gap:8px} .clog .tm{color:var(--muted);flex:none;font-variant-numeric:tabular-nums}
 .cdesc{font-style:italic;color:var(--text);opacity:.9}
+[data-pc],[data-cc]{cursor:pointer}
+b[data-pc]:hover,span[data-pc]:hover{text-decoration:underline}
+.pchead{display:flex;gap:12px;align-items:center}
+.pchead .av{width:46px;height:46px;border-radius:12px;display:grid;place-items:center;font-family:var(--display);font-size:24px;font-weight:800;color:#0f1829;flex:none}
+.pchead h3{margin:0}
+.kv3{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.kv3>div{background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:6px 8px;text-align:center;font-size:12px;color:var(--muted)}
+.kv3 b{display:block;font-size:17px;color:var(--text);font-variant-numeric:tabular-nums}
+.stg{display:grid;grid-template-columns:1fr auto;gap:2px 10px;font-size:13.5px}
+.stg span:nth-child(even){text-align:right;font-weight:800;font-variant-numeric:tabular-nums}
+.vrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;padding:6px 0;border-top:1px solid var(--line);font-size:13.5px;text-align:left;background:none;border-left:0;border-right:0;border-bottom:0;color:inherit;width:100%;font-family:inherit}
+.vrow:first-child{border-top:0}
+.acts{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.over{display:grid;gap:10px}
+.over h3{font-size:24px;text-align:center;margin:0;font-family:var(--display);color:var(--gold)}
+.over .flag{width:70px;height:70px;margin:0 auto;opacity:.85}
+.over p{margin:0;text-align:center;line-height:1.45}
+.suprow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 10px;align-items:center;padding:7px 0;border-top:1px solid var(--line)}
+.suprow:first-of-type{border-top:0}
 .seg{display:grid;grid-template-columns:repeat(3,1fr);background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:3px;gap:3px}
 .seg button{background:none;border:0;border-radius:9px;padding:7px 0;font-weight:800;font-size:14px;color:var(--muted);cursor:pointer;position:relative}
 .seg button.on{background:var(--panel-2);color:var(--gold)}
@@ -514,7 +533,7 @@ const myVillages = () => S.vil.filter(v => v.owner === 'P');
 const LS = { get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }, del(k) { try { localStorage.removeItem(k); } catch (e) {} } };
 function save() {
   if (!S) return; S.lastT = now(); lastSave = now(); notifySoon();
-  if (MPX) { LS.set('ub-mp-cache-' + MPX.id, { S, ver: MPX.ver }); return; }
+  if (MPX) { LS.set('ub-mp-cache-' + MPX.id, { S, ver: MPX.ver }); pushStats(); return; }
   store.set(JSON.stringify(S));
 }
 
@@ -1016,6 +1035,7 @@ $('tabs').addEventListener('click', e => {
 function render() {
   if (!S) return;
   C.processUntil(now());
+  if (!S.vil.some(v => v.owner === 'P')) S.over = true;
   renderTop();
   const view = $('view');
   view.classList.toggle('flush', tab === 'harita' || tab === 'klan' || tab === 'koy');
@@ -1028,10 +1048,10 @@ function tabSig() {
   const v = cur();
   const base = tab + '|' + S.cur + '|' + v.owner;
   if (tab === 'koy') return base;
-  if (tab === 'ordu') return base + JSON.stringify(v.b);
+  if (tab === 'ordu') return base + JSON.stringify(v.b) + JSON.stringify(S.vil.filter(x => (x.sup || []).some(e => e.owner === 'P') || (x.owner === 'P' && x.sup && x.sup.length)).map(x => x.sup));
   if (tab === 'rapor') return base + S.reports.length + (S.reports[0] ? S.reports[0].id : '') + S.reports.filter(r => !r.read).length + '|' + openRep;
   if (tab === 'sira') return base + C.ranking().map(r => r.id + r.pts + r.n).join();
-  if (tab === 'klan') return base + klanSub + '|' + JSON.stringify(C.clanList()) + (klanSub === 'bilgi' ? C.ranking().map(r => r.pts).join() : '');
+  if (tab === 'klan') return base + klanSub + '|' + JSON.stringify(C.clanList()) + JSON.stringify(S.rel || []) + JSON.stringify(S.dipl || []) + (S.clan ? JSON.stringify(C.cmeta(S.clan.tag)) : '') + (klanSub === 'bilgi' ? C.ranking().map(r => r.pts).join() : '');
   if (tab === 'harita') return base;
   return base;
 }
@@ -1073,7 +1093,7 @@ $('vilBtn').onclick = () => {
 };
 $('setBtn').onclick = () => {
   sheet(`<div class="shead"><h3>Ayarlar</h3><button class="x" data-close aria-label="Kapat">×</button></div>
-    <div class="card small"><div><b>Beylik:</b> ${esc(S.player.name)}</div><div><b>Dünya hızı:</b> ${S.speed}×</div>
+    <div class="card small"><div><b>Beylik:</b> <b data-pc="P" style="text-decoration:underline dotted">${esc(S.player.name)}</b> <span class="muted">(profil)</span></div><div><b>Dünya hızı:</b> ${S.speed}×</div>
     <div><b>Başlangıç:</b> ${clock(S.created)}</div>
     <div><b>Acemi koruması:</b> ${now() < S.protectUntil ? dur(S.protectUntil - now()) + ' kaldı' : 'bitti'}</div></div>
     <section class="card"><b>Grafik kalitesi</b><div class="muted small">Yüksek: gerçek gölgeler, parlama, rüzgârda çimen. Telefon ısınır ya da takılırsa bir alt seviyeye geç.</div><div class="chips">${[['high', '3B Yüksek'], ['med', '3B Orta'], ['low', '3B Düşük'], ['2d', '2B']].map(([k, n]) => `<button class="btn ${gq() === k ? 'firuze' : 'sec'}" data-gq="${k}">${n}</button>`).join('')}</div></section>
@@ -1453,6 +1473,29 @@ function unitStats(u) {
   const U = C.U[u];
   return `Sal ${U.a} · Sav ${U.di}/${U.dc} · ${(U.sp / S.speed).toFixed(U.sp / S.speed < 10 ? 1 : 0).replace('.', ',')} dk/kare${U.cr ? ' · Taşır ' + U.cr : ''}`;
 }
+const uList = u => C.U_ORDER.filter(k => u[k] > 0).map(k => `${fmt(u[k])} ${C.U[k].n}`).join(', ');
+function supHTML() {
+  const out = [], inc = [];
+  for (const v of S.vil) for (const e of v.sup || []) {
+    if (e.owner === 'P' && v.owner !== 'P') out.push({ v, e });
+    else if (v.owner === 'P' && e.owner !== 'P') inc.push({ v, e });
+  }
+  let h = '';
+  if (out.length) h += `<h2 class="sec">Başka köylerdeki askerlerim</h2><section class="card">${out.map(({ v, e }) => `<div class="suprow"><span><b>${esc(v.name)}</b> · <span data-pc="${v.owner}" style="color:${C.ownerColor(v.owner)};font-weight:800">${esc(C.ownerName(v.owner))}</span><div class="muted small num">${uList(e.units)}</div></span><button class="btn sec" data-recall="${v.id}|${e.from}">Geri çek</button></div>`).join('')}</section>`;
+  if (inc.length) h += `<h2 class="sec">Köylerimdeki destekler</h2><section class="card">${inc.map(({ v, e }) => `<div class="suprow"><span><span data-pc="${e.owner}" style="color:${C.ownerColor(e.owner)};font-weight:800">${esc(C.ownerName(e.owner))}</span> → <b>${esc(v.name)}</b><div class="muted small num">${uList(e.units)}</div></span><button class="btn sec" data-sendback="${v.id}|${e.owner}|${e.from}">Geri gönder</button></div>`).join('')}<div class="muted small">Destek askerleri köyünü savunur. Savaşta onlar da kayıp verir.</div></section>`;
+  return h;
+}
+function recallUI(key, owner) {
+  const [vid, a, b] = key.split('|'), own = owner === 'P' ? 'P' : a, from = +(owner === 'P' ? a : b);
+  const r = act(() => C.recallSup(+vid, own, from, now()));
+  if (r === 'ok') { toast(owner === 'P' ? 'Askerlerin geri dönüyor' : 'Destek askerleri geri gönderildi', 'good'); if (owner !== 'P') pushTo(own, 0, 'Destek askerlerin dönüyor', `${S.player.name} ${C.vil(+vid).name} köyündeki askerlerini geri gönderdi.`, 'sb' + vid + own, 'zaman'); save(); sig = ''; render(); }
+  else toast(r === 'nohome' ? 'Askerlerin dönebileceği köyün yok' : 'Yapılamadı', 'bad');
+}
+$('view').addEventListener('click', e => {
+  if (tab !== 'ordu') return;
+  const rc = e.target.closest('[data-recall]'); if (rc) { recallUI(rc.dataset.recall, 'P'); return; }
+  const sb = e.target.closest('[data-sendback]'); if (sb) recallUI(sb.dataset.sendback, 'host');
+});
 function renderOrdu() {
   const v = cur();
   let html = `<div class="pad"><div class="qrow"><h2 class="sec">Köydeki birlikler</h2><button class="btn sec" id="simB">Savaş hesaplayıcı</button></div><div class="ugrid" id="homeUnits"></div>`;
@@ -1471,6 +1514,7 @@ function renderOrdu() {
     }
     html += `</section>`;
   }
+  html += supHTML();
   html += `<h2 class="sec" id="movesBox">Hareketler</h2><section class="card" id="moves"></section></div>`;
   $('view').innerHTML = html;
   $('simB').onclick = () => openSim(null);
@@ -1611,14 +1655,15 @@ function mapCard() {
   const box = $('mapcard'); if (!box) return;
   const v = map.sel != null ? S.vil[map.sel] : null, me = cur();
   if (!v) { box.innerHTML = `<div class="muted small">Bir köye dokun. Haritayı parmağınla kaydırabilirsin. Çerçeveli köyler senin.</div>`; box.dataset.sig = ''; return; }
-  const s = v.id + '|' + v.owner + '|' + S.cur; if (box.dataset.sig === s) return; box.dataset.sig = s;
+  const s = v.id + '|' + v.owner + '|' + S.cur + '|' + JSON.stringify(v.sup || []); if (box.dataset.sig === s) return; box.dataset.sig = s;
   const d = C.dist(me, v), own = v.owner === 'P';
   const lastSpy = S.reports.find(r => r.to === v.id && r.spy && r.attOwner === 'P');
-  box.innerHTML = `<div class="shead"><div><h3>${esc(v.name)}</h3><div class="small"><i class="sw" style="background:${C.ownerColor(v.owner)}"></i> ${esc(C.ownerName(v.owner))}${C.clanOf(v.owner) ? ` <span class="ctag">${esc(C.clanOf(v.owner))}</span>` : ''}${(() => { const k = v.owner !== 'P' && C.relOwners('P', v.owner); return k ? ` <span class="rel ${k}">${C.RELS[k]}</span>` : ''; })()} · <b style="color:var(--gold)">${TIERS[tierOf(C.vPoints(v))].n}</b> · <span class="num">${fmt(C.vPoints(v))} puan · (${v.x}|${v.y})</span></div></div><button class="x" id="mcClose" aria-label="Kapat">×</button></div>
+  box.innerHTML = `<div class="shead"><div><h3>${esc(v.name)}</h3><div class="small"><i class="sw" style="background:${C.ownerColor(v.owner)}"></i> ${v.owner !== null ? `<b data-pc="${v.owner}" style="text-decoration:underline dotted">${esc(C.ownerName(v.owner))}</b>` : esc(C.ownerName(v.owner))}${C.clanOf(v.owner) ? ` <span class="ctag" data-cc="${esc(C.clanOf(v.owner))}">${esc(C.clanOf(v.owner))}</span>` : ''}${(() => { const k = v.owner !== 'P' && C.relOwners('P', v.owner); return k ? ` <span class="rel ${k}">${C.RELS[k]}</span>` : ''; })()} · <b style="color:var(--gold)">${TIERS[tierOf(C.vPoints(v))].n}</b> · <span class="num">${fmt(C.vPoints(v))} puan · (${v.x}|${v.y})</span></div></div><button class="x" id="mcClose" aria-label="Kapat">×</button></div>
     <div class="small muted num">${own && v.id === S.cur ? 'Şu an yönettiğin köy.' : `${esc(me.name)} köyünden ${d.toFixed(1).replace('.', ',')} kare. Akıncıyla ${dur(C.travelTime(me, v, { akinci: 1 }))}, piyadeyle ${dur(C.travelTime(me, v, { mizrakli: 1 }))}.`}
     ${lastSpy ? `<br>Son keşif (${clock(lastSpy.t)}): ${lastSpy.spy.res.map(fmt).join(' / ')} kaynak, sur ${lastSpy.spy.b.sur}.` : ''}</div>
     <div class="chips">${own ? (v.id !== S.cur ? `<button class="btn sec" data-goto="${v.id}">Bu köye geç</button><button class="btn firuze" data-send="support">Destek gönder</button><button class="btn sec" data-res="1">Kaynak gönder</button>` : '')
-      : `<button class="btn" data-send="attack">Saldır</button><button class="btn sec" data-sim="1">Hesapla</button><button class="btn firuze" data-send="spy">Çaşıt gönder</button><button class="btn sec" data-res="1">Kaynak gönder</button>`}</div>`;
+      : `<button class="btn" data-send="attack">Saldır</button><button class="btn sec" data-sim="1">Hesapla</button><button class="btn firuze" data-send="spy">Çaşıt gönder</button>${v.owner !== null ? '<button class="btn firuze" data-send="support">Destek gönder</button>' : ''}<button class="btn sec" data-res="1">Kaynak gönder</button>`}</div>
+    ${(() => { const mine = (v.sup || []).find(e => e.owner === 'P'); const n = mine ? C.unitSum(mine.units) : 0; return n ? `<div class="small">Bu köyde <b class="num">${fmt(n)}</b> destek askerin var. <button class="linkbtn" data-recall="${v.id}|${mine.from}">Geri çek</button></div>` : ''; })()}`;
   $('mcClose').onclick = () => { map.sel = null; mapCard(); drawMap(); };
 }
 $('view').addEventListener('click', e => {
@@ -1627,6 +1672,7 @@ $('view').addEventListener('click', e => {
   const s = e.target.closest('[data-send]'); if (s && map.sel != null) sendSheet(S.vil[map.sel], s.dataset.send);
   if (e.target.closest('[data-res]') && map.sel != null) resSheet(S.vil[map.sel]);
   if (e.target.closest('[data-sim]') && map.sel != null) openSim(S.vil[map.sel]);
+  const rc = e.target.closest('[data-recall]'); if (rc) { recallUI(rc.dataset.recall, 'P'); const mc = $('mapcard'); if (mc) mc.dataset.sig = ''; mapCard(); }
 });
 function resSheet(target) {
   const v = cur(), tot = C.merchantsTotal(v);
@@ -1703,8 +1749,9 @@ function sendSheet(target, type) {
           pushTo(target.owner, left, 'Köyüne saldırı ulaştı', `${who} → ${target.name}. Raporuna bak.`, 'arr' + mv.id, 'saldiri');
         }
       }
+      if (r === 'ok' && type === 'support' && target.owner !== 'P') pushTo(target.owner, 0, 'Destek geliyor', `${S.player.name} ${target.name} köyüne destek askeri yolladı.`, 'sup' + target.id, 'zaman');
       if (r === 'ok') { Sfx.play(type === 'attack' ? 'attack' : type === 'spy' ? 'spy' : 'march'); toast(title + ' yola çıktı', 'info'); closeSheet(); save(); drawMap(); renderTop(); }
-      else toast({ own: 'Kendi köyüne saldıramazsın', notown: 'Destek sadece kendi köylerine', empty: 'Birlik seçmedin', ally: 'Klan üyesine saldıramazsın', pact: 'Bu klanla anlaşman var. Önce anlaşmayı boz ya da savaş ilan et.', protected: 'Bu bey acemi korumasında' }[r] || 'Gönderilemedi', 'bad');
+      else toast({ own: 'Kendi köyüne saldıramazsın', barb: 'Terk edilmiş köye destek gönderilemez', empty: 'Birlik seçmedin', ally: 'Klan üyesine saldıramazsın', pact: 'Bu klanla anlaşman var. Önce anlaşmayı boz ya da savaş ilan et.', protected: 'Bu bey acemi korumasında' }[r] || 'Gönderilemedi', 'bad');
     };
     upd();
   });
@@ -1775,7 +1822,7 @@ function renderKlan() {
 function msgHTML(m) {
   if (m.from === 'SYS') return `<div class="msg sys">${esc(m.text)} · ${clock(m.t)}</div>`;
   const me = m.from === 'P', tag = C.clanOf(m.from);
-  return `<div class="msg${me ? ' me' : ''}"><div class="mh"><b style="color:${C.ownerColor(m.from)}">${esc(me ? S.player.name : C.ownerName(m.from))}</b>${tag && klanSub === 'genel' ? `<span class="ctag">${esc(tag)}</span>` : ''}<span class="muted num">${clock(m.t).replace('bugün ', '')}</span></div><div class="mt">${esc(m.text)}</div></div>`;
+  return `<div class="msg${me ? ' me' : ''}"><div class="mh"><b data-pc="${m.from}" style="color:${C.ownerColor(m.from)}">${esc(me ? S.player.name : C.ownerName(m.from))}</b>${tag && klanSub === 'genel' ? `<span class="ctag" data-cc="${esc(tag)}">${esc(tag)}</span>` : ''}<span class="muted num">${clock(m.t).replace('bugün ', '')}</span></div><div class="mt">${esc(m.text)}</div></div>`;
 }
 function liveChat() {
   const log = $('chatlog'); if (!log || !chatRendered.ch) return;
@@ -1808,13 +1855,34 @@ function diplHTML(mine, canDipl) {
       else if (k === 'savas') btn = `<button class="btn firuze" data-prop="${c.tag}|baris">Barış teklif et</button>`;
       else btn = `${k !== 'ittifak' ? `<button class="btn firuze" data-prop="${c.tag}|ittifak">İttifak teklif et</button>` : ''}${!k ? `<button class="btn sec" data-prop="${c.tag}|nap">Saldırmazlık teklif et</button>` : ''}${k ? `<button class="btn sec" data-dbreak="${c.tag}">Anlaşmayı boz</button>` : ''}<button class="btn red" data-war="${c.tag}">Savaş ilan et</button>`;
     }
-    return `<div class="drow">${SHIELD(c.tag)}<span><b>[${esc(c.tag)}] ${esc(c.name)}</b><div class="muted small num">${c.m.length} üye · ${fmt(C.clanPts(c.tag))} puan${ai ? ' · bilgisayar' : ''}</div></span>${REL(k)}${btn ? `<div class="chips">${btn}</div>` : ''}</div>`;
+    return `<div class="drow"><span data-cc="${esc(c.tag)}">${SHIELD(c.tag)}</span><span><b data-cc="${esc(c.tag)}">[${esc(c.tag)}] ${esc(c.name)}</b><div class="muted small num">${c.m.length} üye · ${fmt(C.clanPts(c.tag))} puan${ai ? ' · bilgisayar' : ''}</div></span>${REL(k)}${btn ? `<div class="chips">${btn}</div>` : ''}</div>`;
   }).join('')}<div class="muted small" style="margin-top:6px">İttifak ve saldırmazlık anlaşması olan klanlar birbirine saldıramaz. Savaştaki bilgisayar klanları köylerine daha sık akın eder. ${canDipl ? '' : 'Diplomasiyi klan beyi ve vezirler yürütür.'}</div></section>`;
   return h;
 }
 // klandaki karar vericilere (bey + vezir) anlık bildirim
 const pushClanLeads = (tag, title, body, key) => C.members(tag).filter(o => o !== 'P' && C.isHuman(o) && ['bey', 'vezir'].includes(C.rankOf(o))).forEach(o => pushTo(o, 0, title, body, key + o, 'klan'));
 const pushClanAll = (tag, title, body, key) => C.members(tag).filter(o => o !== 'P' && C.isHuman(o)).forEach(o => pushTo(o, 0, title, body, key + o, 'klan'));
+function dipClick(e, after) {
+  const dipDone = (r, ok) => { const m = { ok, sent: 'Teklif gönderildi', accepted: 'Teklif kabul edildi!', refused: 'Teklif reddedildi', wait: 'Bu klan bir süre yeni teklif dinlemeyecek', dup: 'Zaten bekleyen bir teklifin var', perm: 'Bunun için yetkin yok', already: 'Zaten savaştasınız', bad: 'Bu teklif şu an yapılamaz' }; toast(m[r] || 'Yapılamadı', ['ok', 'sent', 'accepted'].includes(r) ? 'good' : 'bad'); (after || (() => { save(); sig = ''; render(); }))(); };
+  const wr = e.target.closest('[data-war]');
+  if (wr) { if (wr.dataset.armed !== '1') { wr.dataset.armed = '1'; wr.textContent = 'Emin misin? Tekrar dokun';  return true; }
+    const tg = wr.dataset.war, my = S.clan.tag, r = act(() => C.declareWar(tg, now()));
+    if (r === 'ok') { Sfx.play('attack'); pushClanAll(tg, '⚔ Savaş ilan edildi!', `[${my}] ${S.clan.name} klanınıza savaş ilan etti.`, 'war' + my); pushClanAll(my, '⚔ Klanın savaşta', `[${my}], [${tg}] klanına savaş ilan etti.`, 'war' + tg); }
+    dipDone(r, 'Savaş ilan edildi!');  return true; }
+  const pr = e.target.closest('[data-prop]');
+  if (pr) { const [tg, k] = pr.dataset.prop.split('|'), my = S.clan.tag, r = act(() => C.proposeRel(tg, k, now()));
+    if (r === 'sent') pushClanLeads(tg, 'Diplomasi teklifi', `[${my}] ${S.clan.name} ${k === 'baris' ? 'barış istiyor' : C.DIPK[k] + ' anlaşması teklif ediyor'}.`, 'dip' + my);
+    dipDone(r, 'Tamam');  return true; }
+  const da = e.target.closest('[data-dacc]'), dd = e.target.closest('[data-ddec]');
+  if (da || dd) { const id = +(da || dd).dataset[da ? 'dacc' : 'ddec'], q = (S.dipl || []).find(x => x.id === id), my = S.clan.tag, r = act(() => C.answerRel(id, !!da, now()));
+    if (r === 'ok' && q) pushClanLeads(q.fr, da ? 'Teklif kabul edildi' : 'Teklif reddedildi', `[${my}] ${C.DIPK[q.k]} teklifinizi ${da ? 'kabul etti' : 'reddetti'}.`, 'dipa' + my);
+    dipDone(r, da ? 'Anlaşma yapıldı' : 'Teklif reddedildi');  return true; }
+  const dc = e.target.closest('[data-dcancel]'); if (dc) { const id = +dc.dataset.dcancel; dipDone(act(() => C.cancelRel(id)), 'Teklif geri alındı');  return true; }
+  const db = e.target.closest('[data-dbreak]');
+  if (db) { if (db.dataset.armed !== '1') { db.dataset.armed = '1'; db.textContent = 'Emin misin?';  return true; }
+    const tg = db.dataset.dbreak, r = act(() => C.breakRel(tg, now())); if (r === 'ok') pushClanLeads(tg, 'Anlaşma bozuldu', `[${S.clan.tag}] sizinle anlaşmasını bozdu.`, 'brk' + S.clan.tag); dipDone(r, 'Anlaşma bozuldu');  return true; }
+  return false;
+}
 function memberSheet(o) {
   const r = C.rankOf(o), myR = C.rankOf('P'), name = C.ownerName(o), hum = C.isHuman(o);
   sheet(`<div class="shead"><h3>${esc(name)}</h3><button class="x" data-close aria-label="Kapat">×</button></div>
@@ -1833,7 +1901,7 @@ function klanInfoHTML() {
   const RK = o => { const r = C.rankOf(o); return r ? `<span class="rk ${r}">${C.RANKS[r]}</span>` : ''; };
   const myR = S.clan ? C.rankOf('P') : null, ORD = { bey: 3, vezir: 2, uye: 1 };
   const manage = o => S.clan && o !== 'P' && C.clanOf(o) === S.clan.tag && (myR === 'bey' || (myR === 'vezir' && ORD[C.rankOf(o)] < 2));
-  const memberRows = ids => ids.slice().sort((a, b) => (ORD[C.rankOf(b)] || 0) - (ORD[C.rankOf(a)] || 0)).map(o => `<div class="mrow" style="grid-template-columns:auto minmax(0,1fr) auto${manage(o) ? ' auto' : ''}"><i class="sw" style="background:${C.ownerColor(o)}"></i><span><b>${esc(o === 'P' ? S.player.name : C.ownerName(o))}</b>${o === 'P' ? ' <span class="muted small">(sen)</span>' : C.isHuman(o) ? ' <span class="ctag">OYUNCU</span>' : ''} ${RK(o)}</span><span class="num muted small">${pts(o)} puan</span>${manage(o) ? `<button class="btn sec mact" data-mem="${o}" aria-label="Yönet">⋯</button>` : ''}</div>`).join('');
+  const memberRows = ids => ids.slice().sort((a, b) => (ORD[C.rankOf(b)] || 0) - (ORD[C.rankOf(a)] || 0)).map(o => `<div class="mrow" style="grid-template-columns:auto minmax(0,1fr) auto${manage(o) ? ' auto' : ''}"><i class="sw" style="background:${C.ownerColor(o)}"></i><span><b data-pc="${o}">${esc(o === 'P' ? S.player.name : C.ownerName(o))}</b>${o === 'P' ? ' <span class="muted small">(sen)</span>' : C.isHuman(o) ? ' <span class="ctag">OYUNCU</span>' : ''} ${RK(o)}</span><span class="num muted small">${pts(o)} puan</span>${manage(o) ? `<button class="btn sec mact" data-mem="${o}" aria-label="Yönet">⋯</button>` : ''}</div>`).join('');
   let h = '<div class="pad">';
   if (S.clan) {
     const mine = clans.find(c => c.mine);
@@ -1855,7 +1923,7 @@ function klanInfoHTML() {
     if (inv.length) h += `<h2 class="sec">Gelen davetler</h2>` + inv.map(x => `<section class="card"><div class="klanhead">${SHIELD(x.tag)}<div><b style="font-size:17px">${esc(x.name)}</b><div class="muted small">${esc(C.ownerName(x.from))} seni klana çağırıyor</div></div></div><div class="chips"><button class="btn firuze" data-iacc="${x.id}">Katıl</button><button class="btn sec" data-idec="${x.id}">Reddet</button></div></section>`).join('');
     h += `<section class="card"><h2 class="sec" style="margin:0">Klan kur</h2><div class="muted small">Kendi klanını kur, klansız beyleri davet et.</div>
       <form class="form2" id="clanForm"><input id="clanName" maxlength="24" placeholder="Klan adı" aria-label="Klan adı"><input id="clanTag" maxlength="4" placeholder="Kısaltma" aria-label="Klan kısaltması"><button class="btn" type="submit" style="grid-column:1/-1">Klanı kur</button></form></section>`;
-    h += `<h2 class="sec">Klanlar</h2>` + clans.map(c => `<section class="card"><div class="klanhead">${SHIELD(c.tag)}<div><b style="font-size:17px">${esc(c.name)}</b><div class="muted small num">[${esc(c.tag)}] · ${c.m.length}/${C.CLAN_MAX} üye · ${fmt(c.m.reduce((a, o) => a + C.ownerPts(o), 0))} puan</div></div></div><div>${memberRows(c.m)}</div>
+    h += `<h2 class="sec">Klanlar</h2>` + clans.map(c => `<section class="card"><div class="klanhead" data-cc="${esc(c.tag)}">${SHIELD(c.tag)}<div><b style="font-size:17px">${esc(c.name)}</b><div class="muted small num">[${esc(c.tag)}] · ${c.m.length}/${C.CLAN_MAX} üye · ${fmt(c.m.reduce((a, o) => a + C.ownerPts(o), 0))} puan</div></div></div><div>${memberRows(c.m)}</div>
       <button class="btn sec" data-join="${c.tag}" style="justify-self:start">Katılma isteği gönder</button></section>`).join('');
   }
   return h + '</div>';
@@ -1876,24 +1944,7 @@ $('view').addEventListener('click', e => {
   const j = e.target.closest('[data-join]');
   if (j) { const tg = j.dataset.join, r = act(() => C.joinClan(tg, now())); toast(r === 'ok' ? 'Klana katıldın!' : r === 'weak' ? 'Klan üyeleri seni henüz yeterince güçlü bulmuyor. Puanını artır.' : r === 'full' ? 'Klan dolu' : 'Katılamadın', r === 'ok' ? 'good' : 'bad'); save(); sig = ''; render(); return; }
   const mm = e.target.closest('[data-mem]'); if (mm) { memberSheet(mm.dataset.mem); return; }
-  const dipDone = (r, ok) => { const m = { ok, sent: 'Teklif gönderildi', accepted: 'Teklif kabul edildi!', refused: 'Teklif reddedildi', wait: 'Bu klan bir süre yeni teklif dinlemeyecek', dup: 'Zaten bekleyen bir teklifin var', perm: 'Bunun için yetkin yok', already: 'Zaten savaştasınız', bad: 'Bu teklif şu an yapılamaz' }; toast(m[r] || 'Yapılamadı', ['ok', 'sent', 'accepted'].includes(r) ? 'good' : 'bad'); save(); sig = ''; render(); };
-  const wr = e.target.closest('[data-war]');
-  if (wr) { if (wr.dataset.armed !== '1') { wr.dataset.armed = '1'; wr.textContent = 'Emin misin? Tekrar dokun'; return; }
-    const tg = wr.dataset.war, my = S.clan.tag, r = act(() => C.declareWar(tg, now()));
-    if (r === 'ok') { Sfx.play('attack'); pushClanAll(tg, '⚔ Savaş ilan edildi!', `[${my}] ${S.clan.name} klanınıza savaş ilan etti.`, 'war' + my); pushClanAll(my, '⚔ Klanın savaşta', `[${my}], [${tg}] klanına savaş ilan etti.`, 'war' + tg); }
-    dipDone(r, 'Savaş ilan edildi!'); return; }
-  const pr = e.target.closest('[data-prop]');
-  if (pr) { const [tg, k] = pr.dataset.prop.split('|'), my = S.clan.tag, r = act(() => C.proposeRel(tg, k, now()));
-    if (r === 'sent') pushClanLeads(tg, 'Diplomasi teklifi', `[${my}] ${S.clan.name} ${k === 'baris' ? 'barış istiyor' : C.DIPK[k] + ' anlaşması teklif ediyor'}.`, 'dip' + my);
-    dipDone(r, 'Tamam'); return; }
-  const da = e.target.closest('[data-dacc]'), dd = e.target.closest('[data-ddec]');
-  if (da || dd) { const id = +(da || dd).dataset[da ? 'dacc' : 'ddec'], q = (S.dipl || []).find(x => x.id === id), my = S.clan.tag, r = act(() => C.answerRel(id, !!da, now()));
-    if (r === 'ok' && q) pushClanLeads(q.fr, da ? 'Teklif kabul edildi' : 'Teklif reddedildi', `[${my}] ${C.DIPK[q.k]} teklifinizi ${da ? 'kabul etti' : 'reddetti'}.`, 'dipa' + my);
-    dipDone(r, da ? 'Anlaşma yapıldı' : 'Teklif reddedildi'); return; }
-  const dc = e.target.closest('[data-dcancel]'); if (dc) { const id = +dc.dataset.dcancel; dipDone(act(() => C.cancelRel(id)), 'Teklif geri alındı'); return; }
-  const db = e.target.closest('[data-dbreak]');
-  if (db) { if (db.dataset.armed !== '1') { db.dataset.armed = '1'; db.textContent = 'Emin misin?'; return; }
-    const tg = db.dataset.dbreak, r = act(() => C.breakRel(tg, now())); if (r === 'ok') pushClanLeads(tg, 'Anlaşma bozuldu', `[${S.clan.tag}] sizinle anlaşmasını bozdu.`, 'brk' + S.clan.tag); dipDone(r, 'Anlaşma bozuldu'); return; }
+  if (dipClick(e)) return;
   if (e.target.id === 'descEdit') {
     sheet(`<div class="shead"><h3>Klan duyurusu</h3><button class="x" data-close aria-label="Kapat">×</button></div><textarea id="descIn" maxlength="160" rows="3" style="width:100%;box-sizing:border-box">${esc(C.cmeta(S.clan.tag).desc || '')}</textarea><button class="btn firuze" id="descSave">Kaydet</button>`, () => {
       $('descSave').onclick = () => { const v = $('descIn').value; act(() => C.setDesc(v, now())); save(); closeSheet(); sig = ''; render(); };
@@ -1914,11 +1965,13 @@ $('view').addEventListener('submit', e => {
 
 // ---------- SIRALAMA ----------
 function renderSira() {
-  const rows = C.ranking().map((r, i) => `<tr class="${r.id === 'P' ? 'me' : ''}"><td>${i + 1}</td><td style="text-align:left"><i class="sw" style="background:${r.color}"></i> ${esc(r.name)}${r.human ? ' <span class="muted small">(oyuncu)</span>' : ''}${C.clanOf(r.id) ? ` <span class="ctag">${esc(C.clanOf(r.id))}</span>` : ''}</td><td>${r.n}</td><td>${fmt(r.pts)}</td></tr>`).join('');
+  const rows = C.ranking().map((r, i) => `<tr class="${r.id === 'P' ? 'me' : ''}" data-pc="${r.id}"><td>${i + 1}</td><td style="text-align:left"><i class="sw" style="background:${r.color}"></i> ${esc(r.name)}${r.human ? ' <span class="muted small">(oyuncu)</span>' : ''}${C.clanOf(r.id) ? ` <span class="ctag" data-cc="${esc(C.clanOf(r.id))}">${esc(C.clanOf(r.id))}</span>` : ''}</td><td>${r.n}</td><td>${fmt(r.pts)}</td></tr>`).join('');
+  const crow = C.clanList().sort((a, b) => C.clanPts(b.tag) - C.clanPts(a.tag)).map((c, i) => `<tr class="${S.clan && S.clan.tag === c.tag ? 'me' : ''}" data-cc="${esc(c.tag)}"><td>${i + 1}</td><td style="text-align:left"><span class="ctag">${esc(c.tag)}</span> ${esc(c.name)}</td><td>${c.m.length}</td><td>${fmt(C.clanPts(c.tag))}</td></tr>`).join('');
   const barb = S.vil.filter(v => v.owner === null).length;
   $('view').innerHTML = `<div class="pad"><h2 class="sec">Beylikler sıralaması</h2>
     <section class="card"><div class="tblwrap"><table class="tbl rank num"><thead><tr><th>#</th><th style="text-align:left">Beylik</th><th>Köy</th><th>Puan</th></tr></thead><tbody>${rows}</tbody></table></div></section>
-    <div class="muted small">Haritada ${barb} terk edilmiş köy var. Puan, köylerindeki binaların seviyesinden gelir. Rakip beylikler de büyüyor ve boş köyleri fethediyor.</div></div>`;
+    ${crow ? `<h2 class="sec">Klanlar</h2><section class="card"><div class="tblwrap"><table class="tbl rank num"><thead><tr><th>#</th><th style="text-align:left">Klan</th><th>Üye</th><th>Puan</th></tr></thead><tbody>${crow}</tbody></table></div></section>` : ''}
+    <div class="muted small">Bir beyliğe ya da klana dokunarak profilini açabilirsin. Haritada ${barb} terk edilmiş köy var. Puan, köylerindeki binaların seviyesinden gelir. Rakip beylikler de büyüyor ve boş köyleri fethediyor.</div></div>`;
 }
 
 // ---------- sheet ----------
@@ -1926,18 +1979,144 @@ function sheet(html, mount) {
   closeSheet();
   const ov = document.createElement('div'); ov.className = 'ov'; ov.id = 'ov';
   ov.innerHTML = `<div class="sheet" role="dialog" aria-modal="true">${html}</div>`;
-  ov.addEventListener('click', e => { if (e.target === ov || e.target.closest('[data-close]')) closeSheet(); });
+  ov.addEventListener('click', e => { if (ov.dataset.lock) return; if (e.target === ov || e.target.closest('[data-close]')) closeSheet(); });
   $('app').appendChild(ov);
   if (mount) mount(ov.firstChild);
 }
 function closeSheet() { const o = $('ov'); if (o) o.remove(); }
+// ---------- oyuncu ve klan kartları ----------
+const ST_ROWS = [['kills', 'Öldürdüğü asker'], ['lost', 'Kaybettiği asker'], ['conq', 'Fethettiği köy'], ['lostVil', 'Kaybettiği köy'], ['wins', 'Kazandığı saldırı'], ['defWins', 'Püskürttüğü saldırı'], ['loot', 'Yağmaladığı kaynak']];
+const stGrid = st => `<div class="stg">${ST_ROWS.map(([k, n]) => `<span>${n}</span><span>${fmt((st && st[k]) || 0)}</span>`).join('')}</div>`;
+function statsSnap() { const st = S.stats || {}; const o = {}; for (const [k] of ST_ROWS) o[k] = st[k] || 0; o.attacks = st.attacks || 0; o.fell = st.fell || 0; o.pts = C.ownerPts('P'); o.vil = S.vil.filter(v => v.owner === 'P').length; return o; }
+let lastStatsPush = 0;
+function pushStats(force) {
+  if (!MPX || !S || (!force && now() - lastStatsPush < 60000)) return Promise.resolve();
+  lastStatsPush = now();
+  return Net.putStats(MPX.id, S.player.name, statsSnap()).catch(() => {});
+}
+const uidOf = o => (o === 'P' ? Net.uid : (S.beys.find(b => b.id === o) || {}).uid);
+function goMapVil(id) {
+  closeSheet(); map.sel = id; tab = 'harita'; renderTabs(); sig = ''; map.ox = null; render();
+  setTimeout(() => { centerOn(S.vil[id]); drawMap(); mapCard(); }, 0);
+}
+function playerCard(o) {
+  if (o == null || o === 'SYS') return;
+  const me = o === 'P', hum = C.isHuman(o), tag = C.clanOf(o), name = C.ownerName(o), col = C.ownerColor(o);
+  const rk = C.ranking(), pos = rk.findIndex(r => r.id === o) + 1;
+  const vils = S.vil.filter(v => v.owner === o).sort((a, b) => C.vPoints(b) - C.vPoints(a));
+  const here = cur(), near = vils.slice().sort((a, b) => C.dist(a, here) - C.dist(b, here))[0];
+  const rel = me ? null : C.sameClan('P', o) ? 'klan' : C.relOwners('P', o);
+  const relB = rel === 'klan' ? '<span class="rel ittifak">Klan üyesi</span>' : rel ? `<span class="rel ${rel}">${C.RELS[rel]}</span>` : '';
+  const r = C.rankOf(o), pact = rel === 'klan' || rel === 'ittifak' || rel === 'nap';
+  const canInv = !me && !tag && S.clan && C.canDo('P', 'invite') && (hum ? !!MPX : true) && C.members(S.clan.tag).length < C.CLAN_MAX;
+  const st = hum ? C.statsOf(o) : null;
+  const acts = [];
+  if (!me && near) {
+    acts.push(`<button class="btn sec" data-pa="map">Haritada göster</button>`);
+    if (!pact) acts.push(`<button class="btn" data-pa="attack">Saldır</button>`);
+    acts.push(`<button class="btn firuze" data-pa="support">Destek gönder</button>`);
+    acts.push(`<button class="btn sec" data-pa="res">Kaynak gönder</button>`);
+    if (!pact) acts.push(`<button class="btn sec" data-pa="spy">Çaşıt gönder</button>`);
+  }
+  if (canInv) acts.push(`<button class="btn firuze" data-pa="inv">Klana davet et</button>`);
+  if (!me) acts.push(`<button class="btn sec" data-pa="msg">Mesaj yaz</button>`);
+  sheet(`<div class="shead"><div class="pchead"><div class="av" style="background:${col}">${esc(name.trim()[0] || '?')}</div><div><h3>${esc(name)}</h3>
+      <div class="small">${me ? '<span class="muted">sen</span>' : hum ? '<span class="ctag">OYUNCU</span>' : '<span class="muted">bilgisayar beyi</span>'}${tag ? ` · <span class="ctag" data-cc="${esc(tag)}">${esc(tag)}</span>` : ''}${r ? ` <span class="rk ${r}">${C.RANKS[r]}</span>` : ''} ${relB}</div></div></div><button class="x" data-close aria-label="Kapat">×</button></div>
+    <div class="kv3"><div><b>${pos ? '#' + pos : '–'}</b>sıralama</div><div><b>${fmt(C.ownerPts(o))}</b>puan</div><div><b>${vils.length}</b>köy</div></div>
+    ${hum ? `<section class="card"><b>Bu dünyada</b>${stGrid(st)}</section>` : ''}
+    ${hum && MPX ? `<section class="card"><b>Tüm dünyalar</b><div id="pcGlobal" class="muted small">Yükleniyor…</div></section>` : me ? `<div class="muted small">Tüm dünyaların toplamı, arkadaşlarla oynadığın dünyalarda tutulur.</div>` : ''}
+    ${acts.length ? `<div class="acts">${acts.join('')}</div>` : ''}
+    ${vils.length ? `<section class="card"><b>Köyleri</b><div>${vils.slice(0, 12).map(v => `<button class="vrow" data-pv="${v.id}"><span><b>${esc(v.name)}</b> <span class="muted num">(${v.x}|${v.y})</span></span><span class="num muted">${fmt(C.vPoints(v))} puan</span></button>`).join('')}</div>${vils.length > 12 ? `<div class="muted small">+${vils.length - 12} köy daha</div>` : ''}</section>` : `<div class="muted small">Bu beyliğin hiç köyü kalmadı.</div>`}`, box => {
+    box.addEventListener('click', e => {
+      const pv = e.target.closest('[data-pv]'); if (pv) { goMapVil(+pv.dataset.pv); return; }
+      const a = e.target.closest('[data-pa]'); if (!a) return;
+      const k = a.dataset.pa;
+      if (k === 'map') goMapVil(near.id);
+      else if (k === 'attack' || k === 'support' || k === 'spy') sendSheet(near, k);
+      else if (k === 'res') resSheet(near);
+      else if (k === 'inv') {
+        const rr = act(() => hum ? C.inviteHuman(o, now()) : C.inviteBey(o, now()));
+        if (hum && rr === 'ok') pushTo(o, 0, 'Klan daveti', `${S.player.name} seni [${S.clan.tag}] ${S.clan.name} klanına çağırıyor.`, 'inv' + S.clan.tag + o, 'klan');
+        toast(rr === 'ok' ? (hum ? 'Davet gönderildi' : name + ' klana katıldı!') : rr === 'refused' ? name + ' davetini şimdilik reddetti' : rr === 'dup' ? 'Zaten davet ettin' : 'Davet gönderilemedi', rr === 'ok' ? 'good' : 'bad');
+        save(); sig = ''; render(); playerCard(o);
+      } else if (k === 'msg') {
+        closeSheet(); tab = 'klan'; klanSub = 'genel'; renderTabs(); sig = ''; render();
+        const inp = $('chatIn'); if (inp) { inp.value = '@' + name + ' '; inp.focus(); }
+      }
+    });
+    if (hum && MPX) {
+      const uid = uidOf(o), box2 = () => $('pcGlobal');
+      (me ? pushStats(true) : Promise.resolve()).then(() => uid ? Net.globalStats(uid) : null).then(g => {
+        const b = box2(); if (!b) return;
+        if (!g) { b.textContent = 'Bilgi alınamadı.'; return; }
+        b.className = ''; b.innerHTML = `<div class="kv3" style="margin:4px 0 8px"><div><b>${fmt(g.worlds)}</b>dünya</div><div><b>${fmt(g.bestPts)}</b>en yüksek puan</div><div><b>${fmt(g.bestVil)}</b>en çok köy</div></div>${stGrid(g)}`;
+      }).catch(() => { const b = box2(); if (b) b.textContent = 'İnternet yok, toplam istatistik gösterilemiyor.'; });
+    }
+  });
+}
+function clanCard(tag) {
+  const c = C.clanList().find(x => x.tag === tag);
+  if (!c) { toast('Bu klan artık yok', 'bad'); return; }
+  const meta = C.cmeta(tag), my = S.clan && S.clan.tag, mine = my === tag, rel = my && !mine ? C.relOf(my, tag) : null;
+  const order = C.clanList().sort((a, b) => C.clanPts(b.tag) - C.clanPts(a.tag)), pos = order.findIndex(x => x.tag === tag) + 1;
+  const ORD = { bey: 3, vezir: 2, uye: 1 };
+  const mem = c.m.slice().sort((a, b) => (ORD[C.rankOf(b)] || 0) - (ORD[C.rankOf(a)] || 0) || C.ownerPts(b) - C.ownerPts(a));
+  const w = rel === 'savas' ? C.relEntry(my, tag) : null;
+  const canDipl = my && !mine && C.canDo('P', 'dipl'), pend = (S.dipl || []).find(q => q.fr === my && q.to === tag);
+  let acts = '';
+  if (mine) acts = `<button class="btn firuze" data-ca="goto">Klan sayfasına git</button>`;
+  else if (!S.clan) acts = `<button class="btn firuze" data-join="${esc(tag)}">Katılma isteği gönder</button>`;
+  else if (canDipl) {
+    if (pend) acts = `<span class="muted small">${C.DIPK[pend.k]} teklifi bekliyor</span>`;
+    else if (rel === 'savas') acts = `<button class="btn firuze" data-prop="${tag}|baris">Barış teklif et</button>`;
+    else acts = `${rel !== 'ittifak' ? `<button class="btn firuze" data-prop="${tag}|ittifak">İttifak teklif et</button>` : ''}${!rel ? `<button class="btn sec" data-prop="${tag}|nap">Saldırmazlık</button>` : ''}${rel ? `<button class="btn sec" data-dbreak="${tag}">Anlaşmayı boz</button>` : ''}<button class="btn red" data-war="${tag}">Savaş ilan et</button>`;
+  }
+  sheet(`<div class="shead"><div class="klanhead">${SHIELD(tag)}<div><h3>${esc(c.name)}</h3><div class="small"><span class="ctag">${esc(tag)}</span>${!C.humanDecider(tag) && !c.m.some(o => C.isHuman(o)) ? ' <span class="muted">bilgisayar klanı</span>' : ''} ${rel ? `<span class="rel ${rel}">${C.RELS[rel]}</span>` : mine ? '<span class="rel ittifak">Senin klanın</span>' : ''}</div></div></div><button class="x" data-close aria-label="Kapat">×</button></div>
+    <div class="kv3"><div><b>#${pos}</b>klan sırası</div><div><b>${fmt(C.clanPts(tag))}</b>puan</div><div><b>${c.m.length}/${C.CLAN_MAX}</b>üye</div></div>
+    ${meta.desc ? `<div class="small cdesc">“${esc(meta.desc)}”</div>` : ''}
+    ${w ? `<section class="card"><b>Savaş durumu</b><div class="stg"><span>Öldürülen asker</span><span>${fmt(((w.sc || {})[my] || {}).kill || 0)} – ${fmt(((w.sc || {})[tag] || {}).kill || 0)}</span><span>Kazanılan saldırı</span><span>${((w.sc || {})[my] || {}).win || 0} – ${((w.sc || {})[tag] || {}).win || 0}</span><span>Fethedilen köy</span><span>${((w.sc || {})[my] || {}).conq || 0} – ${((w.sc || {})[tag] || {}).conq || 0}</span></div></section>` : ''}
+    <section class="card"><b>Üyeler</b><div>${mem.map(o => { const r = C.rankOf(o); return `<div class="mrow" data-pc="${o}"><i class="sw" style="background:${C.ownerColor(o)}"></i><span><b>${esc(C.ownerName(o))}</b>${o === 'P' ? ' <span class="muted small">(sen)</span>' : C.isHuman(o) ? ' <span class="ctag">OYUNCU</span>' : ''} ${r ? `<span class="rk ${r}">${C.RANKS[r]}</span>` : ''}</span><span class="num muted small">${fmt(C.ownerPts(o))} puan</span></div>`; }).join('')}</div></section>
+    ${acts ? `<div class="chips">${acts}</div>` : ''}`, box => {
+    box.addEventListener('click', e => {
+      if (e.target.closest('[data-ca="goto"]')) { closeSheet(); tab = 'klan'; klanSub = 'bilgi'; renderTabs(); sig = ''; render(); return; }
+      const j = e.target.closest('[data-join]');
+      if (j) { const rr = act(() => C.joinClan(tag, now())); toast(rr === 'ok' ? 'Klana katıldın!' : rr === 'weak' ? 'Klan üyeleri seni henüz yeterince güçlü bulmuyor' : rr === 'full' ? 'Klan dolu' : 'Katılamadın', rr === 'ok' ? 'good' : 'bad'); save(); sig = ''; render(); if (rr === 'ok') clanCard(tag); return; }
+      if (dipClick(e, () => { save(); sig = ''; render(); clanCard(tag); })) return;
+    });
+  });
+}
+// isimler ve klan kısaltmaları her yerde tıklanabilir
+document.addEventListener('click', e => {
+  if (!S) return;
+  const p = e.target.closest('[data-pc]'), c = e.target.closest('[data-cc]');
+  const t = c && (!p || p.contains(c)) ? c : p; if (!t) return;
+  if (t.closest('button') && !t.matches('button')) { /* butonun içindeki isim */ }
+  e.stopPropagation(); e.preventDefault();
+  if (t === c) clanCard(c.dataset.cc); else playerCard(p.dataset.pc);
+}, true);
+
 let overShown = false;
 function showOver() {
   if (overShown) return; overShown = true;
-  const r = C.ranking();
-  sheet(`<h3>Beyliğin düştü</h3><div>Son köyün de el değiştirdi. ${esc(r[0].name)} şu an Anadolu'nun en güçlü beyliği.</div>
-    <button class="btn" id="overNew">Yeni beylik kur</button>`, () => { $('overNew').onclick = () => { if (MPX) { leaveToMenu(); overShown = false; return; } store.del(); S = null; C.S = null; overShown = false; closeSheet(); showStart(); }; });
-  $('ov').classList.add('center');
+  const r = C.ranking(), lost = S.reports.find(x => x.conquered && x.defOwner === 'P'), st = S.stats || {};
+  const by = lost ? C.ownerName(lost.attOwner) : null;
+  Sfx.play('bad');
+  sheet(`<div class="over"><svg class="flag" viewBox="0 0 48 48" fill="none" stroke="#c0392b" stroke-width="2.4" stroke-linecap="round"><path d="M12 44V5"/><path d="M12 7c8-4 13 4 24 0v17c-11 4-16-4-24 0" fill="rgba(192,57,43,.25)"/><path d="M19 13l10 8M29 13l-10 8" stroke="#efe6d2"/></svg>
+    <h3>Sancağın yere düştü</h3>
+    <p>${lost ? `Son köyün <b>${esc(lost.defName)}</b>, ${esc(by)} tarafından fethedildi.` : 'Son köyün de el değiştirdi.'} Ocakların söndü, akıncıların dağıldı; uç boylarında adın artık yalnızca bir hikâye.</p>
+    <p class="muted small">Ama her yıkılış bir doğuşun habercisidir. ${esc(r[0].name)} şu an Anadolu'nun en güçlü beyliği.</p>
+    <div class="kv3"><div><b>${fmt(st.kills || 0)}</b>öldürülen asker</div><div><b>${fmt(st.conq || 0)}</b>fethedilen köy</div><div><b>${fmt(st.defWins || 0)}</b>başarılı savunma</div></div>
+    <button class="btn firuze" id="overRe">Bu dünyada yeniden başla</button>
+    <button class="btn sec" id="overMenu">Ana menüye dön</button>
+    <div class="muted small" style="text-align:center">Yeniden başlarsan haritanın boş bir köşesinde küçük bir köyle, 1 günlük korumayla doğarsın. Teknolojin, klanın ve istatistiklerin seninle kalır.</div></div>`, box => {
+    $('overRe').onclick = () => {
+      const rr = act(() => C.respawn(now()));
+      if (rr === 'ok' || rr === 'alive') { overShown = false; closeSheet(); save(); tab = 'koy'; renderTabs(); sig = ''; render(); toast('Yeni köyünde sancak açtın. Yolun açık olsun!', 'good'); Sfx.play('good'); }
+      else toast('Haritada boş köy kalmadı', 'bad');
+    };
+    $('overMenu').onclick = () => { overShown = false; if (MPX) { leaveToMenu(); return; } save(); S = null; C.S = null; closeSheet(); showStart(); };
+  });
+  const ov = $('ov'); ov.classList.add('center'); ov.dataset.lock = '1';
 }
 
 // ---------- canlı güncelleme ----------
@@ -1964,7 +2143,7 @@ addEventListener('resize', () => { if (tab === 'harita') { sig = ''; render(); }
 window.__back = () => {
   try {
     if ($('tutbox')) { tutSkip(); return true; }
-    if ($('ov')) { const x = $('ov').querySelector('[data-close]'); closeSheet(); return true; }
+    if ($('ov')) { if ($('ov').dataset.lock) return true; closeSheet(); return true; }
     if (SC.sel) { selectBuilding(null); return true; }
     if (S && tab !== 'koy') { tab = 'koy'; renderTabs(); sig = ''; render(); return true; }
     sheet(`<h3>Oyundan çıkılsın mı?</h3><div class="muted">İlerlemen kayıtlı. Dünya sen yokken de dönmeye devam eder.</div><div class="chips"><button class="btn red" id="exitYes">Çık</button><button class="btn sec" data-close>Oyuna dön</button></div>`, () => {
