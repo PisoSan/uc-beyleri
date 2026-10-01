@@ -110,6 +110,18 @@ h2.sec{font-family:var(--display);font-size:17px;font-weight:700;margin:4px 0 0;
 .bsh{display:flex;gap:10px;align-items:center}
 .bic.sm{width:32px;height:32px;border-radius:8px;flex:none}
 .bic.sm svg{width:19px;height:19px}
+.tl3{display:block;width:92px;height:92px;flex:none}
+.thimg{width:100%;height:100%;object-fit:contain;display:block}
+.bic .thimg{transform:scale(1.18)}
+.thph{display:grid;place-items:center;width:100%;height:100%}
+.bic{overflow:hidden;background:radial-gradient(circle at 50% 35%,#2a3d5e,#141f33)}
+.bsh .bic{width:64px;height:64px;border-radius:14px}
+.pop .bic.sm{width:44px;height:44px;border-radius:10px}
+.uic{float:left;width:52px;height:52px;margin:0 10px 0 0;border-radius:10px;overflow:hidden;background:radial-gradient(circle at 50% 40%,#4a6488,#1c2a44);border:1px solid var(--line)}
+.startbg{position:fixed;inset:0;width:100%;height:100%;z-index:0;display:block}
+.start .box{position:relative;z-index:2}
+.start.has3d::before{content:'';position:fixed;inset:0;z-index:1;pointer-events:none;background:linear-gradient(180deg,rgba(12,20,34,.62),rgba(12,20,34,.5) 25%,rgba(12,20,34,.8) 50%,rgba(12,20,34,.93))}
+.start.has3d h1,.start.has3d .kicker,.start.has3d p,.start.has3d .field{text-shadow:0 2px 8px rgba(0,0,0,.8)}
 .blist2 button{align-items:center;justify-content:flex-start;gap:10px}
 .blist2 .bl{flex:1;display:grid;text-align:left}
 .req{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:13px}
@@ -420,7 +432,10 @@ const BI = {
   kervansaray: 'M3 20V9l9-5 9 5v11M3 20h18M9 20v-5a3 3 0 016 0v5M7 11h.01M17 11h.01',
   divan: 'M6 4h11a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6a2 2 0 0 1 1-2zM9 9h7M9 13h7M9 17h4',
 };
-const bIcon = b => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${BI[b]}"/></svg>`;
+const use3D = () => V3.ok && !use2D();
+const bIcon = b => { if (!use3D()) return bIconSvg(b); const l = S && cur() ? Math.max(1, cur().b[b] || 1) : 1, url = V3.thumb('b', b, l); return url ? `<img class="thimg" src="${url}" alt="">` : `<span class="thph" data-thumb="${V3.thumbKey('b', b, l)}">${bIconSvg(b)}</span>`; };
+const uIcon = u => { if (!use3D()) return ''; const url = V3.thumb('u', u); return `<span class="uic">${url ? `<img class="thimg" src="${url}" alt="">` : `<span class="thph" data-thumb="${V3.thumbKey('u', u)}"></span>`}</span>`; };
+const bIconSvg = b => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${BI[b]}"/></svg>`;
 const TABS = [
   ['koy', 'Köy', 'M4 20V11l8-6 8 6v9M9 20v-5h6v5'],
   ['harita', 'Harita', 'M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2zM9 4v14M15 6v14'],
@@ -625,6 +640,7 @@ function showStart(err) {
     </div>
   </div>`;
   $('app').appendChild(el);
+  if (use3D()) { const bg = document.createElement('canvas'); bg.className = 'startbg'; el.prepend(bg); el.classList.add('has3d'); try { V3.showcase(bg); } catch (e) { bg.remove(); el.classList.remove('has3d'); } }
   let mode = LS.get('ub-startmode') || (hasSp ? 'sp' : 'mp');
   const setMode = m => {
     mode = m; LS.set('ub-startmode', m);
@@ -992,7 +1008,7 @@ function bSheetHTML(b) {
     h += `<h2 class="sec">Eğitim</h2><div id="srq">${rqHTML(v, b)}</div><section class="card">`;
     for (const u of C.U_ORDER.filter(x => C.U[x].b === b)) {
       const U = C.U[u], un = C.unitUnlocked(v, u);
-      h += `<div class="urow${un ? '' : ' locked'}"><div><div class="nm">${U.n} <span class="muted small num">· elde ${fmt(v.units[u] || 0)}</span></div><div class="st num">${U.d}. ${unitStats(u)}</div></div>
+      h += `<div class="urow${un ? '' : ' locked'}"><div>${uIcon(u)}<div class="nm">${U.n} <span class="muted small num">· elde ${fmt(v.units[u] || 0)}</span></div><div class="st num">${U.d}. ${unitStats(u)}</div></div>
         <div class="num small muted" style="text-align:right">${dur(C.uTime(u, l, 'P'))}<br>nüfus ${U.pop}</div>
         <div class="ctl"><div class="chips">${costChips(U.c)}</div>
         ${un ? `<input class="qty num" type="number" min="0" inputmode="numeric" id="sq-${u}" value="${drafts[u] || ''}" placeholder="0" aria-label="${U.n} sayısı">
@@ -1150,7 +1166,7 @@ function renderOrdu() {
     html += `<div id="rq-${rb}"></div>`;
     for (const u of C.U_ORDER.filter(x => C.U[x].b === rb)) {
       const U = C.U[u], un = C.unitUnlocked(v, u);
-      html += `<div class="urow${un ? '' : ' locked'}"><div><div class="nm">${U.n}</div><div class="st num">${U.d}. ${unitStats(u)}</div></div>
+      html += `<div class="urow${un ? '' : ' locked'}"><div>${uIcon(u)}<div class="nm">${U.n}</div><div class="st num">${U.d}. ${unitStats(u)}</div></div>
         <div class="num small muted" style="text-align:right">${CLOCK_I.replace('<svg', '<svg style="width:13px;height:13px;vertical-align:-2px"')} ${dur(C.uTime(u, lvl, 'P'))}<br>nüfus ${U.pop}</div>
         <div class="ctl"><div class="chips">${costChips(U.c)}</div>
         ${un ? `<input class="qty num" type="number" min="0" inputmode="numeric" id="q-${u}" value="${drafts[u] || ''}" placeholder="0" aria-label="${U.n} sayısı">
@@ -1225,6 +1241,13 @@ function renderMap() {
     <div class="mapbtns"><button class="icon-btn" id="mzIn" aria-label="Yakınlaştır">+</button><button class="icon-btn" id="mzOut" aria-label="Uzaklaştır">−</button><button class="icon-btn" id="centerBtn" aria-label="Köyüne dön"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg></button><button class="icon-btn" id="tierBtn" aria-label="Güç kademeleri">◆</button></div>
     <div class="mapcard" id="mapcard"></div></div>`;
   const cv = $('map');
+  map.three = use3D();
+  if (map.three) {
+    cv.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block';
+    V3.map.start();
+    $('centerBtn').onclick = () => V3.map.center(cur());
+    $('mzIn').onclick = () => V3.map.zoom(1.3); $('mzOut').onclick = () => V3.map.zoom(1 / 1.3);
+  } else {
   const ro = () => { const r = cv.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, 2); cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr); cv.getContext('2d').setTransform(dpr, 0, 0, dpr, 0, 0); if (map.ox === null) centerOn(cur()); drawMap(); };
   ro();
   cv.addEventListener('pointerdown', e => { cv.setPointerCapture(e.pointerId); map.drag = { x: e.clientX, y: e.clientY, ox: map.ox, oy: map.oy, moved: false }; cv.style.cursor = 'grabbing'; });
@@ -1242,16 +1265,19 @@ function renderMap() {
   const mz = f => () => { const r = cv.getBoundingClientRect(), cxw = (map.ox + r.width / 2) / map.T, cyw = (map.oy + r.height / 2) / map.T; map.T = Math.max(30, Math.min(96, Math.round(map.T * f))); map.ox = cxw * map.T - r.width / 2; map.oy = cyw * map.T - r.height / 2; clampMap(); drawMap(); };
   $('mzIn').onclick = mz(1.25); $('mzOut').onclick = mz(.8);
   cv.addEventListener('wheel', e => { e.preventDefault(); mz(e.deltaY < 0 ? 1.12 : .9)(); }, { passive: false });
+  }
   $('tierBtn').onclick = () => sheet(`<div class="shead"><h3>Güç kademeleri</h3><button class="x" data-close aria-label="Kapat">×</button></div><div class="muted small">Haritadaki kalelerin şekli puanlarına göre değişir. Altındaki elmaslar kademeyi, sayı toplam puanı gösterir. Gri ve yıkık kaleler terk edilmiş köylerdir.</div><div class="tlist">${tierLegendHTML()}</div>`, paintTierLegend);
   $('mvpanel').addEventListener('click', e => { if (e.target.closest('[data-mvtoggle]')) { MV.open = !MV.open; liveMovePanel(); return; } const r = e.target.closest('[data-mv]'); if (r) focusMove(+r.dataset.mv); });
   MV.sig = ''; MV.seen = new Map(S.moves.filter(mvRelevant).map(m => [m.id, m])); liveMovePanel();
   mapCard();
   if (!MV.raf) MV.raf = requestAnimationFrame(mapLoop);
 }
-function centerOn(v) { const cv = $('map'); if (!cv) return; const r = cv.getBoundingClientRect(); map.ox = (v.x + .5) * map.T - r.width / 2; map.oy = (v.y + .5) * map.T - r.height * .42; clampMap(); }
+function mapPt(x, y) { return map.three ? V3.map.proj(x, y) : { x: x * map.T - map.ox, y: y * map.T - map.oy }; }
+function centerOn(v) { if (map.three) { V3.map.center(v); return; } const cv = $('map'); if (!cv) return; const r = cv.getBoundingClientRect(); map.ox = (v.x + .5) * map.T - r.width / 2; map.oy = (v.y + .5) * map.T - r.height * .42; clampMap(); }
 function clampMap() { const cv = $('map'), r = cv.getBoundingClientRect(), W = C.WORLD * map.T; map.ox = Math.max(-60, Math.min(W - r.width + 60, map.ox)); map.oy = Math.max(-60, Math.min(W - r.height + 180, map.oy)); }
 const hash = (x, y) => { let h = x * 374761393 + y * 668265263 + S.seed; h = (h ^ (h >>> 13)) * 1274126177; return ((h ^ (h >>> 16)) >>> 0); };
 function drawMap() {
+  if (map.three) { if ($('map')) V3.map.frame(); return; }
   const cv = $('map'); if (!cv) return; const g = cv.getContext('2d'), r = cv.getBoundingClientRect(), T = map.T;
   g.fillStyle = '#0c1422'; g.fillRect(0, 0, r.width, r.height);
   const x0 = Math.max(0, Math.floor(map.ox / T)), y0 = Math.max(0, Math.floor(map.oy / T));

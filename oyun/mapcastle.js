@@ -205,6 +205,7 @@ function tierLegendHTML() {
   return TIERS.map((t, i) => `<div class="tl"><canvas data-tier="${i}" width="10" height="10"></canvas><div><b>${t.n}</b><div class="muted small num">${i < TIERS.length - 1 ? fmt(t.min) + '–' + fmt(TIERS[i + 1].min - 1) : fmt(t.min) + '+'} puan</div></div></div>`).join('');
 }
 function paintTierLegend(box) {
+  if (use3D()) { for (const cv of box.querySelectorAll('canvas[data-tier]')) { const i = +cv.dataset.tier, url = V3.thumb('c', i), el = document.createElement('span'); el.className = 'tl3'; el.innerHTML = url ? `<img class="thimg" src="${url}" alt="">` : `<span class="thph" data-thumb="${V3.thumbKey('c', i)}"></span>`; cv.replaceWith(el); } return; }
   for (const cv of box.querySelectorAll('canvas[data-tier]')) {
     const sp = castleSprite(+cv.dataset.tier, S.player.color, false, 56);
     cv.width = sp.c.width; cv.height = sp.c.height; cv.style.width = sp.W + 'px'; cv.style.height = sp.H + 'px';

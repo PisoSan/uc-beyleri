@@ -17,7 +17,7 @@ function mvRelevant(m) { return m.owner === 'P' || (S.vil[m.to] && S.vil[m.to].o
 function mvOther(m) { return !!S.mp && !mvRelevant(m) && C.isHuman(m.owner) && (m.type === 'attack' || m.type === 'spy' || m.type === 'support'); }
 function mvGeom(m, T) {
   const a = S.vil[m.type === 'return' || m.type === 'tradeback' ? m.via : m.from], b = S.vil[m.to];
-  const ax = (a.x + .5) * T - map.ox, ay = (a.y + .62) * T - map.oy, bx = (b.x + .5) * T - map.ox, by = (b.y + .62) * T - map.oy;
+  const pa = mapPt(a.x + .5, a.y + (map.three ? .5 : .62)), pb = mapPt(b.x + .5, b.y + (map.three ? .5 : .62)), ax = pa.x, ay = pa.y, bx = pb.x, by = pb.y;
   const dx = bx - ax, dy = by - ay, L = Math.hypot(dx, dy) || 1, bend = Math.min(60, L * .18) * (m.id % 2 ? 1 : -1);
   const cx = (ax + bx) / 2 - dy / L * bend, cy = (ay + by) / 2 + dx / L * bend;
   return { ax, ay, bx, by, cx, cy };
@@ -128,7 +128,7 @@ function drawTargetAlert(g, G, t, T) {
 }
 function drawClash(g, fx, T, t) {
   const age = (t - fx.t0) / 2400; if (age > 1) return false;
-  const x = (S.vil[fx.v].x + .5) * T - map.ox, y = (S.vil[fx.v].y + .45) * T - map.oy, s = T * .5;
+  const cp = mapPt(S.vil[fx.v].x + .5, S.vil[fx.v].y + (map.three ? .4 : .45)), x = cp.x, y = cp.y, s = T * .5;
   g.save();
   g.globalAlpha = 1 - age * age;
   const rg = g.createRadialGradient(x, y, 1, x, y, s * (1 + age));
@@ -192,6 +192,7 @@ function liveMovePanel() {
 }
 function focusMove(id) {
   const m = S.moves.find(x => x.id === id), cv = $('map'); if (!m || !cv) return;
+  if (map.three) { const a = S.vil[m.type === 'return' || m.type === 'tradeback' ? m.via : m.from], b = S.vil[m.to], k = Math.min(1, Math.max(0, (now() - m.depart) / (m.arrive - m.depart))); V3.map.focus(a.x + .5 + (b.x - a.x) * k, a.y + .5 + (b.y - a.y) * k); map.sel = m.to; mapCard(); return; }
   const G = mvGeom(m, map.T), k = Math.min(1, Math.max(0, (now() - m.depart) / (m.arrive - m.depart))), p = qpt(G, k), r = cv.getBoundingClientRect();
   map.ox += p.x - r.width * .55; map.oy += p.y - r.height * .58; clampMap(); map.sel = m.to; mapCard();
 }
