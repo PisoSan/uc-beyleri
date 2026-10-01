@@ -743,6 +743,7 @@ function showCode(first) {
   });
 }
 
+if (!window.UB && navigator.storage && navigator.storage.persist) { try { navigator.storage.persist(); } catch (e) {} }
 function hideSplash() { const sp = $('splash'); if (!sp || sp.classList.contains('hide')) return; requestAnimationFrame(() => setTimeout(() => { sp.classList.add('hide'); setTimeout(() => sp.remove(), 500); }, 250)); }
 // ---------- bildirimler ----------
 // Yerel: inşaat/eğitim/araştırma bitince, ordu dönünce, köye saldırı ulaşınca, günlük sandık (telefon alarmı).
@@ -1188,7 +1189,8 @@ $('view').addEventListener('click', e => {
     if (r === 'ok') { Sfx.play('build'); toast(C.B[b].n + ' inşaatı başladı', 'info'); save(); liveKoy(); renderTop(); }
   }
 });
-function gq() { if (use2D()) return '2d'; try { return localStorage.getItem('ub-q') || 'high'; } catch (e) { return 'high'; } }
+const DEFQ = () => (/iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) ? 'med' : 'high';
+function gq() { if (use2D()) return '2d'; try { return localStorage.getItem('ub-q') || DEFQ(); } catch (e) { return DEFQ(); } }
 function use2D() { try { return localStorage.getItem('ub-2d') === '1'; } catch (e) { return false; } }
 function selectBuilding(b) { SC.sel = b; const pop = $('pop'); if (pop) { pop.dataset.sig = ''; if (!b) pop.hidden = true; } livePop(); }
 function popHTML(b) {

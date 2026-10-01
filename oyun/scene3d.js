@@ -548,7 +548,8 @@ function mergeGeos(list) {
 // ============================================================
 //  KALİTE: gökyüzü, ortam ışığı, görüntü sonrası işleme, zemin boyaması, çimen, rüzgâr, köy eşyaları
 // ============================================================
-const QUAL = () => { try { return localStorage.getItem('ub-q') || 'high'; } catch (e) { return 'high'; } };
+const DEFQ = () => (/iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) ? 'med' : 'high';
+const QUAL = () => { try { return localStorage.getItem('ub-q') || DEFQ(); } catch (e) { return DEFQ(); } };
 const QS = { high: { pr: 1.5, shadow: 2048, post: true, bloom: true, msaa: 2, grass: 3000, splat: 2048, trees: 380, forest: 3 }, med: { pr: 1.25, shadow: 1024, post: false, bloom: false, msaa: 0, grass: 1200, splat: 1024, trees: 260, forest: 2 }, low: { pr: 1, shadow: 1024, post: false, bloom: false, msaa: 0, grass: 0, splat: 1024, trees: 170, forest: 2 } };
 const QC = () => QS[QUAL()] || QS.high;
 const WIND = { value: 0 };

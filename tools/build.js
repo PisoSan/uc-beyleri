@@ -22,4 +22,17 @@ for (const out of ['app/src/main/assets/index.html', 'dist/uc-beyleri.html']) {
   fs.mkdirSync(path.dirname(path.join(root, out)), { recursive: true });
   fs.writeFileSync(path.join(root, out), html);
 }
+// Web sürümü (iPhone / tarayıcı): site/ klasörü GitHub Pages'e yüklenir
+const webHead = '<meta name="apple-mobile-web-app-capable" content="yes">\n<meta name="mobile-web-app-capable" content="yes">\n' +
+  '<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">\n<meta name="apple-mobile-web-app-title" content="Uç Beyleri">\n' +
+  '<meta name="theme-color" content="#0f1829">\n<link rel="manifest" href="manifest.webmanifest">\n<link rel="apple-touch-icon" href="icon-180.png">\n<link rel="icon" href="icon-192.png">\n';
+const site = path.join(root, 'site');
+fs.mkdirSync(site, { recursive: true });
+fs.writeFileSync(path.join(site, 'index.html'), html.replace('<meta charset="utf-8">\n', '<meta charset="utf-8">\n' + webHead));
+for (const f of ['icon-180.png', 'icon-192.png', 'icon-512.png']) fs.copyFileSync(path.join(root, 'oyun', 'web', f), path.join(site, f));
+fs.writeFileSync(path.join(site, 'manifest.webmanifest'), JSON.stringify({
+  name: 'Uç Beyleri', short_name: 'Uç Beyleri', lang: 'tr', start_url: './', scope: './', display: 'standalone', orientation: 'portrait',
+  background_color: '#0f1829', theme_color: '#0f1829',
+  icons: [{ src: 'icon-192.png', sizes: '192x192', type: 'image/png' }, { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' }],
+}, null, 2));
 console.log('Oyun dosyası üretildi:', (html.length / 1024).toFixed(0), 'KB');
