@@ -6,3 +6,6 @@ create table if not exists public.accounts (
   created_at timestamptz not null default now()
 );
 alter table public.accounts enable row level security;   -- sadece "account" fonksiyonu (sunucu anahtarıyla) yazar/okur
+-- "account" fonksiyonu tabloya sunucu anahtarıyla yazar (yeni projelerde bu izin otomatik verilmiyor)
+grant usage on schema public to service_role;
+grant select, insert, update, delete on table public.accounts to service_role;
