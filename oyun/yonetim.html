@@ -85,6 +85,8 @@ button.row:hover{background:rgba(255,255,255,.02)}
 .login h1{margin:0;font-family:var(--display);font-size:40px;color:var(--brass);line-height:1}
 .login p{margin:0;color:var(--muted)}
 .login form{display:grid;gap:10px;text-align:left}
+.dlg{position:fixed;inset:0;z-index:80;background:rgba(8,6,4,.7);display:grid;place-items:center;padding:20px}
+.dbox{background:var(--panel);border:1px solid var(--line-2);border-radius:14px;padding:16px;display:grid;gap:12px;width:100%;max-width:400px;font-size:16px;box-shadow:0 20px 50px rgba(0,0,0,.6)}
 .login .big{padding:12px;font-size:17px}
 </style>
 <div id="app"></div>
@@ -125,6 +127,16 @@ function netErr(e) {
   if (/function .* does not exist|schema cache/i.test(m)) return 'Yönetim SQL kurulumu eksik (20261002000000_yonetim.sql).';
   return m || 'Bir şeyler ters gitti';
 }
+// onay penceresi (Android WebView'de tarayıcının confirm/prompt pencereleri açılmıyor)
+function ask(msg, opt = {}) {
+  return new Promise(res => {
+    const ov = document.createElement('div'); ov.className = 'dlg';
+    ov.innerHTML = `<div class="dbox"><div>${esc(msg)}</div>${opt.input != null ? `<input id="dlgIn" autocomplete="off" autocapitalize="characters" placeholder="${esc(opt.input)}">` : ''}<div class="chips" style="justify-content:flex-end"><button class="btn sec" data-r="0">Vazgeç</button><button class="btn ${opt.danger ? 'red' : ''}" data-r="1">${esc(opt.ok || 'Evet')}</button></div></div>`;
+    document.body.appendChild(ov);
+    const inp = ov.querySelector('#dlgIn'); if (inp) setTimeout(() => inp.focus(), 50);
+    ov.onclick = e => { const b = e.target.closest('[data-r]'); if (!b && e.target !== ov) return; const ok = b && b.dataset.r === '1'; const v = inp ? inp.value : true; ov.remove(); res(ok ? v : null); };
+  });
+}
 const T = () => Date.now() + (Net.offset || 0);
 const SEAL = `<svg viewBox="0 0 48 48" fill="none" aria-hidden="true"><circle cx="24" cy="24" r="21" stroke="#d4a94e" stroke-width="2"/><g stroke="#d4a94e" stroke-width="2.2" stroke-linejoin="round"><path d="M14 14h20v20H14z"/><path d="M24 9.9 38.1 24 24 38.1 9.9 24z"/></g><circle cx="24" cy="24" r="5" fill="#d2553c"/></svg>`;
 const I = {
@@ -150,7 +162,7 @@ function shell(title, crumb) {
       <nav class="tabbar nav">${NAV.map(([k, n, ic]) => `<button data-nav="${k}" class="${(top ? top[0] : route.top) === k ? 'on' : ''}">${ic}<span>${n}</span></button>`).join('')}</nav></main>`;
   document.querySelectorAll('[data-nav]').forEach(b => b.onclick = () => { hist = []; go({ v: b.dataset.nav }, false); });
   const bk = $('bk'); if (bk) bk.onclick = back;
-  for (const id of ['out', 'out2']) { const o = $(id); if (o) o.onclick = async () => { if (!confirm('Çıkış yapılsın mı?')) return; await Net.logout(); showLogin(); }; }
+  for (const id of ['out', 'out2']) { const o = $(id); if (o) o.onclick = async () => { if (!(await ask('Çıkış yapılsın mı?', { ok: 'Çıkış yap' }))) return; await Net.logout(); showLogin(); }; }
   return $('c');
 }
 const fail = (c, e) => { c.innerHTML = `<div class="card"><div class="err">${esc(netErr(e))}</div><button class="btn sec" id="retry">Tekrar dene</button></div>`; $('retry').onclick = draw; };
@@ -298,7 +310,7 @@ async function vDunya() {
     if (e.target.id === 'send') { const m = $('msg').value.trim(); if (!m) return; run(() => edit(wid, (W2, t) => { W2.chat.genel.push({ id: ++W2.uid, t, from: 'SYS', text: '📢 Yönetim: ' + m.slice(0, 300) }); }), 'Duyuru gönderildi', draw); }
     const ar = e.target.closest('[data-allres]'); if (ar) { const n = +ar.dataset.allres; run(() => edit(wid, (W2, t) => { for (const vv of W2.vil) { const b = beyOf(W2, vv.owner); if (b && b.human) addRes(vv, n, t); } }), 'Kaynaklar eklendi'); }
     const ap = e.target.closest('[data-allprot]'); if (ap) { const hr = +ap.dataset.allprot; run(() => edit(wid, (W2, t) => { for (const b of W2.beys) if (b.human) b.protectUntil = hr ? t + hr * 3600000 : 0; }), hr ? 'Herkes korumada' : 'Korumalar kaldırıldı'); }
-    if (e.target.id === 'del') { if (!confirm('Dünya "' + R.name + '" kalıcı olarak silinsin mi? Geri alınamaz.')) return; if (prompt('Onay için dünya kodunu yaz: ' + R.code) !== R.code) { toast('Kod tutmadı, silinmedi', 'bad'); return; } run(() => Net.admin.del(wid), 'Dünya silindi', () => { hist = []; go({ v: 'dunyalar' }, false); }); }
+    if (e.target.id === 'del') { const typed = await ask('"' + R.name + '" dünyası ve içindeki bütün ilerleme kalıcı olarak silinecek. Onaylamak için dünya kodunu yaz: ' + R.code, { input: R.code, ok: 'Dünyayı sil', danger: true }); if (typed == null) return; if (typed.trim().toUpperCase() !== R.code.toUpperCase()) { toast('Kod tutmadı, silinmedi', 'bad'); return; } run(() => Net.admin.del(wid), 'Dünya silindi', () => { hist = []; go({ v: 'dunyalar' }, false); }); }
   };
 }
 
@@ -320,14 +332,14 @@ async function vOyuncu() {
     <section class="card"><h2>Koruma</h2><div class="chips"><button class="btn sec" data-prot="24">24 saat ver</button><button class="btn sec" data-prot="72">3 gün ver</button><button class="btn sec" data-prot="0">Kaldır</button></div></section>
     <section class="card"><h2>Köyleri</h2>${vils.map(v => `<button class="row" data-v="${v.id}"><span><b>${esc(v.name)}</b> <span class="muted num">(${v.x}|${v.y})</span><div class="muted small num">${fmt(C.vPoints(v))} puan · ${v.res.map(fmt).join(' / ')}</div></span><span class="chev">›</span></button>`).join('') || '<div class="empty">Köyü yok.</div>'}</section>
     <section class="card"><h2>Dünyadan çıkar</h2><div class="muted small">Köyleri terk edilmiş köye döner, ordusu dağılır. Kodla tekrar katılabilir; engellemek için yasakla.</div><div class="chips"><button class="btn red" id="kick">Dünyadan çıkar</button></div></section>`;
-  c.onclick = e => {
+  c.onclick = async e => {
     const v = e.target.closest('[data-v]'); if (v) { go({ v: 'koy', top: route.top, wid, vid: +v.dataset.v }); return; }
-    const bn = e.target.closest('[data-ban]'); if (bn) { const hr = +bn.dataset.ban; if (!confirm(p.name + ' ' + (hr ? Math.round(hr / 24) + ' gün' : 'kalıcı olarak') + ' yasaklansın mı?')) return; run(() => Net.admin.ban(p.user_id, $('why').value.trim(), hr), p.name + ' yasaklandı', draw); return; }
+    const bn = e.target.closest('[data-ban]'); if (bn) { const hr = +bn.dataset.ban; if (!(await ask(p.name + ' ' + (hr ? Math.round(hr / 24) + ' gün' : 'kalıcı olarak') + ' yasaklansın mı?', { ok: 'Yasakla', danger: true }))) return; run(() => Net.admin.ban(p.user_id, $('why').value.trim(), hr), p.name + ' yasaklandı', draw); return; }
     if (e.target.id === 'unban') { run(() => Net.admin.unban(p.user_id), 'Yasak kaldırıldı', draw); return; }
     const rs = e.target.closest('[data-res]'); if (rs) { const n = +rs.dataset.res; run(() => edit(wid, (W2, t) => { for (const vv of W2.vil) if (vv.owner === hid) addRes(vv, n, t); }), 'Kaynak eklendi', draw); return; }
     const pr = e.target.closest('[data-prot]'); if (pr) { const hr = +pr.dataset.prot; run(() => edit(wid, (W2, t) => { const bb = beyOf(W2, hid); if (!bb) return false; bb.protectUntil = hr ? t + hr * 3600000 : 0; }), hr ? 'Koruma verildi' : 'Koruma kaldırıldı', draw); return; }
     if (e.target.id === 'kick') {
-      if (!confirm(p.name + ' dünyadan çıkarılsın mı?')) return;
+      if (!(await ask(p.name + ' dünyadan çıkarılsın mı?', { ok: 'Çıkar', danger: true }))) return;
       run(async () => {
         await edit(wid, (W2, t) => {
           for (const vv of W2.vil) if (vv.owner === hid) { vv.owner = null; vv.base = Object.assign({}, vv.units); vv.bq = []; }
@@ -362,20 +374,20 @@ async function vKoy() {
       <div class="chips"><button class="btn sec" id="loy">Bağlılığı 100 yap</button></div></section>`;
   const num = id => Math.max(0, Math.floor(+($(id).value || 0)));
   const ed = (fn, msg) => run(() => edit(wid, (W2, t) => { const vv = W2.vil[vid]; C.syncRes(vv, t); return fn(vv, W2, t); }), msg, draw);
-  c.onclick = e => {
+  c.onclick = async e => {
     const id = e.target.id;
     if (id === 'radd') { const a = [num('r0'), num('r1'), num('r2')]; if (a.some(x => x)) ed((vv, W2, t) => addRes(vv, a, t), 'Kaynak eklendi'); }
     const q = e.target.closest('[data-q]'); if (q) { const n = +q.dataset.q; ed((vv, W2, t) => addRes(vv, n, t), 'Kaynak eklendi'); }
     if (id === 'rfill') ed(vv => { const cc = C.cap(vv); vv.res = vv.res.map(x => Math.max(x, cc)); }, 'Ambar dolduruldu');
-    if (id === 'rzero') { if (confirm('Kaynaklar sıfırlansın mı?')) ed(vv => { vv.res = [0, 0, 0]; }, 'Kaynaklar sıfırlandı'); }
+    if (id === 'rzero') { if (await ask('Kaynaklar sıfırlansın mı?', { danger: true })) ed(vv => { vv.res = [0, 0, 0]; }, 'Kaynaklar sıfırlandı'); }
     const u = e.target.closest('[data-u]');
     if (u) { const k = u.dataset.u, un = $('un').value, n = num('uc');
-      if (k === 'add' && !n) return; if (k === 'clear' && !confirm('Köydeki bütün askerler silinsin mi?')) return;
+      if (k === 'add' && !n) return; if (k === 'clear' && !(await ask('Köydeki bütün askerler silinsin mi?', { danger: true }))) return;
       ed(vv => { if (k === 'clear') vv.units = {}; else vv.units[un] = k === 'add' ? (vv.units[un] || 0) + n : n; if (vv.owner === null) vv.base = Object.assign({}, vv.units); }, k === 'clear' ? 'Askerler silindi' : 'Askerler güncellendi'); }
     if (id === 'bset') { const k = $('bk').value, l = Math.min(C.B[k].max, num('bl')); ed(vv => { vv.b[k] = l; vv.bq = vv.bq.filter(x => x.b !== k); }, C.B[k].n + ' ' + l + '. seviye'); }
     if (id === 'bmax') ed(vv => { for (const k of C.B_ORDER) vv.b[k] = C.B[k].max; vv.bq = []; }, 'Bütün binalar son seviyede');
     if (id === 'loy') ed(vv => { vv.loy = 100; }, 'Bağlılık 100');
-    if (id === 'oset') { const o = $('own').value || null; if (!confirm('Köyün sahibi "' + ownerName(W, o) + '" yapılsın mı?')) return;
+    if (id === 'oset') { const o = $('own').value || null; if (!(await ask('Köyün sahibi "' + ownerName(W, o) + '" yapılsın mı?'))) return;
       ed((vv, W2, t) => { if (vv.owner === o) return false; vv.owner = o; vv.loy = 100; vv.lt = t; vv.bq = []; vv.base = o === null ? Object.assign({}, vv.units) : null; W2.chat.genel.push({ id: ++W2.uid, t, from: 'SYS', text: vv.name + ' köyü yönetim kararıyla ' + ownerName(W2, o) + ' beyliğine geçti.' }); }, 'Sahip değiştirildi'); }
   };
 }

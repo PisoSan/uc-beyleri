@@ -3,6 +3,7 @@ package com.ahmetkaragoz.ucbeyleri.yonetim;
 import android.app.Activity;
 import android.os.Bundle;
 import android.view.View;
+import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -22,6 +23,7 @@ public class MainActivity extends Activity {
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
         webView.setWebViewClient(new WebViewClient());
+        webView.setWebChromeClient(new WebChromeClient());   // JS onay pencereleri için
         webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
         setContentView(webView);
         webView.loadUrl("file:///android_asset/index.html");

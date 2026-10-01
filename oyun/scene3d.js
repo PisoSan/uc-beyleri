@@ -1482,17 +1482,17 @@ function showcase(cv) {
   } else if (cv !== st.r.domElement) { cv.replaceWith(st.r.domElement); cv = st.r.domElement; }
   st.cv = cv; st.vil = v; buildVillage(v); st.sig = 'showcase';
   st.night = null; setLight(false);
-  const t0 = performance.now();
-  let last = 0;
+  // başlangıç ekranı arka planı: birkaç kare çizip durur (sürekli 3B çizim telefonu yoruyordu)
+  let frames = 0;
   const loop = ts => {
     if (!$('start') || !document.body.contains(cv) || !st.showcase) { st.showcase = false; return; }
-    if (ts - last < 33) { requestAnimationFrame(loop); return; } last = ts;
+    if (++frames > 4) { st.showcase = false; return; }
     const r = cv.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, 1.75);
     if (cv.width !== Math.round(r.width * dpr)) { st.r.setPixelRatio(dpr); st.r.setSize(r.width, r.height, false); st.cam.aspect = r.width / r.height; st.cam.updateProjectionMatrix(); }
-    const a = Math.PI / 4 + (ts - t0) / 24000;
+    const a = Math.PI / 4 + .35;
     st.view = { tx: 6.4, tz: 7.4, yaw: a, pitch: .62, dist: 19 }; applyCam();
     animate(ts); draw3(st, cv.width, cv.height);
-    requestAnimationFrame(loop);
+    setTimeout(() => requestAnimationFrame(loop), 60);
   };
   requestAnimationFrame(loop);
 }

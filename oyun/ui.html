@@ -361,6 +361,12 @@ input.qty{width:74px;background:var(--bg);border:1px solid var(--line);border-ra
 .speeds input{grid-row:span 2;accent-color:var(--gold)}
 .speeds b{font-size:15px}
 .speeds span{font-size:12.5px;color:var(--muted)}
+.homebtns{display:grid;gap:10px;justify-items:stretch;max-width:320px;width:100%;justify-self:center}
+.homebtns .bigbtn{justify-self:stretch}
+.homebtns .btn{padding:12px 16px;font-size:16px}
+.orline{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:13px;font-weight:700}
+.orline::before,.orline::after{content:'';flex:1;height:1px;background:var(--line)}
+.acctop{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px}
 .bigbtn{justify-self:center;border:0;border-radius:999px;background:var(--gold);color:#23190a;font-weight:800;font-size:19px;padding:10px 34px;cursor:pointer;box-shadow:0 4px 0 #9c7426}
 .bigbtn:active{transform:translateY(2px);box-shadow:0 2px 0 #9c7426}
 .star-row{display:flex;justify-content:center;color:var(--gold)}
@@ -401,7 +407,7 @@ input.qty{width:74px;background:var(--bg);border:1px solid var(--line);border-ra
 .seg.two{grid-template-columns:1fr 1fr}
 .mpbox{display:grid;gap:10px}
 .mprow{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center}
-.mprow input{min-width:0;text-transform:uppercase;letter-spacing:.2em;font-weight:800;text-align:center}
+.mprow input{background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:9px 12px;color:var(--text);font:inherit;font-size:18px;min-width:0;text-transform:uppercase;letter-spacing:.2em;font-weight:800;text-align:center}
 .wlist{display:grid;gap:6px}
 .wlist button{display:grid;grid-template-columns:1fr auto;align-items:center;gap:8px;text-align:left;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:8px 10px;color:var(--text);cursor:pointer}
 .wlist button span.code{font-weight:800;letter-spacing:.15em;color:var(--gold)}
@@ -712,73 +718,92 @@ function accSheet(kind, done) {
     };
   });
 }
-function showStart(err) {
+function showStart(err, step) {
   hideSplash();
   $('top').hidden = true; $('tabs').hidden = true; $('view').innerHTML = ''; setNet();
   const old = $('start'); if (old) old.remove();
   const el = document.createElement('div'); el.className = 'start'; el.id = 'start';
   const hasSp = !!store.get();
-  el.innerHTML = `<div class="box">
-    <div class="star-row">${STAR}</div>
-    <div class="kicker">Anadolu · XIII. yüzyıl</div>
-    <h1>Uç Beyleri</h1>
-    <p>Uç boylarında küçük bir köyün beyisin. Kaynak topla, ordunu kur, terk edilmiş köyleri yağmala ve Anadolu'nun hâkimiyeti için yarış.</p>
-    <div class="seg two"><button data-mode="sp">Tek başına</button><button data-mode="mp">Arkadaşlarla</button></div>
-    ${err ? `<div class="mperr">${esc(err)}</div>` : ''}
-    <label class="field">Beyliğinin adı<input id="stName" maxlength="28" value="${esc(LS.get('ub-name') || 'Kızılırmak Beyliği')}" autocomplete="off"></label>
-    <label class="field">İlk köyünün adı<input id="stVil" maxlength="22" value="${esc(LS.get('ub-vil') || 'Kızılcahamam')}" autocomplete="off"></label>
-    <div class="field" id="spdField">Dünya hızı
-      <div class="speeds">
-        <label><input type="radio" name="spd" value="1"><b>Gerçek zaman (1×)</b><span>Binalar saatler, fetih haftalar sürer.</span></label>
-        <label><input type="radio" name="spd" value="10" checked><b>Hızlı dünya (10×)</b><span>Her şey 10 kat hızlı. Birkaç günde fetih.</span></label>
-        <label><input type="radio" name="spd" value="100"><b>Deneme (100×)</b><span>Oyunu hızlıca denemek için.</span></label>
+  // adım: karşılama → (giriş) → dünyalar  |  tek başına
+  step = step || (err ? LS.get('ub-startmode') : null) || (Net.account ? 'mp' : null) || (Net.hasAuth && LS.get('ub-startmode') === 'mp' ? 'mp' : 'home');
+  if (step !== 'home') LS.set('ub-startmode', step);
+  const hero = small => `<div class="star-row">${STAR}</div>${small ? '' : '<div class="kicker">Anadolu · XIII. yüzyıl</div>'}<h1${small ? ' style="font-size:40px"' : ''}>Uç Beyleri</h1>`;
+  const nameFields = () => `<label class="field">Beyliğinin adı<input id="stName" maxlength="28" value="${esc(LS.get('ub-name') || 'Kızılırmak Beyliği')}" autocomplete="off"></label>
+    <label class="field">İlk köyünün adı<input id="stVil" maxlength="22" value="${esc(LS.get('ub-vil') || 'Kızılcahamam')}" autocomplete="off"></label>`;
+  const speeds = () => `<div class="field">Dünya hızı<div class="speeds">
+      <label><input type="radio" name="spd" value="1"><b>Gerçek zaman (1×)</b><span>Binalar saatler, fetih haftalar sürer.</span></label>
+      <label><input type="radio" name="spd" value="10" checked><b>Hızlı dünya (10×)</b><span>Her şey 10 kat hızlı. Birkaç günde fetih.</span></label>
+      <label><input type="radio" name="spd" value="100"><b>Deneme (100×)</b><span>Oyunu hızlıca denemek için.</span></label></div></div>`;
+  const backBtn = `<button class="linkbtn" id="stBack" style="justify-self:start">‹ Ana ekran</button>`;
+  let body = '';
+  if (step === 'home') {
+    body = `${hero()}<p>Uç boylarında küçük bir köyün beyisin. Kaynak topla, ordunu kur, terk edilmiş köyleri yağmala ve Anadolu'nun hâkimiyeti için yarış.</p>
+      ${err ? `<div class="mperr">${esc(err)}</div>` : ''}
+      <div class="homebtns">
+        <button class="bigbtn" data-go="in">Giriş yap</button>
+        <button class="btn firuze" data-go="reg">Hesap oluştur</button>
+        <button class="btn sec" data-go="guest">Misafir olarak arkadaşlarla oyna</button>
+        <div class="orline"><span>ya da</span></div>
+        ${hasSp ? '<button class="btn sec" id="stCont">Tek kişilik oyununa devam et</button>' : ''}
+        <button class="btn sec" data-go="sp">${hasSp ? 'Yeni tek kişilik oyun' : 'Tek başına oyna'}</button>
       </div>
-    </div>
-    <div id="spPane" class="mpbox">
-      ${hasSp ? '<button class="btn firuze" id="stCont">Kayıtlı oyununa devam et</button>' : ''}
-      <div class="field">Oyun modu
-        <div class="speeds">
-          <label><input type="radio" name="tst" value="" checked><b>Normal</b><span>Sıfırdan başla.</span></label>
-          <label><input type="radio" name="tst" value="res"><b>Test: kaynaklar dolu</b><span>Ambar dolu başlar, istediğin an tek dokunuşla yeniden doldurursun.</span></label>
-          <label><input type="radio" name="tst" value="full"><b>Test: bütün madenler en üst seviye</b><span>Kereste, Taş, Demir ve Ambar 30. seviye, kaynaklar dolu.</span></label>
-          <label><input type="radio" name="tst" value="max"><b>Test: bütün binalar son seviye</b><span>Köydeki her bina en üst seviyede, kaynaklar dolu.</span></label>
-        </div>
-      </div>
-      ${hasSp ? '<div class="muted small" style="text-align:center">Yeni oyun kurarsan kayıtlı tek kişilik oyunun silinir.</div>' : ''}
-      <button class="bigbtn" id="stGo">${hasSp ? 'Yeni oyun kur' : 'Beyliği kur'}</button>
-    </div>
-    <div id="mpPane" class="mpbox" hidden>
-      <section class="card mpbox"><b>Yeni dünya kur</b><div class="muted small">Seçtiğin hızda bir dünya kurulur. Sana 6 harfli bir kod verilir; arkadaşların bu kodla aynı dünyaya katılır.</div>
-        <button class="bigbtn" id="mpNew">Dünya kur</button></section>
-      <section class="card mpbox"><b>Koda katıl</b><div class="mprow"><input id="mpCode" maxlength="6" placeholder="KOD" autocomplete="off" aria-label="Dünya kodu"><button class="btn" id="mpJoin">Katıl</button></div></section>
+      <div class="muted small" style="text-align:center">Hesapla girersen beyliğin her telefonda seninle gelir.</div>`;
+  } else if (step === 'mp') {
+    const u = Net.account;
+    body = `${hero(true)}${backBtn}
+      <section class="card acctop"><span>${u ? `Giriş yapıldı: <b style="color:var(--gold)">@${esc(u)}</b>` : '<b>Misafir</b> olarak oynuyorsun'}</span>${u ? '<button class="btn sec" data-acc="out">Çıkış</button>' : '<button class="btn firuze" data-acc="reg">Hesabını kaydet</button>'}</section>
+      ${err ? `<div class="mperr">${esc(err)}</div>` : ''}
       <section class="card mpbox"><b>Dünyaların</b><div class="wlist" id="mpList"><div class="muted small">Yükleniyor…</div></div></section>
-      <section class="card mpbox" id="accBox">${accHTML()}</section>
-    </div>
-  </div>`;
+      <section class="card mpbox"><b>Beylik bilgilerin</b><div class="muted small">Yeni kurduğun ya da katıldığın dünyada bu adlarla başlarsın.</div>${nameFields()}</section>
+      <section class="card mpbox"><b>Koda katıl</b><div class="muted small">Arkadaşının verdiği 6 harfli kodu yaz.</div><div class="mprow"><input id="mpCode" maxlength="6" placeholder="KOD" autocomplete="off" aria-label="Dünya kodu"><button class="btn" id="mpJoin">Katıl</button></div></section>
+      <section class="card mpbox"><b>Yeni dünya kur</b><div class="muted small">Sana bir kod verilir; arkadaşların bu kodla katılır.</div>${speeds()}<button class="bigbtn" id="mpNew">Dünya kur</button></section>
+      ${u ? `<div class="chips" style="justify-content:center"><button class="linkbtn" data-acc="pass">Şifre değiştir</button></div>` : ''}`;
+  } else {
+    body = `${hero(true)}${backBtn}${err ? `<div class="mperr">${esc(err)}</div>` : ''}
+      <section class="card mpbox"><b>Tek başına</b><div class="muted small">Oyun bu cihazda kaydedilir, internet gerekmez. Komşu beyleri bilgisayar yönetir.</div>${nameFields()}${speeds()}
+      <div class="field">Oyun modu<div class="speeds">
+        <label><input type="radio" name="tst" value="" checked><b>Normal</b><span>Sıfırdan başla.</span></label>
+        <label><input type="radio" name="tst" value="res"><b>Test: kaynaklar dolu</b><span>Ambar dolu başlar, istediğin an tek dokunuşla yeniden doldurursun.</span></label>
+        <label><input type="radio" name="tst" value="full"><b>Test: bütün madenler en üst seviye</b><span>Kereste, Taş, Demir ve Ambar 30. seviye, kaynaklar dolu.</span></label>
+        <label><input type="radio" name="tst" value="max"><b>Test: bütün binalar son seviye</b><span>Köydeki her bina en üst seviyede, kaynaklar dolu.</span></label></div></div>
+      ${hasSp ? '<div class="muted small" style="text-align:center">Yeni oyun kurarsan kayıtlı tek kişilik oyunun silinir.</div>' : ''}
+      <button class="bigbtn" id="stGo">${hasSp ? 'Yeni oyun kur' : 'Beyliği kur'}</button></section>`;
+  }
+  el.innerHTML = `<div class="box">${body}</div>`;
   $('app').appendChild(el);
   if (use3D()) { const bg = document.createElement('canvas'); bg.className = 'startbg'; el.prepend(bg); el.classList.add('has3d'); try { V3.showcase(bg); } catch (e) { bg.remove(); el.classList.remove('has3d'); } }
-  let mode = LS.get('ub-startmode') || (hasSp ? 'sp' : 'mp');
-  const setMode = m => {
-    mode = m; LS.set('ub-startmode', m);
-    el.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('on', b.dataset.mode === m));
-    $('spPane').hidden = m !== 'sp'; $('mpPane').hidden = m !== 'mp';
-    if (m === 'mp') loadList();
-  };
-  el.querySelector('.seg').onclick = e => { const b = e.target.closest('[data-mode]'); if (b) setMode(b.dataset.mode); };
+  const goStep = st => showStart(null, st);
+  const bk = $('stBack'); if (bk) bk.onclick = () => { LS.set('ub-startmode', 'home'); goStep('home'); };
+  el.addEventListener('click', e => {
+    const g = e.target.closest('[data-go]');
+    if (g) { const k = g.dataset.go; if (k === 'in' || k === 'reg') accSheet(k, () => goStep('mp')); else goStep(k === 'guest' ? 'mp' : 'sp'); return; }
+    const a = e.target.closest('[data-acc]'); if (a) accSheet(a.dataset.acc, () => goStep(a.dataset.acc === 'out' ? 'home' : 'mp'));
+  });
+  const cont = $('stCont'); if (cont) cont.onclick = () => { el.remove(); LS.set('ub-mode', { sp: true }); boot(); };
+  if (step === 'home') return;
   const names = () => { const name = $('stName').value.trim() || 'Kızılırmak Beyliği', village = $('stVil').value.trim() || 'Kızılcahamam'; LS.set('ub-name', name); LS.set('ub-vil', village); return { name, village }; };
   const speedV = () => +document.querySelector('input[name=spd]:checked').value;
+  if (step === 'sp') {
+    $('stGo').onclick = () => {
+      const { name, village } = names(), speed = speedV(), test = document.querySelector('input[name=tst]:checked').value || null;
+      C.S = S = C.newGame({ now: now(), speed, name, village, test });
+      LS.set('ub-mode', { sp: true });
+      el.remove(); save(); tab = 'koy'; map.ox = null; overShown = false; showGame();
+      toast('Beyliğin kuruldu. İlk görev seni bekliyor.', 'good');
+    };
+    return;
+  }
   const busy = (on, msg) => { el.querySelectorAll('button').forEach(b => b.disabled = on); if (msg) { const l = $('mpList'); if (l) l.innerHTML = `<div class="muted small">${esc(msg)}</div>`; } };
-  const fail = e => { busy(false); showStart(netErr(e)); setTimeout(() => { const b = document.querySelector('[data-mode=mp]'); if (b) b.click(); }, 0); };
-  async function loadList() {
+  const fail = e => { busy(false); showStart(netErr(e), 'mp'); };
+  (async () => {
     const box = $('mpList'); if (!box) return;
     try {
       const ws = await Net.myWorlds(); if (!$('mpList')) return;
       box.innerHTML = ws.length ? ws.map(w => `<button data-world="${w.id}" data-hid="${esc(w.hid)}" data-code="${esc(w.code)}"><span><b>${esc(w.name)}</b><div class="muted small">${esc(w.pname)} · ${w.speed}× · ${w.updated ? clock(Date.parse(w.updated)) : ''}</div></span><span class="code">${esc(w.code)}</span></button>`).join('')
-        : '<div class="muted small">Henüz bir dünyan yok. Kur ya da arkadaşının kodunu yaz.</div>';
+        : '<div class="muted small">Henüz bir dünyan yok. Aşağıdan kur ya da arkadaşının kodunu yaz.</div>';
       try { const ban = await Net.myBan(); if (ban && $('mpList')) box.innerHTML = `<div class="mperr">${esc(banText(ban))}</div>`; } catch (x) {}
     } catch (e) { if ($('mpList')) box.innerHTML = `<div class="mperr">${esc(netErr(e))}</div>`; }
-  }
-  $('accBox').onclick = e => { const b = e.target.closest('[data-acc]'); if (b) accSheet(b.dataset.acc, () => showStart()); };
+  })();
   $('mpList').onclick = e => { const b = e.target.closest('[data-world]'); if (!b) return; el.remove(); mpOpen({ id: b.dataset.world, hid: b.dataset.hid, code: b.dataset.code }); };
   $('mpNew').onclick = async () => {
     const { name, village } = names(); busy(true, 'Dünya kuruluyor…');
@@ -797,17 +822,6 @@ function showStart(err) {
     try { const r = await Net.joinWorld(code, me.name); el.remove(); await mpOpen(r, me); if (MPX) toast('Dünyaya katıldın! Köyün haritada hazır.', 'good'); }
     catch (e) { fail(e); }
   };
-  const cont = $('stCont'); if (cont) cont.onclick = () => { el.remove(); LS.set('ub-mode', { sp: true }); boot(); };
-  $('stGo').onclick = () => {
-    const { name, village } = names();
-    const speed = speedV();
-    const test = document.querySelector('input[name=tst]:checked').value || null;
-    C.S = S = C.newGame({ now: now(), speed, name, village, test });
-    LS.set('ub-mode', { sp: true });
-    el.remove(); save(); tab = 'koy'; map.ox = null; overShown = false; showGame();
-    toast('Beyliğin kuruldu. İlk görev seni bekliyor.', 'good');
-  };
-  setMode(mode);
 }
 function netErr(e) {
   const m = (e && e.message) || '';
@@ -1153,7 +1167,7 @@ $('setBtn').onclick = () => {
       <section class="card" id="accBox2">${accHTML()}</section>
       <button class="btn red" id="mpLeave">Bu dünyadan ayrıl</button>` : `
     <div class="muted small">Oyun bu cihazda kaydedilir. Uygulamayı kapatsan da dünya işlemeye devam eder; geri döndüğünde aradaki her şey hesaplanır.</div>
-    <button class="btn firuze" id="spMenu">Ana menü · Arkadaşlarla oyna</button>
+    <button class="btn firuze" id="spMenu">Ana menü</button>
     <section class="card"><b>Test araçları</b><div class="muted small">Oyunu denerken kullanman için. ${S.test ? 'Bu oyun test modunda.' : ''}</div>
       <div class="chips"><button class="btn firuze" id="tFill">Kaynakları doldur</button><button class="btn sec" id="tMines">Madenleri en üst seviyeye çıkar</button><button class="btn" id="tMax">Bütün binaları son seviyeye çıkar</button></div></section>
     <button class="btn red" id="resetBtn">Yeni oyun başlat</button>`}`, box => {
@@ -1185,7 +1199,7 @@ $('setBtn').onclick = () => {
       };
       return;
     }
-    $('spMenu').onclick = leaveToMenu;
+    $('spMenu').onclick = () => { LS.set('ub-startmode', 'home'); leaveToMenu(); };
     $('tFill').onclick = () => { C.fillRes(cur(), now()); S.test = S.test || 'res'; save(); renderTop(); toast('Ambar dolduruldu', 'good'); };
     $('tMax').onclick = () => { C.maxAll(cur(), now()); S.test = 'max'; save(); closeSheet(); sig = ''; render(); toast('Bütün binalar son seviyede, ambar dolu', 'good'); };
     $('tMines').onclick = () => { const v = cur(); C.syncRes(v, now()); for (const m of C.MINES) v.b[m] = C.B[m].max; v.b.ambar = C.B.ambar.max; v.b.ciftlik = Math.max(v.b.ciftlik, 20); S.test = 'full'; C.fillRes(v, now()); save(); sig = ''; render(); toast('Madenler ve Ambar 30. seviyede, kaynaklar dolu', 'good'); };
