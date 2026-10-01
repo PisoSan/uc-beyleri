@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "155002611921",
+    "project_id": "uc-beyleri",
+    "storage_bucket": "uc-beyleri.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:155002611921:android:fa47d4300ff9397d83fdf0",
+        "android_client_info": {
+          "package_name": "com.ahmetkaragoz.ucbeyleri"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCMRxJc-Tm2CJpuSeo5lTJb_qdkjPo0TMk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
