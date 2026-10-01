@@ -3798,6 +3798,8 @@ function emptyLot3(b) {
 }
 
 // ---------- birleştirme: aynı malzemeli parçaları tek çizime indirir ----------
+const VCMS = {};
+const vcMat = (r, m, f) => VCMS[r + '|' + m + '|' + f] || (VCMS[r + '|' + m + '|' + f] = new T.MeshStandardMaterial({ vertexColors: true, roughness: r, metalness: m, flatShading: !!f, side: T.DoubleSide }));
 function mergeGroup(g, b) {
   g.updateMatrixWorld(true);
   const buckets = new Map(), keep = [];
@@ -3807,16 +3809,22 @@ function mergeGroup(g, b) {
     const geo = (o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone()); geo.applyMatrix4(o.matrixWorld);
     const mats = Array.isArray(o.material) ? o.material : [o.material], groups = geo.groups.length ? geo.groups : [{ start: 0, count: geo.attributes.position.count, materialIndex: 0 }];
     for (const gr of groups) {
-      const m = mats[gr.materialIndex || 0] || mats[0], key = m.uuid + (o.castShadow ? 's' : 'n');
-      let bk = buckets.get(key); if (!bk) { bk = { m, shadow: o.castShadow, pos: [], nor: [], uv: [] }; buckets.set(key, bk); }
-      const P = geo.attributes.position.array, N = geo.attributes.normal.array, U = geo.attributes.uv ? geo.attributes.uv.array : null;
-      for (let i = gr.start; i < gr.start + gr.count; i++) { bk.pos.push(P[i * 3], P[i * 3 + 1], P[i * 3 + 2]); bk.nor.push(N[i * 3], N[i * 3 + 1], N[i * 3 + 2]); bk.uv.push(U ? U[i * 2] : 0, U ? U[i * 2 + 1] : 0); }
+      const m = mats[gr.materialIndex || 0] || mats[0];
+      // dokusuz, ışımasız düz renkli malzemeler köşe rengine çevrilip tek çizimde toplanır
+      const plain = m.isMeshStandardMaterial && !m.map && !m.transparent && !(m.emissiveIntensity > 0 && m.emissive && m.emissive.getHex()) && !m.onBeforeCompile.toString().includes('uTime') && (!m.vertexColors || !!geo.attributes.color);
+      const key = (plain ? 'vc|' + m.roughness + '|' + m.metalness + '|' + m.flatShading : m.uuid) + (o.castShadow ? 's' : 'n');
+      let bk = buckets.get(key); if (!bk) { bk = { m: plain ? vcMat(m.roughness, m.metalness, m.flatShading) : m, plain, shadow: o.castShadow, pos: [], nor: [], uv: [], col: [] }; buckets.set(key, bk); }
+      const P = geo.attributes.position.array, N = geo.attributes.normal.array, U = geo.attributes.uv ? geo.attributes.uv.array : null, CA = geo.attributes.color ? geo.attributes.color.array : null;
+      for (let i = gr.start; i < gr.start + gr.count; i++) {
+        bk.pos.push(P[i * 3], P[i * 3 + 1], P[i * 3 + 2]); bk.nor.push(N[i * 3], N[i * 3 + 1], N[i * 3 + 2]); bk.uv.push(U ? U[i * 2] : 0, U ? U[i * 2 + 1] : 0);
+        if (plain) { if (CA) bk.col.push(CA[i * 3], CA[i * 3 + 1], CA[i * 3 + 2]); else bk.col.push(m.color.r, m.color.g, m.color.b); }
+      }
     }
     geo.dispose(); keep.push(o);
   });
   for (const o of keep) { o.parent.remove(o); o.geometry.dispose(); }
   for (const bk of buckets.values()) {
-    const geo = new T.BufferGeometry(); geo.setAttribute('position', new T.Float32BufferAttribute(bk.pos, 3)); geo.setAttribute('normal', new T.Float32BufferAttribute(bk.nor, 3)); geo.setAttribute('uv', new T.Float32BufferAttribute(bk.uv, 2));
+    const geo = new T.BufferGeometry(); geo.setAttribute('position', new T.Float32BufferAttribute(bk.pos, 3)); geo.setAttribute('normal', new T.Float32BufferAttribute(bk.nor, 3)); geo.setAttribute('uv', new T.Float32BufferAttribute(bk.uv, 2)); if (bk.plain) geo.setAttribute('color', new T.Float32BufferAttribute(bk.col, 3));
     geo.computeBoundingBox(); geo.computeBoundingSphere();
     const mesh = new T.Mesh(geo, bk.m); mesh.castShadow = bk.shadow; mesh.receiveShadow = true; mesh.userData.b = b; g.add(mesh);
   }
@@ -3864,12 +3872,12 @@ function buildWorld() {
   const wm = new T.MeshStandardMaterial({ color: '#21596a', roughness: .06, metalness: .15, normalMap: wn, normalScale: new T.Vector2(.45, .45), transparent: true, opacity: .9 });
   W.add(ribbon(rv, 1.05, wm, .03)); st.water = wn;
   // zemin boyaması: yumuşak kenarlı yollar, avlu, taş yol, kıyı
-  const sm = withDetail(new T.MeshStandardMaterial({ map: splatTexture(), transparent: true, roughness: 1, depthWrite: false }), 120, .14);
-  const sp = new T.Mesh(new T.PlaneGeometry(SPL.SZ, SPL.SZ), sm); sp.rotation.x = -Math.PI / 2; sp.position.set(SPL.U0 + SPL.SZ / 2, .008, SPL.V0 + SPL.SZ / 2); sp.receiveShadow = true; sp.renderOrder = -1; W.add(sp);
+  const sm = withDetail(new T.MeshStandardMaterial({ map: splatTexture(), alphaTest: .5, roughness: 1 }), 120, .14);
+  const sp = new T.Mesh(new T.PlaneGeometry(SPL.SZ, SPL.SZ), sm); sp.rotation.x = -Math.PI / 2; sp.position.set(SPL.U0 + SPL.SZ / 2, .008, SPL.V0 + SPL.SZ / 2); sp.receiveShadow = true; sp.renderOrder = -2; W.add(sp); gm.renderOrder = -1;
   grassField(W);
   // ağaçlar (örneklenmiş)
   const rnd = mul32(4242), trees = { mese: [], servi: [], kavak: [] };
-  for (let i = 0; i < 20000 && trees.mese.length + trees.servi.length + trees.kavak.length < 520; i++) {
+  for (let i = 0; i < 20000 && trees.mese.length + trees.servi.length + trees.kavak.length < QC().trees; i++) {
     const u = -16 + rnd() * 44, v = -14 + rnd() * 46;
     if (occupied(u, v) || Math.hypot(u - 6, v - 7) > 24) continue;
     const all = [...trees.mese, ...trees.servi, ...trees.kavak]; if (all.some(t => Math.hypot(t[0] - u, t[1] - v) < .62)) continue;
@@ -3877,10 +3885,10 @@ function buildWorld() {
   }
   const mk = (geo, mat, list, f) => { const im = new T.InstancedMesh(geo, mat, list.length), m4 = new T.Matrix4(), c = new T.Color(); list.forEach((t, i) => { f(m4, t); im.setMatrixAt(i, m4); c.setHSL(.25 + (t[3] - .5) * .06, .45 + t[3] * .15, .5 + (t[3] - .5) * .18); im.setColorAt(i, c); }); im.castShadow = true; im.receiveShadow = true; W.add(im); };
   const trunkM = colMat('#4a3524', { roughness: 1 });
-  const blob = (() => { const parts = []; for (const [x, y, z, r] of [[0, .62, 0, .34], [.2, .55, .1, .26], [-.18, .58, -.08, .27], [.05, .8, -.05, .25], [-.05, .52, .2, .22]]) { const s = new T.IcosahedronGeometry(r, 1); s.translate(x, y, z); parts.push(s.index ? s.toNonIndexed() : s); } return mergeGeos(parts); })();
+  const blob = (() => { const parts = []; for (const [x, y, z, r] of [[0, .62, 0, .34], [.2, .55, .1, .26], [-.18, .58, -.08, .27], [.05, .8, -.05, .25], [-.05, .52, .2, .22]]) { const s = new T.IcosahedronGeometry(r, 0); s.translate(x, y, z); parts.push(s.index ? s.toNonIndexed() : s); } return mergeGeos(parts); })();
   mk(new T.CylinderGeometry(.045, .065, .5, 6).translate(0, .25, 0), trunkM, trees.mese, (m4, t) => m4.compose(new T.Vector3(t[0], 0, t[1]), new T.Quaternion(), new T.Vector3(t[2], t[2], t[2])));
   mk(blob, addWind(new T.MeshStandardMaterial({ color: '#ffffff', roughness: .95, flatShading: true }), .045), trees.mese, (m4, t) => m4.compose(new T.Vector3(t[0], 0, t[1]), new T.Quaternion().setFromAxisAngle(new T.Vector3(0, 1, 0), t[3] * 6), new T.Vector3(t[2], t[2], t[2])));
-  const lathe = (w, h) => { const pts = []; for (let i = 0; i <= 10; i++) { const f = i / 10; pts.push(new T.Vector2(Math.sin(Math.PI * Math.pow(f, .8)) * w * (1 - f * .35), .12 + f * h)); } return new T.LatheGeometry(pts, 10); };
+  const lathe = (w, h) => { const pts = []; for (let i = 0; i <= 6; i++) { const f = i / 6; pts.push(new T.Vector2(Math.sin(Math.PI * Math.pow(f, .8)) * w * (1 - f * .35), .12 + f * h)); } return new T.LatheGeometry(pts, 7); };
   const sGeo = lathe(.16, 1.45), kGeo = lathe(.2, 1.3);
   for (const [list, geo, col] of [[trees.servi, sGeo, '#2f5a2c'], [trees.kavak, kGeo, '#6e9442']]) {
     mk(new T.CylinderGeometry(.03, .04, .2, 5).translate(0, .1, 0), trunkM, list, (m4, t) => m4.compose(new T.Vector3(t[0], 0, t[1]), new T.Quaternion(), new T.Vector3(t[2], t[2], t[2])));
@@ -3913,7 +3921,7 @@ function mergeGeos(list) {
 //  KALİTE: gökyüzü, ortam ışığı, görüntü sonrası işleme, zemin boyaması, çimen, rüzgâr, köy eşyaları
 // ============================================================
 const QUAL = () => { try { return localStorage.getItem('ub-q') || 'high'; } catch (e) { return 'high'; } };
-const QS = { high: { pr: 2, shadow: 4096, post: true, bloom: true, grass: 5200, splat: 2048 }, med: { pr: 1.5, shadow: 2048, post: true, bloom: false, grass: 2200, splat: 2048 }, low: { pr: 1, shadow: 1024, post: false, bloom: false, grass: 0, splat: 1024 } };
+const QS = { high: { pr: 1.5, shadow: 2048, post: true, bloom: true, msaa: 2, grass: 3000, splat: 2048, trees: 380, forest: 3 }, med: { pr: 1.25, shadow: 1024, post: false, bloom: false, msaa: 0, grass: 1200, splat: 1024, trees: 260, forest: 2 }, low: { pr: 1, shadow: 1024, post: false, bloom: false, msaa: 0, grass: 0, splat: 1024, trees: 170, forest: 2 } };
 const QC = () => QS[QUAL()] || QS.high;
 const WIND = { value: 0 };
 function addWind(m, k) {
@@ -3998,7 +4006,7 @@ function makePost(r) {
   const e = r.extensions; if (!(e.has('EXT_color_buffer_float') || e.has('EXT_color_buffer_half_float'))) return null;
   const vs = 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0., 1.); }';
   const mk = (fs, un) => new T.ShaderMaterial({ uniforms: un, vertexShader: vs, fragmentShader: fs, depthTest: false, depthWrite: false });
-  const P = { rt: new T.WebGLRenderTarget(4, 4, { type: T.HalfFloatType, samples: r.capabilities.isWebGL2 ? 4 : 0 }), b1: new T.WebGLRenderTarget(4, 4, { type: T.HalfFloatType }), b2: new T.WebGLRenderTarget(4, 4, { type: T.HalfFloatType }),
+  const P = { rt: new T.WebGLRenderTarget(4, 4, { type: T.HalfFloatType, samples: r.capabilities.isWebGL2 ? QC().msaa : 0 }), b1: new T.WebGLRenderTarget(4, 4, { type: T.HalfFloatType }), b2: new T.WebGLRenderTarget(4, 4, { type: T.HalfFloatType }),
     cam: new T.OrthographicCamera(-1, 1, 1, -1, 0, 1), scene: new T.Scene(), bloomOn: QC().bloom };
   P.quad = new T.Mesh(new T.PlaneGeometry(2, 2)); P.quad.frustumCulled = false; P.scene.add(P.quad);
   P.bright = mk('uniform sampler2D t; uniform float th; varying vec2 vUv; void main(){ vec3 c = texture2D(t, vUv).rgb; float l = max(c.r, max(c.g, c.b)); gl_FragColor = vec4(c * smoothstep(th, th * 2.2, l), 1.); }', { t: { value: null }, th: { value: 1.1 } });
@@ -4162,21 +4170,34 @@ function buildVillage(v) {
   { G = new T.Group(); props(v); mergeGroup(G, null); root.add(G); }
   if (v.b.ahir > 0) { G = new T.Group(); OFF3 = SH.ahir; const m = new T.Mesh(new T.PlaneGeometry(1.8, 1.6), texMat('dirt')); m.rotation.x = -Math.PI / 2; m.position.set(X(10.9), .018, Z(5.6)); m.receiveShadow = true; G.add(m); OFF3 = [0, 0]; root.add(G); }
   st.bgrp = root; st.scene.add(root); root.updateMatrixWorld(true); anchorBoxes();
+  // bütün binaları malzemeye göre tek çizimde birleştir; dokunma için görünmez kutular
+  mergeGroup(root, null);
+  const pm = new T.MeshBasicMaterial({ visible: false }); st.picks = [];
+  for (const b in st.boxes) { const bx = st.boxes[b], sz = bx.getSize(new T.Vector3()), c = bx.getCenter(new T.Vector3()); const m = new T.Mesh(new T.BoxGeometry(Math.max(.2, sz.x), Math.max(.2, sz.y), Math.max(.2, sz.z)), pm); m.position.copy(c); m.userData.b = b; root.add(m); st.picks.push(m); }
   // hareketli: işçiler, atlar, araba, kuşlar, duman
   buildDynamic(v);
   st.r.shadowMap.needsUpdate = true;
 }
 
 // ---------- canlılar ----------
+const VCM = () => VCM.m || (VCM.m = new T.MeshStandardMaterial({ vertexColors: true, roughness: .9 }));
+function bake(parts) {   // [geometry, renk, [x,y,z], [rx,ry,rz], [sx,sy,sz]?] -> tek renkli-köşeli geometri
+  const out = [], c = new T.Color(), m4 = new T.Matrix4();
+  for (const [g0, col, p = [0, 0, 0], r = [0, 0, 0], sc = [1, 1, 1]] of parts) {
+    const g = g0.index ? g0.toNonIndexed() : g0; m4.compose(new T.Vector3(...p), new T.Quaternion().setFromEuler(new T.Euler(...r)), new T.Vector3(...sc)); g.applyMatrix4(m4);
+    c.set(col); const n = g.attributes.position.count, ca = new Float32Array(n * 3); for (let i = 0; i < n; i++) { ca[i * 3] = c.r; ca[i * 3 + 1] = c.g; ca[i * 3 + 2] = c.b; }
+    g.setAttribute('color', new T.BufferAttribute(ca, 3)); out.push(g);
+  }
+  const geo = mergeGeos(out), cols = new Float32Array(geo.attributes.position.count * 3); let o = 0; for (const g of out) { cols.set(g.attributes.color.array, o); o += g.attributes.color.array.length; }
+  geo.setAttribute('color', new T.BufferAttribute(cols, 3)); return geo;
+}
+const LEGG = () => LEGG.g || (LEGG.g = new T.CylinderGeometry(.013, .013, .08, 5).translate(0, -.04, 0));
 function person3(col, hat) {
   const g = new T.Group();
-  const body = new T.Mesh(new T.CylinderGeometry(.04, .065, .2, 8), colMat(col, { roughness: .95 })); body.position.y = .16; g.add(body);
-  const head = new T.Mesh(new T.SphereGeometry(.034, 8, 6), colMat('#d9b48c')); head.position.y = .29; g.add(head);
-  const h = new T.Mesh(new T.CylinderGeometry(.03, .036, .03, 8), colMat(hat ? '#f1ece0' : '#5a3a22')); h.position.y = .32; g.add(h);
-  const legs = []; for (const z of [.022, -.022]) { const l = new T.Mesh(new T.CylinderGeometry(.013, .013, .08, 5), colMat('#3a2a1e')); l.geometry.translate(0, -.04, 0); l.position.set(0, .08, z); g.add(l); legs.push(l); }
-  for (const z of [.05, -.05]) { const a = new T.Mesh(new T.CylinderGeometry(.011, .01, .11, 5), colMat(col, { roughness: .95 })); a.geometry.translate(0, -.05, 0); a.position.set(0, .24, z); a.rotation.x = z > 0 ? -.15 : .15; g.add(a); legs.push(a); }
-  const sh = new T.Mesh(new T.CircleGeometry(.07, 12), new T.MeshBasicMaterial({ color: '#000', transparent: true, opacity: .25, depthWrite: false })); sh.rotation.x = -Math.PI / 2; sh.position.y = .012; g.add(sh);
-  g.userData.legs = legs; return g;
+  const geo = bake([[new T.CylinderGeometry(.04, .065, .2, 8), col, [0, .16, 0]], [new T.SphereGeometry(.034, 8, 6), '#d9b48c', [0, .29, 0]], [new T.CylinderGeometry(.03, .036, .03, 8), hat ? '#f1ece0' : '#5a3a22', [0, .32, 0]],
+    [new T.CylinderGeometry(.011, .01, .11, 5).translate(0, -.05, 0), col, [0, .24, .05], [-.15, 0, 0]], [new T.CylinderGeometry(.011, .01, .11, 5).translate(0, -.05, 0), col, [0, .24, -.05], [.15, 0, 0]],
+    [LEGG().clone(), '#3a2a1e', [0, .08, .022]], [LEGG().clone(), '#3a2a1e', [0, .08, -.022]]]);
+  const body = new T.Mesh(geo, VCM()); g.add(body); g.userData.body = body; return g;
 }
 const LOADM = { kereste: () => { const m = new T.Mesh(new T.CylinderGeometry(.025, .025, .22, 6), colMat('#7a4f2a')); m.rotation.z = Math.PI / 2; return m; }, tas: () => new T.Mesh(new T.BoxGeometry(.09, .07, .08), texMat('stone')), demir: () => new T.Mesh(new T.DodecahedronGeometry(.045), colMat('#5b4a36', { metalness: .4, roughness: .5 })) };
 function buildDynamic(v) {
@@ -4197,30 +4218,28 @@ function buildDynamic(v) {
   st.smokeSprites = [];
   const sc = document.createElement('canvas'); sc.width = sc.height = 64; const sg = sc.getContext('2d'), gr = sg.createRadialGradient(32, 32, 2, 32, 32, 30); gr.addColorStop(0, 'rgba(235,232,225,.9)'); gr.addColorStop(1, 'rgba(235,232,225,0)'); sg.fillStyle = gr; sg.fillRect(0, 0, 64, 64);
   const smt = new T.CanvasTexture(sc);
-  for (const s of st.smokes) for (let i = 0; i < 6; i++) { const sp = new T.Sprite(new T.SpriteMaterial({ map: smt, transparent: true, depthWrite: false })); D.add(sp); st.smokeSprites.push({ sp, s, i }); }
+  for (const s of st.smokes) for (let i = 0; i < 4; i++) { const sp = new T.Sprite(new T.SpriteMaterial({ map: smt, transparent: true, depthWrite: false })); D.add(sp); st.smokeSprites.push({ sp, s, i }); }
   // meşaleler (gece)
   st.torchLights = [];
-  for (const [x, y, z] of st.torches.slice(0, 3)) { const L = new T.PointLight('#ffb35a', 0, 3.2, 2); L.position.set(x, y + .1, z); D.add(L); const f = new T.Mesh(new T.SphereGeometry(.03, 8, 6), new T.MeshBasicMaterial({ color: '#ffcf7a' })); f.position.set(x, y + .05, z); D.add(f); st.torchLights.push({ L, f }); }
+  for (const [x, y, z] of st.torches.slice(0, 4)) { const f = new T.Mesh(new T.SphereGeometry(.035, 8, 6), new T.MeshBasicMaterial({ color: new T.Color(4, 2.4, 1) })); f.position.set(x, y + .05, z); D.add(f); st.torchLights.push({ f }); }
   // kuşlar
   st.birds = [];
-  for (let i = 0; i < 5; i++) { const g = new T.Group(); for (const s of [1, -1]) { const w = new T.Mesh(new T.PlaneGeometry(.18, .05), new T.MeshBasicMaterial({ color: '#2a2a30', side: T.DoubleSide })); w.geometry.translate(s * .09, 0, 0); w.rotation.x = -Math.PI / 2; g.add(w); } D.add(g); st.birds.push({ g, i }); }
+  const bg = new T.BufferGeometry(); bg.setAttribute('position', new T.Float32BufferAttribute([-.18, .04, 0, 0, 0, .03, 0, 0, -.03, .18, .04, 0, 0, 0, -.03, 0, 0, .03], 3)); const bm = new T.MeshBasicMaterial({ color: '#2a2a30', side: T.DoubleSide });
+  for (let i = 0; i < 5; i++) { const g = new T.Mesh(bg, bm); D.add(g); st.birds.push({ g, i }); }
   st.scene.add(D);
 }
 function horse3(i) {
-  const g = new T.Group(), col = colMat(['#6b3f22', '#2b211b', '#9a6a3c', '#d9ccb4'][i % 4], { roughness: .7 });
-  const body = new T.Mesh(new T.SphereGeometry(.1, 12, 8), col); body.scale.set(1.7, .85, .8); body.position.y = .22; g.add(body);
-  const neck = new T.Mesh(new T.CylinderGeometry(.035, .05, .18, 6), col); neck.position.set(.17, .3, 0); neck.rotation.z = -.7; g.add(neck);
-  const head = new T.Mesh(new T.BoxGeometry(.12, .05, .05), col); head.position.set(.25, .37, 0); head.rotation.z = -.5; g.add(head);
-  const tail = new T.Mesh(new T.CylinderGeometry(.012, .02, .14, 5), colMat('#1d1510')); tail.position.set(-.18, .2, 0); tail.rotation.z = .5; g.add(tail);
-  const legs = []; for (const [x, z] of [[-.1, .04], [-.1, -.04], [.1, .04], [.1, -.04]]) { const l = new T.Mesh(new T.CylinderGeometry(.015, .013, .16, 5), col); l.geometry.translate(0, -.08, 0); l.position.set(x, .16, z); g.add(l); legs.push(l); }
-  const sh = new T.Mesh(new T.CircleGeometry(.14, 12), new T.MeshBasicMaterial({ color: '#000', transparent: true, opacity: .22, depthWrite: false })); sh.scale.x = 1.6; sh.rotation.x = -Math.PI / 2; sh.position.y = .012; g.add(sh);
-  g.userData.legs = legs; return g;
+  const hc = ['#6b3f22', '#2b211b', '#9a6a3c', '#d9ccb4'][i % 4], g = new T.Group();
+  g.add(new T.Mesh(bake([[new T.SphereGeometry(.1, 10, 7), hc, [0, .22, 0], [0, 0, 0], [1.7, .85, .8]], [new T.CylinderGeometry(.035, .05, .18, 6), hc, [.17, .3, 0], [0, 0, -.7]], [new T.BoxGeometry(.12, .05, .05), hc, [.25, .37, 0], [0, 0, -.5]], [new T.CylinderGeometry(.012, .02, .14, 5), '#1d1510', [-.18, .2, 0], [0, 0, .5]]]), VCM()));
+  const lg = new T.CylinderGeometry(.015, .013, .16, 5).translate(0, -.08, 0), parts = [];
+  for (const [x, z] of [[-.1, .04], [-.1, -.04], [.1, .04], [.1, -.04]]) parts.push([lg.clone(), hc, [x, .16, z]]);
+  const legs = new T.Mesh(bake(parts), VCM()); g.add(legs); g.userData.body = g.children[0]; return g;
 }
 function draw3(o, W, H) { if (o.atmos) o.atmos.update(o.cam); if (o.post) { o.post.setSize(W, H); o.post.render(o.scene, o.cam, o.night); } else o.r.render(o.scene, o.cam); }
 function animate(t) {
   const sec = t / 1000, v = st.vil; WIND.value = sec;
-  for (const f of st.flags) { const p = f.mesh.geometry.attributes.position, b = f.base; for (let i = 0; i < p.count; i++) { const x = b[i * 3]; p.setZ(i, Math.sin(sec * 4 + x * 14 + f.ph) * .03 * x / .42); } p.needsUpdate = true; f.mesh.geometry.computeVertexNormals(); }
-  for (const s of st.smokeSprites) { const p = (sec / 3.4 + s.i / 6 + s.s.ph) % 1; s.sp.position.set(s.s.x + Math.sin(p * 5 + s.s.ph * 9) * .08 + p * .25, s.s.y + p * .9, s.s.z - p * .1); const sz = .12 + p * .35; s.sp.scale.set(sz, sz, 1); s.sp.material.opacity = .45 * (1 - p); }
+  for (const f of st.flags) { const p = f.mesh.geometry.attributes.position, b = f.base; for (let i = 0; i < p.count; i++) { const x = b[i * 3]; p.setZ(i, Math.sin(sec * 4 + x * 14 + f.ph) * .03 * x / .42); } p.needsUpdate = true; }
+  for (const s of st.smokeSprites) { const p = (sec / 3.4 + s.i / 4 + s.s.ph) % 1; s.sp.position.set(s.s.x + Math.sin(p * 5 + s.s.ph * 9) * .08 + p * .25, s.s.y + p * .9, s.s.z - p * .1); const sz = .12 + p * .35; s.sp.scale.set(sz, sz, 1); s.sp.material.opacity = .45 * (1 - p); }
   for (const w of st.workers) {
     const cyc = (sec * .55 + w.k * (2 * w.L / w.n) + w.idx * 3.1) % (2 * w.L), going = cyc < w.L, f = going ? cyc / w.L : 1 - (cyc - w.L) / w.L;
     const [u, vv] = routeAt(w.route, f), [u2, v2] = routeAt(w.route, Math.min(1, Math.max(0, f + (going ? .01 : -.01))));
@@ -4231,11 +4250,11 @@ function animate(t) {
   if (st.cartM && st.cart) { const f = (Math.sin(t / 3200) + 1) / 2, a = st.cart.a, b = st.cart.b; st.cartM.position.set(a[0] + (b[0] - a[0]) * f, 0, a[1] + (b[1] - a[1]) * f); st.cartM.rotation.y = -Math.atan2(b[1] - a[1], b[0] - a[0]); }
   if (st.mill) st.mill.rotation.z = -sec * .9;
   for (const c of st.cranes) c.rotation.y = Math.sin(sec / 1.8) * .9;
-  for (const b of st.birds) { const a = sec * .25 + b.i * 1.3, r = 9 + b.i; b.g.position.set(6 + Math.cos(a) * r, 5 + b.i * .4 + Math.sin(sec + b.i) * .3, 7 + Math.sin(a) * r); b.g.rotation.y = -a; const fl = Math.sin(sec * 9 + b.i) * .5; b.g.children[0].rotation.z = fl; b.g.children[1].rotation.z = -fl; }
+  for (const b of st.birds) { const a = sec * .25 + b.i * 1.3, r = 9 + b.i; b.g.position.set(6 + Math.cos(a) * r, 5 + b.i * .4 + Math.sin(sec + b.i) * .3, 7 + Math.sin(a) * r); b.g.rotation.y = -a; b.g.scale.y = 1 + Math.sin(sec * 9 + b.i) * 1.2; }
   if (st.water) st.water.offset.y -= .004;
-  for (const tl of st.torchLights) { tl.L.intensity = st.night ? 1.4 + Math.sin(sec * 11 + tl.L.position.x) * .25 : 0; tl.f.visible = !!st.night; }
+  for (const tl of st.torchLights) { tl.f.visible = !!st.night; if (st.night) tl.f.scale.setScalar(1 + Math.sin(sec * 11 + tl.f.position.x) * .15); }
 }
-function walkLegs(g, t, i) { const s = Math.sin(t / 140 + i) * .45; const L = g.userData.legs; if (!L) return; for (let k = 0; k < L.length; k++) L[k].rotation.z = k % 2 ? s : -s; }
+function walkLegs(g, t, i) { const b = g.userData.body; if (!b) return; const s = Math.sin(t / 140 + i); b.position.y = Math.abs(s) * .012; b.rotation.x = s * .06; }
 
 // ---------- ışık, gece-gündüz ----------
 function setLight(night) {
@@ -4327,8 +4346,8 @@ function start() {
   if (!st.r) {
     st.r = new T.WebGLRenderer({ canvas: cv, antialias: true, powerPreference: 'high-performance' });
     st.r.outputColorSpace = T.SRGBColorSpace; st.r.toneMapping = T.ACESFilmicToneMapping; st.r.toneMappingExposure = 1.0;
-    st.r.shadowMap.enabled = true; st.r.shadowMap.type = T.PCFSoftShadowMap; st.r.shadowMap.autoUpdate = false;
-    for (const k in MATS) delete MATS[k];
+    st.r.shadowMap.enabled = true; st.r.shadowMap.type = T.PCFShadowMap; st.r.shadowMap.autoUpdate = false;
+    for (const k in MATS) delete MATS[k]; for (const k in VCMS) delete VCMS[k];
     st.scene = new T.Scene();
     st.cam = new T.PerspectiveCamera(32, 1, .1, 200);
     st.hemi = new T.HemisphereLight('#cfe4ff', '#5a4a32', 1.05); st.scene.add(st.hemi);
@@ -4396,19 +4415,29 @@ function frame(t) {
   animate(t);
   ringFor(SC.sel); if (selRing && selRing.visible) selRing.material.opacity = .6 + .35 * Math.sin(t / 250);
   draw3(st, W, H);
-  // etiketler ve açılır pencere (2B sahnenin yardımcılarıyla)
-  SC.body = bodyRects3();
-  const g = st.ov.getContext('2d'); g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, W, H); g.setTransform(dpr, 0, 0, dpr, 0, 0);
-  const vi = { r, k: 1, ox: 0, oy: 0, dpr, cv: st.cv };
-  drawLabels(g, v, vi); placePop(vi);
+  // etiketler ve açılır pencere: kamera, seçim ya da köy değişince (ve yarım saniyede bir) yeniden çizilir
+  const e = st.cam.matrixWorld.elements, lk = [e[12], e[13], e[14], e[8], e[10]].map(x => x.toFixed(3)).join() + '|' + SC.sel + '|' + SC.showLabels + '|' + st.sig + '|' + W + 'x' + H + '|' + Math.floor(performance.now() / 500) + '|' + v.bq.length;
+  if (lk !== st.lk) {
+    st.lk = lk; SC.body = bodyRects3();
+    const g = st.ov.getContext('2d'); g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, W, H); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const vi = { r, k: 1, ox: 0, oy: 0, dpr, cv: st.cv };
+    drawLabels(g, v, vi); placePop(vi);
+  }
+}
+// kare aralığı uzun süre 50 ms'yi aşarsa (20 fps altı) önce çözünürlüğü, sonra parlamayı, sonra görüntü işlemeyi kapatır
+function adapt(o, ts) {
+  if (o.last) { const dt = ts - o.last; if (dt < 400) o.ft = o.ft ? o.ft * .95 + dt * .05 : dt; }
+  o.adN = (o.adN || 0) + 1; if (o.adN < 90 || !(o.ft > 50)) return;
+  o.adN = 0; o.ft = 0;
+  if (o.quality > .72) o.quality = Math.round((o.quality - .14) * 100) / 100;
+  else if (o.post && o.post.bloomOn) o.post.bloomOn = false;
+  else if (o.post) o.post = null;
 }
 function loop(ts) {
   st.raf = 0;
   if (tab !== 'koy' || !$('scene') || $('scene') !== st.cv) return;
   if (ts - st.last > 33) {
-    const t0 = performance.now(); st.last = ts; frame(ts);
-    // yavaş cihazda çözünürlüğü kendiliğinden düşür
-    const dt = performance.now() - t0; st.slow = (st.slow || 0) * .9 + (dt > 40 ? 1 : 0); if (st.slow > 5 && st.quality > .6) { st.quality -= .15; st.slow = 0; }
+    adapt(st, ts); st.last = ts; frame(ts);
   }
   st.raf = requestAnimationFrame(loop);
 }
@@ -4637,12 +4666,12 @@ function mapWorld() {
   for (let y = -6; y < N + 6; y++) for (let x = -6; x < N + 6; x++) {
     if (occ.has(x + ',' + y)) continue;
     const h = hsh(x, y), d = h % 23, inside = x >= 0 && y >= 0 && x < N && y < N;
-    if (d < 3 || (!inside && d < 9)) for (let i = 0; i < 4; i++) { const tx = x + .2 + ((h >> (i * 3)) % 7) / 10, tz = y + .2 + ((h >> (i * 4 + 1)) % 7) / 10, s = .55 + ((h >> (i * 2 + 5)) % 5) / 10; ((h >> i) % 4 === 0 ? servi : forest).push([tx, tz, s, ((h >> (i + 7)) % 100) / 100]); }
+    if (d < 3 || (!inside && d < 6)) for (let i = 0; i < QC().forest; i++) { const tx = x + .2 + ((h >> (i * 3)) % 7) / 10, tz = y + .2 + ((h >> (i * 4 + 1)) % 7) / 10, s = .55 + ((h >> (i * 2 + 5)) % 5) / 10; ((h >> i) % 4 === 0 ? servi : forest).push([tx, tz, s, ((h >> (i + 7)) % 100) / 100]); }
     else if (d === 5 || d === 6) hills.push([x + .5, y + .5, .7 + (h % 5) / 10, (h % 100) / 100]);
     else if (d === 9) rocks.push([x + .6, y + .55, .8 + (h % 3) / 5, (h % 100) / 100]);
   }
   const mk = (geo, mat, list, f, cast = true) => { const im = new T.InstancedMesh(geo, mat, Math.max(1, list.length)), m4 = new T.Matrix4(), c = new T.Color(); im.count = list.length; list.forEach((t, i) => { f(m4, t); im.setMatrixAt(i, m4); c.setHSL(.25 + (t[3] - .5) * .06, .45 + t[3] * .15, .5 + (t[3] - .5) * .18); im.setColorAt(i, c); }); im.castShadow = cast; im.receiveShadow = true; W.add(im); };
-  const blob = (() => { const parts = []; for (const [x, y, z, r] of [[0, .3, 0, .17], [.1, .27, .05, .13], [-.09, .29, -.04, .13], [.02, .4, -.02, .12]]) { const s2 = new T.IcosahedronGeometry(r, 1); s2.translate(x, y, z); parts.push(s2.index ? s2.toNonIndexed() : s2); } return mergeGeos(parts); })();
+  const blob = (() => { const parts = []; for (const [x, y, z, r] of [[0, .3, 0, .17], [.1, .27, .05, .13], [-.09, .29, -.04, .13], [.02, .4, -.02, .12]]) { const s2 = new T.IcosahedronGeometry(r, 0); s2.translate(x, y, z); parts.push(s2.index ? s2.toNonIndexed() : s2); } return mergeGeos(parts); })();
   mk(new T.CylinderGeometry(.022, .03, .22, 5).translate(0, .11, 0), colMat('#4a3524'), forest, (m4, t) => m4.compose(new T.Vector3(t[0], 0, t[1]), new T.Quaternion(), new T.Vector3(t[2], t[2], t[2])));
   mk(blob, new T.MeshStandardMaterial({ color: '#ffffff', roughness: .95, flatShading: true }), forest, (m4, t) => m4.compose(new T.Vector3(t[0], 0, t[1]), new T.Quaternion().setFromAxisAngle(new T.Vector3(0, 1, 0), t[3] * 6), new T.Vector3(t[2], t[2], t[2])));
   const lat = (() => { const pts = []; for (let i = 0; i <= 8; i++) { const f = i / 8; pts.push(new T.Vector2(Math.sin(Math.PI * Math.pow(f, .8)) * .08 * (1 - f * .35), .05 + f * .7)); } return new T.LatheGeometry(pts, 8); })();
@@ -4665,6 +4694,7 @@ function mapVillages() {
     if (!barb) for (const f of t.flags) mapFlag(c, f, C.ownerColor(v.owner));
     c.userData.vid = v.id; g.add(c); MP.tiers[v.id] = tier;
   }
+  mergeGroup(g, null);
   // kendi köylerin altında altın halka
   const ringG = new T.RingGeometry(.44, .5, 40), mine = new T.MeshBasicMaterial({ color: '#dcaa45', transparent: true, opacity: .8, depthWrite: false });
   for (const v of S.vil.filter(v => v.owner === 'P')) { const r = new T.Mesh(ringG, mine); r.rotation.x = -Math.PI / 2; r.position.set(v.x + .5, .035, v.y + .5); g.add(r); }
@@ -4676,8 +4706,7 @@ function mapCam() {
   vw.tx = Math.max(-1, Math.min(N + 1, vw.tx)); vw.tz = Math.max(-1, Math.min(N + 1, vw.tz));
   const c = MP.cam, cp = Math.cos(vw.pitch);
   c.position.set(vw.tx + Math.sin(vw.yaw) * cp * vw.dist, Math.sin(vw.pitch) * vw.dist, vw.tz + Math.cos(vw.yaw) * cp * vw.dist); c.lookAt(vw.tx, 0, vw.tz);
-  const sc = MP.sun.shadow.camera, e = vw.dist * .9 + 3; sc.left = sc.bottom = -e; sc.right = sc.top = e; sc.updateProjectionMatrix();
-  MP.sun.position.set(vw.tx - 8, 16, vw.tz + 5); MP.sun.target.position.set(vw.tx, 0, vw.tz); MP.r.shadowMap.needsUpdate = true;
+  if (!MP.shadowSet) { MP.shadowSet = true; const sc = MP.sun.shadow.camera, N2 = N / 2 + 2; sc.left = sc.bottom = -N2 * 1.15; sc.right = sc.top = N2 * 1.15; sc.near = 1; sc.far = 80; sc.updateProjectionMatrix(); MP.sun.position.set(N / 2 - 12, 26, N / 2 + 8); MP.sun.target.position.set(N / 2, 0, N / 2); MP.r.shadowMap.needsUpdate = true; }
 }
 function mapProj(x, z) { const r = MP.cv.getBoundingClientRect(), p = new T.Vector3(x, 0, z).project(MP.cam); return { x: (p.x + 1) / 2 * r.width, y: (1 - p.y) / 2 * r.height, z: p.z }; }
 function mapPan(dx, dy) {
@@ -4691,7 +4720,7 @@ function mapStart() {
   if (!MP.r) {
     MP.r = new T.WebGLRenderer({ canvas: cv, antialias: true, powerPreference: 'high-performance' });
     MP.r.outputColorSpace = T.SRGBColorSpace; MP.r.toneMapping = T.ACESFilmicToneMapping;
-    MP.r.shadowMap.enabled = true; MP.r.shadowMap.type = T.PCFSoftShadowMap; MP.r.shadowMap.autoUpdate = false;
+    MP.r.shadowMap.enabled = true; MP.r.shadowMap.type = T.PCFShadowMap; MP.r.shadowMap.autoUpdate = false;
     MP.scene = new T.Scene(); MP.cam = new T.PerspectiveCamera(34, 1, .1, 200);
     MP.hemi = new T.HemisphereLight('#cfe4ff', '#5a4a32', 1.05); MP.scene.add(MP.hemi);
     MP.sun = new T.DirectionalLight('#fff1d8', 2.5); MP.sun.castShadow = true; MP.sun.shadow.mapSize.set(2048, 2048); MP.sun.shadow.bias = -.0004; MP.sun.shadow.normalBias = .02; MP.sun.shadow.camera.near = 1; MP.sun.shadow.camera.far = 60;
@@ -4749,6 +4778,7 @@ function mapLight(night) {
 }
 function mapFrame() {
   if (!MP.cv || !S) return;
+  { const nt = performance.now(); if (MP.last && nt - MP.last < 25) return; adapt(MP, nt); MP.last = nt; }
   const r = MP.cv.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, QC().pr) * MP.quality; WIND.value = performance.now() / 1000;
   const W = Math.max(1, Math.round(r.width * dpr)), H = Math.max(1, Math.round(r.height * dpr));
   if (MP.cv.width !== W || MP.cv.height !== H) { MP.r.setPixelRatio(dpr); MP.r.setSize(r.width, r.height, false); MP.cam.aspect = r.width / r.height; MP.cam.updateProjectionMatrix(); mapCam(); }
@@ -4777,7 +4807,7 @@ function showcase(cv) {
   if (!st.r) {
     st.r = new T.WebGLRenderer({ canvas: cv, antialias: true, powerPreference: 'high-performance' });
     st.r.outputColorSpace = T.SRGBColorSpace; st.r.toneMapping = T.ACESFilmicToneMapping;
-    st.r.shadowMap.enabled = true; st.r.shadowMap.type = T.PCFSoftShadowMap; st.r.shadowMap.autoUpdate = false;
+    st.r.shadowMap.enabled = true; st.r.shadowMap.type = T.PCFShadowMap; st.r.shadowMap.autoUpdate = false;
     st.scene = new T.Scene(); st.cam = new T.PerspectiveCamera(32, 1, .1, 200);
     st.hemi = new T.HemisphereLight('#cfe4ff', '#5a4a32', 1.05); st.scene.add(st.hemi);
     st.sun = new T.DirectionalLight('#fff1d8', 2.6); st.sun.position.set(-4, 20, 13); st.sun.target.position.set(6, 0, 7);
