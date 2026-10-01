@@ -125,6 +125,33 @@ begin
   delete from public.worlds w where w.id = p_world;
 end $$;
 
+-- bütün dünyalarda oyuncu ara (ad ya da kullanıcı adı)
+create or replace function public.admin_search(p_q text)
+returns table (user_id uuid, username text, name text, world_id uuid, world_name text, code text, hid text, banned boolean)
+language plpgsql stable security definer set search_path = '' as $$
+begin
+  if not public.is_admin() then raise exception 'Yetkin yok'; end if;
+  return query select p.user_id, a.username, p.name, w.id, w.name, w.code, p.hid, public.is_banned(p.user_id)
+  from public.world_players p join public.worlds w on w.id = p.world_id
+  left join public.accounts a on a.user_id = p.user_id
+  where coalesce(p_q, '') = '' or p.name ilike '%' || p_q || '%' or a.username ilike '%' || p_q || '%' or w.code ilike p_q
+  order by p.joined_at desc limit 100;
+end $$;
+
+-- genel bakış sayıları
+create or replace function public.admin_overview() returns jsonb
+language plpgsql stable security definer set search_path = '' as $$
+begin
+  if not public.is_admin() then raise exception 'Yetkin yok'; end if;
+  return jsonb_build_object(
+    'worlds', (select count(*) from public.worlds),
+    'active', (select count(*) from public.worlds w where w.updated_at > now() - interval '1 day'),
+    'players', (select count(distinct p.user_id) from public.world_players p),
+    'accounts', (select count(*) from public.accounts),
+    'bans', (select count(*) from public.bans b where b.until is null or b.until > now()),
+    'push', (select count(*) from public.push_tokens));
+end $$;
+
 -- katılma ve dünya kurma da yasaklıya kapalı
 create or replace function public.join_world_guard() returns trigger
 language plpgsql security definer set search_path = '' as $$
@@ -137,7 +164,7 @@ create trigger world_players_ban before insert on public.world_players for each 
 
 do $$ declare f text; begin
   foreach f in array array['is_admin()','is_banned(uuid)','my_ban()','am_admin()','admin_worlds()','admin_players(uuid)','admin_load(uuid)',
-    'admin_save(uuid, text, int)','admin_ban(uuid, text, int)','admin_unban(uuid)','admin_bans()','admin_kick(uuid, text)','admin_delete_world(uuid)'] loop
+    'admin_save(uuid, text, int)','admin_ban(uuid, text, int)','admin_unban(uuid)','admin_bans()','admin_kick(uuid, text)','admin_delete_world(uuid)','admin_search(text)','admin_overview()'] loop
     execute 'revoke all on function public.' || f || ' from public, anon';
     execute 'grant execute on function public.' || f || ' to authenticated';
   end loop;

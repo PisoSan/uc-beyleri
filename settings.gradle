@@ -13,4 +13,4 @@ dependencyResolutionManagement {
     }
 }
 rootProject.name = "UcBeyleri"
-include ':app'
+include ':app', ':yonetim'
