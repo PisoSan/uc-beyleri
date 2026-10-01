@@ -1,10 +1,14 @@
 // Uç Beyleri — send-push
 // Zamanı gelen bildirimleri Firebase Cloud Messaging (HTTP v1) ile telefonlara yollar.
 // Her dakika pg_cron tarafından çağrılır. Gizli anahtar: FCM_SERVICE_ACCOUNT (Firebase hizmet hesabı JSON'u).
-// SUPABASE_URL ve SUPABASE_SERVICE_ROLE_KEY Supabase tarafından otomatik verilir.
+// SUPABASE_URL ve sunucu anahtarı Supabase tarafından otomatik verilir (yeni SUPABASE_SECRET_KEYS, yoksa eski SERVICE_ROLE_KEY).
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
-const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false } });
+function serverKey(): string {
+  try { const k = JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS') || '{}'); const v = k.default || Object.values(k)[0]; if (v) return String(v); } catch (_) { /* eski anahtara düş */ }
+  return Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+}
+const db = createClient(Deno.env.get('SUPABASE_URL')!, serverKey(), { auth: { persistSession: false } });
 const sa = JSON.parse(Deno.env.get('FCM_SERVICE_ACCOUNT') || '{}');
 
 const b64url = (b: Uint8Array) => btoa(String.fromCharCode(...b)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
