@@ -107,7 +107,7 @@ const lastVillage = o => S.vil.filter(v => v.owner === o).length < 2;
 const beyShort = o => (o === 'P' ? S.player.name : ownerName(o).replace('oğulları', ''));
 function createClan(name, tag, t) {
   name = String(name || '').trim().slice(0, 24); tag = String(tag || '').trim().toUpperCase().replace(/[^A-ZÇĞİÖŞÜ0-9]/g, '').slice(0, 4);
-  if (S.clan) return 'already'; if (name.length < 3) return 'name'; if (tag.length < 2) return 'tag';
+  if (S.clan) return 'already'; if (name.length < 3) return 'name'; if (tag.length < 2 || /^H\d+$/.test(tag)) return 'tag';
   if (S.beys.some(b => b.clan === tag)) return 'taken';
   S.clan = { name, tag, created: t }; S.clanJoinedAi = false;
   if (S.clanChat) S.chat.klan = S.clanChat[tag] = S.clanChat[tag] || [];
@@ -117,7 +117,7 @@ function createClan(name, tag, t) {
 }
 function inviteBey(id, t) {
   const b = S.beys.find(x => x.id === id);
-  if (!S.clan) return 'noclan'; if (!b || b.clan) return 'taken';
+  if (!S.clan) return 'noclan'; if (!canDo('P', 'invite')) return 'perm'; if (!b || b.clan) return 'taken';
   if (1 + S.beys.filter(x => x.clan === S.clan.tag).length >= CLAN_MAX) return 'full';
   if (b.human) return 'human';
   if (b.refusedUntil && t < b.refusedUntil) return 'wait';
@@ -146,11 +146,186 @@ function joinClan(tag, t) {
 }
 function leaveClan(t) {
   if (!S.clan) return 'none';
-  const tag = S.clan.tag, mine = S.beys.filter(b => b.clan === tag);
-  const own = !S.clanJoinedAi;
-  if (own) for (const b of mine) if (!b.human) { b.clan = null; b.clanName = null; }
+  const tag = S.clan.tag, others = members(tag).filter(o => o !== 'P'), humans = others.filter(o => isHuman(o)); let gone = false;
+  if (leaderOf(tag) === 'P') {
+    if (humans.length) {
+      // beylik klandaki başka bir oyuncuya geçer (önce vezirler, sonra en güçlü)
+      const next = humans.find(o => rankOf(o) === 'vezir') || humans.slice().sort((a, b) => ownerPts(b) - ownerPts(a))[0];
+      const m = cmeta(tag, true); m.ranks = m.ranks.filter(x => x.owner !== 'P' && x.owner !== next && x.r !== 'bey'); m.ranks.push({ owner: next, r: 'bey' });
+      clog(tag, ownerName(next) + ' klanın yeni beyi oldu.', t);
+    } else if (!AI_CLANS.some(c => c.tag === tag)) gone = true;
+  }
+  if (!gone) { clog(tag, S.player.name + ' klandan ayrıldı.', t); if (S.clanMeta && S.clanMeta[tag]) S.clanMeta[tag].ranks = S.clanMeta[tag].ranks.filter(x => x.owner !== 'P'); }
+  else { for (const b of S.beys) if (b.clan === tag && !b.human) { b.clan = null; b.clanName = null; } dissolve(tag); }
   say('genel', 'SYS', S.player.name + ', [' + tag + '] klanından ayrıldı.', t);
   S.clan = null; S.chat.klan = []; return 'ok';
+}
+
+// ---------- klan yönetimi: rütbeler, üye atma, diplomasi ----------
+// Rütbeler { owner, r } biçiminde tutulur; böylece çok oyunculuda kimlik çevirisi (P ↔ H1) kendiliğinden yapılır.
+const RANKS = { bey: 'Klan Beyi', vezir: 'Vezir', uye: 'Üye' }, RANK_ORD = { bey: 3, vezir: 2, uye: 1 };
+const RELS = { savas: 'Savaşta', ittifak: 'İttifak', nap: 'Saldırmazlık' };
+const PERM = { invite: 2, kick: 2, dipl: 2, rank: 3, desc: 3 };
+function members(tag) { const c = clanList().find(x => x.tag === tag); return c ? c.m : []; }
+function defaultLeader(tag) {
+  const mem = members(tag), ai = AI_CLANS.find(c => c.tag === tag);
+  if (ai && mem.includes(ai.m[0])) return ai.m[0];
+  const founder = mem.find(o => isHuman(o) && !(o === 'P' ? S.clanJoinedAi : (beyOf(o) || {}).clanJoinedAi));
+  return founder || mem.find(o => isHuman(o)) || mem[0] || null;
+}
+function cmeta(tag, write) {
+  S.clanMeta = S.clanMeta || {};
+  if (S.clanMeta[tag]) return S.clanMeta[tag];
+  const lead = defaultLeader(tag), m = { ranks: lead ? [{ owner: lead, r: 'bey' }] : [], desc: '', log: [], g: {} };
+  if (write) S.clanMeta[tag] = m;
+  return m;
+}
+function leaderOf(tag) {
+  if (!tag) return null;
+  const mem = members(tag), m = cmeta(tag);
+  const e = m.ranks.find(x => x.r === 'bey' && mem.includes(x.owner)); if (e) return e.owner;
+  // bey ayrıldıysa: vezir oyuncu, sonra herhangi bir oyuncu, sonra bilgisayar beyi
+  const vz = m.ranks.find(x => x.r === 'vezir' && mem.includes(x.owner) && isHuman(x.owner)); if (vz) return vz.owner;
+  return defaultLeader(tag);
+}
+function rankOf(o) {
+  const tag = clanOf(o); if (!tag) return null;
+  if (leaderOf(tag) === o) return 'bey';
+  return cmeta(tag).ranks.some(x => x.owner === o && x.r === 'vezir') ? 'vezir' : 'uye';
+}
+const canDo = (o, a) => { const r = rankOf(o); return !!r && RANK_ORD[r] >= PERM[a]; };
+function clog(tag, text, t) {
+  if (!tag) return; const m = cmeta(tag, true); m.log.unshift({ t, text }); if (m.log.length > 30) m.log.length = 30;
+  if (S.clan && S.clan.tag === tag) say('klan', 'SYS', text, t);
+  else if (S.clanChat && S.clanChat[tag]) { S.clanChat[tag].push({ id: ++S.uid, t, from: 'SYS', text }); if (S.clanChat[tag].length > CHAT_MAX) S.clanChat[tag].shift(); }
+}
+function dissolve(tag) {
+  if (S.clanMeta) delete S.clanMeta[tag];
+  S.rel = (S.rel || []).filter(r => r.a !== tag && r.b !== tag);
+  S.dipl = (S.dipl || []).filter(r => r.fr !== tag && r.to !== tag);
+}
+function setRank(target, r, t) {
+  if (!S.clan) return 'noclan'; if (!canDo('P', 'rank')) return 'perm'; if (target === 'P') return 'self';
+  const tag = S.clan.tag; if (!members(tag).includes(target)) return 'none';
+  if (!['bey', 'vezir', 'uye'].includes(r)) return 'bad';
+  if (r === 'bey' && !isHuman(target)) return 'ai';
+  const m = cmeta(tag, true);
+  if (!m.ranks.some(x => x.r === 'bey' && x.owner === 'P')) m.ranks.push({ owner: 'P', r: 'bey' });
+  m.ranks = m.ranks.filter(x => x.owner !== target);
+  if (r === 'bey') {
+    m.ranks = m.ranks.filter(x => x.owner !== 'P'); m.ranks.push({ owner: target, r: 'bey' }, { owner: 'P', r: 'vezir' });
+    clog(tag, S.player.name + ', klan beyliğini ' + ownerName(target) + ' beye devretti.', t);
+  } else {
+    if (r === 'vezir') m.ranks.push({ owner: target, r: 'vezir' });
+    clog(tag, ownerName(target) + (r === 'vezir' ? ' vezirliğe yükseltildi.' : ' üyeliğe indirildi.'), t);
+  }
+  return 'ok';
+}
+function kickMember(target, t) {
+  if (!S.clan) return 'noclan'; if (!canDo('P', 'kick')) return 'perm'; if (target === 'P') return 'self';
+  const tag = S.clan.tag, b = beyOf(target); if (!b || b.clan !== tag) return 'none';
+  if (RANK_ORD[rankOf(target)] >= RANK_ORD[rankOf('P')]) return 'rank';
+  b.clan = null; b.clanName = null; b.clanJoinedAi = false;
+  if (!b.human) b.refusedUntil = t + 24 * HOUR / S.speed;
+  const m = cmeta(tag, true); m.ranks = m.ranks.filter(x => x.owner !== target);
+  S.invites = (S.invites || []).filter(x => !(x.owner === target && x.tag === tag));
+  clog(tag, b.name + ', ' + S.player.name + ' tarafından klandan çıkarıldı.', t);
+  say('genel', 'SYS', b.name + ' artık [' + tag + '] klanında değil.', t);
+  return 'ok';
+}
+function setDesc(text, t) {
+  if (!S.clan) return 'noclan'; if (!canDo('P', 'desc')) return 'perm';
+  cmeta(S.clan.tag, true).desc = String(text || '').replace(/\s+/g, ' ').trim().slice(0, 160); return 'ok';
+}
+// ---- diplomasi ----
+function relEntry(a, b) { if (!a || !b || a === b) return null; return (S.rel || []).find(x => (x.a === a && x.b === b) || (x.a === b && x.b === a)) || null; }
+const relOf = (a, b) => { const r = relEntry(a, b); return r ? r.k : null; };
+const relOwners = (oa, ob) => relOf(clanOf(oa), clanOf(ob));
+const clanPts = tag => members(tag).reduce((a, o) => a + ownerPts(o), 0);
+const clanName = tag => { const c = clanList().find(x => x.tag === tag); return c ? c.name : tag; };
+// teklife karar veren biri (klan beyi ya da vezir) gerçek oyuncu mu?
+const humanDecider = tag => members(tag).some(o => isHuman(o) && RANK_ORD[rankOf(o)] >= 2);
+function setRel(a, b, k, t) {
+  S.rel = (S.rel || []).filter(x => !((x.a === a && x.b === b) || (x.a === b && x.b === a)));
+  S.dipl = (S.dipl || []).filter(x => !((x.fr === a && x.to === b) || (x.fr === b && x.to === a)));
+  if (k === 'savas') S.rel.push({ id: ++S.uid, a, b, k, t, sc: { [a]: { kill: 0, conq: 0, win: 0 }, [b]: { kill: 0, conq: 0, win: 0 } } });
+  else if (k === 'ittifak' || k === 'nap') S.rel.push({ id: ++S.uid, a, b, k, t });
+}
+function declareWar(tag, t, by) {
+  const mine = by || (S.clan && S.clan.tag);
+  if (!mine) return 'noclan'; if (!by && !canDo('P', 'dipl')) return 'perm'; if (tag === mine) return 'self';
+  if (!members(tag).length) return 'none'; if (relOf(mine, tag) === 'savas') return 'already';
+  const was = relOf(mine, tag);
+  setRel(mine, tag, 'savas', t);
+  const txt = '[' + mine + '] ' + clanName(mine) + ', [' + tag + '] ' + clanName(tag) + ' klanına savaş ilan etti!' + (was ? ' (' + DIPK[was] + ' bozuldu)' : '');
+  say('genel', 'SYS', txt, t); clog(mine, txt, t); clog(tag, txt, t);
+  return 'ok';
+}
+function proposeRel(tag, k, t) {
+  const mine = S.clan && S.clan.tag;
+  if (!mine) return 'noclan'; if (!canDo('P', 'dipl')) return 'perm'; if (tag === mine) return 'self';
+  if (!members(tag).length) return 'none';
+  const cur = relOf(mine, tag);
+  if (k === 'baris' ? cur !== 'savas' : (cur === k || cur === 'savas' || !['ittifak', 'nap'].includes(k))) return 'bad';
+  S.dipl = S.dipl || [];
+  if (S.dipl.some(x => x.fr === mine && x.to === tag)) return 'dup';
+  if (humanDecider(tag)) { S.dipl.push({ id: ++S.uid, fr: mine, to: tag, k, t }); clog(mine, '[' + tag + '] klanına ' + DIPK[k] + ' teklifi gönderildi.', t); return 'sent'; }
+  // bilgisayar klanı hemen karar verir
+  const m = cmeta(tag, true); m.cool = m.cool || {};
+  if (m.cool[mine] && t < m.cool[mine]) return 'wait';
+  const ratio = (clanPts(mine) + 1) / (clanPts(tag) + 1), grudge = (m.g && m.g[mine]) || 0;
+  let p = k === 'ittifak' ? .2 + ratio * .45 : k === 'nap' ? .4 + ratio * .4 : .3 + ratio * .35;
+  if (k === 'baris') { const w = relEntry(mine, tag); if (w && w.sc) p += (w.sc[mine].kill - w.sc[tag].kill) / (w.sc[mine].kill + w.sc[tag].kill + 50) * .4; }
+  p = Math.max(.08, Math.min(.92, p - grudge * .12));
+  if (R() < p) { acceptRel(mine, tag, k, t); return 'accepted'; }
+  m.cool[mine] = t + 6 * HOUR / S.speed;
+  clog(mine, '[' + tag + '] ' + DIPK[k] + ' teklifini reddetti.', t);
+  return 'refused';
+}
+const DIPK = { ittifak: 'ittifak', nap: 'saldırmazlık', baris: 'barış' };
+function acceptRel(a, b, k, t) {
+  setRel(a, b, k === 'baris' ? null : k, t);
+  if (k === 'baris' && S.clanMeta) for (const [x, y] of [[a, b], [b, a]]) if (S.clanMeta[x] && S.clanMeta[x].g) delete S.clanMeta[x].g[y];
+  const txt = k === 'baris' ? '[' + a + '] ile [' + b + '] barış yaptı.' : '[' + a + '] ile [' + b + '] arasında ' + DIPK[k] + ' kuruldu.';
+  say('genel', 'SYS', txt, t); clog(a, txt, t); clog(b, txt, t);
+}
+function answerRel(id, yes, t) {
+  const mine = S.clan && S.clan.tag, q = (S.dipl || []).find(x => x.id === id);
+  if (!q || q.to !== mine) return 'gone'; if (!canDo('P', 'dipl')) return 'perm';
+  S.dipl = S.dipl.filter(x => x !== q);
+  const cur = relOf(q.fr, q.to);
+  if (yes && (q.k === 'baris' ? cur === 'savas' : cur !== 'savas')) { acceptRel(q.fr, q.to, q.k, t); return 'ok'; }
+  clog(q.fr, '[' + mine + '] ' + DIPK[q.k] + ' teklifini reddetti.', t);
+  return yes ? 'gone' : 'ok';
+}
+function cancelRel(id) {
+  const mine = S.clan && S.clan.tag; if (!canDo('P', 'dipl')) return 'perm';
+  S.dipl = (S.dipl || []).filter(x => !(x.id === id && x.fr === mine)); return 'ok';
+}
+function breakRel(tag, t) {
+  const mine = S.clan && S.clan.tag; if (!mine) return 'noclan'; if (!canDo('P', 'dipl')) return 'perm';
+  const cur = relOf(mine, tag); if (cur !== 'ittifak' && cur !== 'nap') return 'none';
+  setRel(mine, tag, null, t);
+  const txt = '[' + mine + '], [' + tag + '] ile ' + DIPK[cur] + ' anlaşmasını bozdu.';
+  say('genel', 'SYS', txt, t); clog(mine, txt, t); clog(tag, txt, t);
+  return 'ok';
+}
+// savaş skoru + bilgisayar klanlarının kin tutması
+function warBattle(rep, t) {
+  if (rep.type !== 'attack') return;
+  const ca = clanOf(rep.attOwner), cd = clanOf(rep.defOwner);
+  const w = ca && cd && (S.rel || []).find(x => x.k === 'savas' && ((x.a === ca && x.b === cd) || (x.a === cd && x.b === ca)));
+  if (w) {
+    const sc = w.sc || (w.sc = {}), A = sc[ca] || (sc[ca] = { kill: 0, conq: 0, win: 0 }), D = sc[cd] || (sc[cd] = { kill: 0, conq: 0, win: 0 });
+    A.kill += unitSum(rep.dLost || {}); D.kill += unitSum(rep.aLost || {});
+    if (rep.win) A.win++; if (rep.conquered) A.conq++;
+    return;
+  }
+  // insan saldırısına uğrayan bilgisayar klanı: üç saldırıdan sonra savaş ilan eder
+  if (ca && cd && ca !== cd && isHuman(rep.attOwner) && !isHuman(rep.defOwner) && !humanDecider(cd) && relOf(ca, cd) !== 'ittifak') {
+    const m = cmeta(cd, true); m.g = m.g || {}; m.g[ca] = (m.g[ca] || 0) + 1;
+    if (m.g[ca] >= 3) declareWar(ca, t, cd);
+  }
 }
 const CHAT_GENEL = [
   '{v} tarafında bol ganimetli terk edilmiş köyler var, akıncılar hazır olsun.', 'Bu sabah hasat iyi geçti, ambarlar dolu.',
@@ -270,7 +445,7 @@ function newGame(opts) {
   const seed = opts.seed != null ? opts.seed : Math.floor(Math.random() * 1e9);
   const rnd = mulberry32(seed);
   const ri = (a, b) => a + Math.floor(rnd() * (b - a + 1));
-  S = { ver: 1, rs: seed ^ 0x5bd1e995, mp: !!opts.mp, extra: {}, invites: [], market: [], tech: {}, techq: null, clan: null, chat: { genel: [], klan: [] }, chatq: [], chatSeen: { genel: 0, klan: 0 }, nextChat: t + 30000, seed, speed: opts.speed, created: t, lastT: t, protectUntil: t + 3 * 24 * HOUR / opts.speed,
+  S = { ver: 1, rs: seed ^ 0x5bd1e995, mp: !!opts.mp, extra: {}, invites: [], rel: [], dipl: [], clanMeta: {}, market: [], tech: {}, techq: null, clan: null, chat: { genel: [], klan: [] }, chatq: [], chatSeen: { genel: 0, klan: 0 }, nextChat: t + 30000, seed, speed: opts.speed, created: t, lastT: t, protectUntil: t + 3 * 24 * HOUR / opts.speed,
     nextAi: t + HOUR / opts.speed, uid: 100, player: { name: opts.name || 'Kızılırmak Beyliği', color: '#e3b341' },
     beys: [], vil: [], moves: [], reports: [], quests: { claimed: [] },
     stats: { trained: {}, barbWins: 0, spies: 0 }, cur: 0, over: false };
@@ -373,7 +548,7 @@ function migrate(st) {
     st.beys.forEach((b, i) => { const ac = AI_CLANS.find(c => c.m.includes('B' + i)); b.clan = ac ? ac.tag : null; b.clanName = ac ? ac.name : null; }); }
   if (st.techq === undefined) st.techq = null;
   if (st.rs == null) st.rs = (st.seed || 1) ^ 0x5bd1e995;
-  if (!st.extra) st.extra = {}; if (!st.invites) st.invites = [];
+  if (!st.extra) st.extra = {}; if (!st.invites) st.invites = []; if (!st.rel) st.rel = []; if (!st.dipl) st.dipl = []; if (!st.clanMeta) st.clanMeta = {};
   for (const v of st.vil) { if (v.b.medrese == null) v.b.medrese = 0; if (v.b.kervansaray == null) v.b.kervansaray = 0; }
   return st;
 }
@@ -435,6 +610,7 @@ function send(from, to, units, type, t) {
   if (type === 'support' && to.owner !== from.owner) return 'notown';
   if (type === 'attack' && to.owner === from.owner) return 'own';
   if (type === 'attack' && sameClan(to.owner, from.owner)) return 'ally';
+  if (type !== 'support' && (relOwners(from.owner, to.owner) === 'ittifak' || relOwners(from.owner, to.owner) === 'nap')) return 'pact';
   if (isHuman(to.owner) && from.owner !== to.owner && t < protectOf(to.owner)) return 'protected';
   for (const [u, k] of Object.entries(clean)) from.units[u] -= k;
   const dur = travelTime(from, to, clean);
@@ -539,6 +715,7 @@ function finishBattle(m, rep, att, dv, t) {
     const from = vil(m.from);
     S.moves.push({ id: ++S.uid, type: 'return', owner: m.owner, from: m.from, to: m.from, via: m.to, units: back, loot: rep.loot.slice(), depart: t, arrive: t + travelTime(dv, from, back) });
   }
+  warBattle(rep, t);
   pushReport(rep);
 }
 function pushReport(rep) {
@@ -579,7 +756,7 @@ function simulate(att, def, wall, luck, aOwner = 'P', dOwner = null) {
 }
 // ---------- gerçek oyunculara klan daveti ----------
 function inviteHuman(id, t) {
-  const b = beyOf(id); if (!S.clan) return 'noclan'; if (!b || !b.human) return 'taken'; if (b.clan) return 'taken';
+  const b = beyOf(id); if (!S.clan) return 'noclan'; if (!canDo('P', 'invite')) return 'perm'; if (!b || !b.human) return 'taken'; if (b.clan) return 'taken';
   S.invites = S.invites || [];
   if (S.invites.some(x => x.owner === id && x.tag === S.clan.tag)) return 'dup';
   if (clanList().find(c => c.tag === S.clan.tag).m.length >= CLAN_MAX) return 'full';
@@ -875,19 +1052,23 @@ const AI = (() => {
     if (R() < .015) { const m = MINES[Math.floor(R() * 3)]; if (v.b[m] < 14) v.b[m]++; }
   }
   function attack(bey, t) {
-    if (R() > 0.35 * bey.aggr) return;
+    const atWarAny = bey.clan && (S.rel || []).some(x => x.k === 'savas' && (x.a === bey.clan || x.b === bey.clan));
+    if (R() > 0.35 * bey.aggr * (atWarAny ? 1.8 : 1)) return;
     const mine = S.vil.filter(v => v.owner === bey.id);
     for (const v of mine.sort(() => R() - .5)) {
       const off = offPower(v.units); if (off < 250) continue;
       const busy = new Set(S.moves.filter(m => m.owner === bey.id && m.type !== 'return').map(m => m.to));
       const canHitP = t - bey.lastHitP > 6 * HOUR / S.speed;
+      const war = o => relOwners(bey.id, o.owner) === 'savas';
       const cand = S.vil.filter(o => o.owner !== bey.id && !sameClan(o.owner, bey.id) && !busy.has(o.id) && dist(v, o) <= 9 &&
-        (o.owner === null || (isHuman(o.owner) && t >= protectOf(o.owner) && canHitP && R() < bey.aggr * .55)));
+        relOwners(bey.id, o.owner) !== 'ittifak' && relOwners(bey.id, o.owner) !== 'nap' &&
+        (o.owner === null || (isHuman(o.owner) && t >= protectOf(o.owner) &&
+          (war(o) ? t - bey.lastHitP > 2 * HOUR / S.speed : canHitP && R() < bey.aggr * .55))));
       let best = null, bscore = -Infinity;
       for (const o of cand) {
         syncRes(o, t);
         const d = defPower(o); if (off < d * 1.25) continue;
-        const score = (o.res[0] + o.res[1] + o.res[2]) / 500 - dist(v, o) + (isHuman(o.owner) ? 3 * bey.aggr : 0);
+        const score = (o.res[0] + o.res[1] + o.res[2]) / 500 - dist(v, o) + (isHuman(o.owner) ? 3 * bey.aggr : 0) + (war(o) ? 6 : 0);
         if (score > bscore) { bscore = score; best = o; }
       }
       if (!best) continue;
@@ -913,7 +1094,7 @@ const AI = (() => {
 
 return {
   HOUR, RES_NAMES, MINES, B, B_ORDER, U, U_ORDER, REC_B, WORLD, TECH, TECH_ORDER,
-  reqFor, simulate, inviteHuman, acceptInvite, declineInvite, isHuman, protectOf, mkVillage, clanOf, sameClan, clanList, ownerPts, createClan, inviteBey, joinClan, leaveClan, playerSay, CLAN_MAX, techCost, techTime, canResearch, research, migrate, medreseMax, TL,
+  reqFor, simulate, RANKS, RELS, DIPK, members, leaderOf, rankOf, canDo, cmeta, setRank, kickMember, setDesc, relOf, relEntry, relOwners, clanPts, clanName, humanDecider, declareWar, proposeRel, answerRel, cancelRel, breakRel, inviteHuman, acceptInvite, declineInvite, isHuman, protectOf, mkVillage, clanOf, sameClan, clanList, ownerPts, createClan, inviteBey, joinClan, leaveClan, playerSay, CLAN_MAX, techCost, techTime, canResearch, research, migrate, medreseMax, TL,
   get S() { return S; }, set S(x) { S = x; },
   onNotify(fn) { log = fn; },
   maxAll(v, t) { syncRes(v, t); for (const b of B_ORDER) v.b[b] = B[b].max; v.bq = []; const c = cap(v); v.res = [c, c, c]; },
