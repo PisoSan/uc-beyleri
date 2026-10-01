@@ -46,6 +46,7 @@ function texMat(name) {
   const nm = new T.CanvasTexture(normalFrom(cv, 2.2)); nm.wrapS = nm.wrapT = T.RepeatWrapping;
   const m = new T.MeshStandardMaterial({ map, normalMap: nm, normalScale: new T.Vector2(p.n || .8, p.n || .8), roughness: p.r != null ? p.r : .9, metalness: p.m || 0, side: T.DoubleSide });
   m.userData.sc = [TEXI[name][0] / TEXI[name][2], TEXI[name][1] / TEXI[name][2]];
+  if (QUAL() !== 'low') withDetail(m, 7, name === 'turq' || name === 'lead' ? .04 : .09);
   return MATS[name] = m;
 }
 function colMat(col, o = {}) {
@@ -452,6 +453,7 @@ function mergeGroup(g, b) {
 
 // ---------- dünya: zemin, dere, yollar, ağaçlar, tepeler ----------
 function grassTex() {
+  if (grassTex.t) return grassTex.t;
   const n = 512, c = document.createElement('canvas'); c.width = c.height = n; const g = c.getContext('2d'), id = g.createImageData(n, n), d = id.data;
   for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
     const a = fbm(i / 40, j / 40, 21), b = hash2(i, j, 4), blade = hash2(i >> 1, j, 9) > .82 ? 18 : 0;
@@ -460,7 +462,7 @@ function grassTex() {
   // tileable kenarlar için fbm periyodik değil; yine de tekrar küçük olduğundan göze batmaz
   g.putImageData(id, 0, 0);
   for (let k = 0; k < 900; k++) { const x = hash2(k, 1, 31) * n, y = hash2(k, 2, 31) * n; g.strokeStyle = hash2(k, 3, 31) < .5 ? 'rgba(40,72,24,.5)' : 'rgba(176,196,110,.45)'; g.lineWidth = 1.2; g.beginPath(); g.moveTo(x, y); g.lineTo(x + (hash2(k, 4, 31) - .5) * 4, y - 4 - hash2(k, 5, 31) * 5); g.stroke(); }
-  const t = new T.CanvasTexture(c); t.wrapS = t.wrapT = T.RepeatWrapping; t.colorSpace = T.SRGBColorSpace; t.anisotropy = 8; return t;
+  const t = new T.CanvasTexture(c); t.wrapS = t.wrapT = T.RepeatWrapping; t.colorSpace = T.SRGBColorSpace; t.anisotropy = 8; return grassTex.t = t;
 }
 function ribbon(pts, width, mat, y) {   // pts: [[u,v]...] boyunca şerit
   const pos = [], uv = [], idx = [];
@@ -482,28 +484,17 @@ function buildWorld() {
   const gp = ground.attributes.position, gc = [];
   for (let i = 0; i < gp.count; i++) { const x = gp.getX(i), z = gp.getZ(i), n = fbm(x / 9 + 50, z / 9, 7), dry = fbm(x / 5, z / 5 + 30, 8); const k = .78 + n * .38; gc.push(k * (dry > .62 ? 1.12 : 1), k, k * (dry > .62 ? .86 : 1)); const far = Math.max(0, Math.hypot(x, z) - 16); gp.setY(i, Math.min(2.2, far * far * .006) * fbm(x / 7, z / 7, 3) * 1.4 - .02); }
   ground.setAttribute('color', new T.Float32BufferAttribute(gc, 3)); ground.computeVertexNormals();
-  const gt = grassTex(); gt.repeat.set(30, 30);
+  const gt = grassTex().clone(); gt.needsUpdate = true; gt.repeat.set(30, 30);
   const gm = new T.Mesh(ground, new T.MeshStandardMaterial({ map: gt, vertexColors: true, roughness: 1 })); gm.position.set(6, 0, 7); gm.receiveShadow = true; W.add(gm);
-  // dere
+  // dere (kıyılar zemin boyamasında)
   const rv = []; for (let v = -40; v <= 50; v += .5) rv.push([riverU(v), v]);
-  const bank = ribbon(rv, 1.7, new T.MeshStandardMaterial({ color: '#a8946a', roughness: 1 }), .012); W.add(bank);
   const wn = new T.CanvasTexture(normalFrom(TEX.rock, 1.2)); wn.wrapS = wn.wrapT = T.RepeatWrapping; wn.repeat.set(2, 8);
-  const wm = new T.MeshStandardMaterial({ color: '#2d6f80', roughness: .12, metalness: .25, normalMap: wn, normalScale: new T.Vector2(.35, .35), transparent: true, opacity: .93 });
-  const water = ribbon(rv, 1.05, wm, .03); W.add(water); st.water = wn;
-  // avlu, yollar, taş yol
-  const dm = texMat('dirt');
-  const yard = new T.Mesh(new T.PlaneGeometry(WB - WA - .1, WB - WA - .1), dm); yard.rotation.x = -Math.PI / 2; yard.position.set((WA + WB) / 2, .014, (WA + WB) / 2);
-  { const [sx, sy] = dm.userData.sc, uv = yard.geometry.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * (WB - WA) / sx, uv.getY(i) * (WB - WA) / sy); }
-  yard.receiveShadow = true; W.add(yard);
-  ROADS.forEach((r, ri) => { for (let i = 0; i < r.pts.length - 1; i++) {
-    const [a, b] = [r.pts[i], r.pts[i + 1]], h = r.w / 2, u0 = Math.min(a[0], b[0]) - h, u1 = Math.max(a[0], b[0]) + h, v0 = Math.min(a[1], b[1]) - h, v1 = Math.max(a[1], b[1]) + h;
-    const m = new T.Mesh(new T.PlaneGeometry(u1 - u0, v1 - v0), dm); m.rotation.x = -Math.PI / 2; m.position.set((u0 + u1) / 2, .016 + (ri * 3 + i) * .0005, (v0 + v1) / 2);
-    const [sx, sy] = dm.userData.sc, uv = m.geometry.attributes.uv; for (let k = 0; k < uv.count; k++) uv.setXY(k, uv.getX(k) * (u1 - u0) / sx, uv.getY(k) * (v1 - v0) / sy);
-    m.receiveShadow = true; W.add(m);
-  } });
-  const pm = texMat('pave'), path = new T.Mesh(new T.PlaneGeometry(.5, WB + .1 - 7.25), pm); path.rotation.x = -Math.PI / 2; path.position.set(GC, .02, (7.25 + WB + .1) / 2);
-  { const [sx, sy] = pm.userData.sc, uv = path.geometry.attributes.uv; for (let k = 0; k < uv.count; k++) uv.setXY(k, uv.getX(k) * .5 / sx, uv.getY(k) * (WB - 7.15) / sy); }
-  path.receiveShadow = true; W.add(path);
+  const wm = new T.MeshStandardMaterial({ color: '#21596a', roughness: .06, metalness: .15, normalMap: wn, normalScale: new T.Vector2(.45, .45), transparent: true, opacity: .9 });
+  W.add(ribbon(rv, 1.05, wm, .03)); st.water = wn;
+  // zemin boyaması: yumuşak kenarlı yollar, avlu, taş yol, kıyı
+  const sm = withDetail(new T.MeshStandardMaterial({ map: splatTexture(), transparent: true, roughness: 1, depthWrite: false }), 120, .14);
+  const sp = new T.Mesh(new T.PlaneGeometry(SPL.SZ, SPL.SZ), sm); sp.rotation.x = -Math.PI / 2; sp.position.set(SPL.U0 + SPL.SZ / 2, .008, SPL.V0 + SPL.SZ / 2); sp.receiveShadow = true; sp.renderOrder = -1; W.add(sp);
+  grassField(W);
   // ağaçlar (örneklenmiş)
   const rnd = mul32(4242), trees = { mese: [], servi: [], kavak: [] };
   for (let i = 0; i < 20000 && trees.mese.length + trees.servi.length + trees.kavak.length < 520; i++) {
@@ -516,12 +507,12 @@ function buildWorld() {
   const trunkM = colMat('#4a3524', { roughness: 1 });
   const blob = (() => { const parts = []; for (const [x, y, z, r] of [[0, .62, 0, .34], [.2, .55, .1, .26], [-.18, .58, -.08, .27], [.05, .8, -.05, .25], [-.05, .52, .2, .22]]) { const s = new T.IcosahedronGeometry(r, 1); s.translate(x, y, z); parts.push(s.index ? s.toNonIndexed() : s); } return mergeGeos(parts); })();
   mk(new T.CylinderGeometry(.045, .065, .5, 6).translate(0, .25, 0), trunkM, trees.mese, (m4, t) => m4.compose(new T.Vector3(t[0], 0, t[1]), new T.Quaternion(), new T.Vector3(t[2], t[2], t[2])));
-  mk(blob, new T.MeshStandardMaterial({ color: '#ffffff', roughness: .95, flatShading: true }), trees.mese, (m4, t) => m4.compose(new T.Vector3(t[0], 0, t[1]), new T.Quaternion().setFromAxisAngle(new T.Vector3(0, 1, 0), t[3] * 6), new T.Vector3(t[2], t[2], t[2])));
+  mk(blob, addWind(new T.MeshStandardMaterial({ color: '#ffffff', roughness: .95, flatShading: true }), .045), trees.mese, (m4, t) => m4.compose(new T.Vector3(t[0], 0, t[1]), new T.Quaternion().setFromAxisAngle(new T.Vector3(0, 1, 0), t[3] * 6), new T.Vector3(t[2], t[2], t[2])));
   const lathe = (w, h) => { const pts = []; for (let i = 0; i <= 10; i++) { const f = i / 10; pts.push(new T.Vector2(Math.sin(Math.PI * Math.pow(f, .8)) * w * (1 - f * .35), .12 + f * h)); } return new T.LatheGeometry(pts, 10); };
   const sGeo = lathe(.16, 1.45), kGeo = lathe(.2, 1.3);
   for (const [list, geo, col] of [[trees.servi, sGeo, '#2f5a2c'], [trees.kavak, kGeo, '#6e9442']]) {
     mk(new T.CylinderGeometry(.03, .04, .2, 5).translate(0, .1, 0), trunkM, list, (m4, t) => m4.compose(new T.Vector3(t[0], 0, t[1]), new T.Quaternion(), new T.Vector3(t[2], t[2], t[2])));
-    const mat = new T.MeshStandardMaterial({ color: col, roughness: .95, flatShading: true });
+    const mat = addWind(new T.MeshStandardMaterial({ color: col, roughness: .95, flatShading: true }), .03);
     const im = new T.InstancedMesh(geo, mat, list.length), m4 = new T.Matrix4(), c = new T.Color();
     list.forEach((t, i) => { m4.compose(new T.Vector3(t[0], 0, t[1]), new T.Quaternion(), new T.Vector3(t[2], t[2] * (.9 + t[3] * .3), t[2])); im.setMatrixAt(i, m4); c.set(col).offsetHSL((t[3] - .5) * .03, 0, (t[3] - .5) * .1); im.setColorAt(i, c); });
     im.castShadow = true; im.receiveShadow = true; W.add(im);
@@ -545,11 +536,246 @@ function mergeGeos(list) {
   const geo = new T.BufferGeometry(); geo.setAttribute('position', new T.BufferAttribute(pos, 3)); geo.setAttribute('normal', new T.BufferAttribute(nor, 3)); return geo;
 }
 
+
+// ============================================================
+//  KALİTE: gökyüzü, ortam ışığı, görüntü sonrası işleme, zemin boyaması, çimen, rüzgâr, köy eşyaları
+// ============================================================
+const QUAL = () => { try { return localStorage.getItem('ub-q') || 'high'; } catch (e) { return 'high'; } };
+const QS = { high: { pr: 2, shadow: 4096, post: true, bloom: true, grass: 5200, splat: 2048 }, med: { pr: 1.5, shadow: 2048, post: true, bloom: false, grass: 2200, splat: 2048 }, low: { pr: 1, shadow: 1024, post: false, bloom: false, grass: 0, splat: 1024 } };
+const QC = () => QS[QUAL()] || QS.high;
+const WIND = { value: 0 };
+function addWind(m, k) {
+  m.onBeforeCompile = sh => {
+    sh.uniforms.uTime = WIND;
+    sh.vertexShader = 'uniform float uTime;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+      vec3 wp0 = vec3(0.0);
+      #ifdef USE_INSTANCING
+        wp0 = (instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+      #endif
+      float hh = max(position.y, 0.0);
+      transformed.x += sin(uTime * 1.6 + wp0.x * .7 + wp0.z * .45) * hh * ${k.toFixed(3)};
+      transformed.z += cos(uTime * 1.25 + wp0.x * .35 + wp0.z * .8) * hh * ${(k * .6).toFixed(3)};`);
+  };
+  m.customProgramCacheKey = () => 'wind' + k;
+  return m;
+}
+// ---------- gökyüzü ----------
+const SKY_FS = `uniform vec3 top, hor, bot, sunCol, sunDir; uniform float night, uTime; varying vec3 vDir;
+float h1(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3. - 2. * f); return mix(mix(h1(i), h1(i + vec2(1., 0.)), f.x), mix(h1(i + vec2(0., 1.)), h1(i + vec2(1., 1.)), f.x), f.y); }
+float fbm2(vec2 p){ float s = 0., a = .5; for (int i = 0; i < 5; i++) { s += a * vn(p); p *= 2.03; a *= .5; } return s; }
+void main(){
+  vec3 d = normalize(vDir); float y = d.y;
+  vec3 col = y > 0. ? mix(hor, top, pow(clamp(y, 0., 1.), .5)) : mix(hor, bot, clamp(-y * 4., 0., 1.));
+  float sd = max(dot(d, normalize(sunDir)), 0.);
+  col += sunCol * (pow(sd, 900.) * 8. + pow(sd, 10.) * .28 * (1. - night * .6));
+  if (y > .01) {
+    vec2 uv = d.xz / (y + .12) * 1.4 + vec2(uTime * .006, uTime * .002);
+    float c = smoothstep(.48, .86, fbm2(uv));
+    vec3 cc = mix(vec3(1.0, .98, .95), hor * .5, night);
+    col = mix(col, cc, c * .7 * smoothstep(.01, .22, y));
+  }
+  if (night > .5 && y > 0.) { vec2 g = floor(d.xz / (y + .25) * 260.); float s = step(.9965, h1(g)); col += vec3(s) * (.6 + .4 * sin(uTime * 3. + h1(g * 1.3) * 40.)) * smoothstep(0., .25, y); }
+  gl_FragColor = vec4(col, 1.);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
+}`;
+function makeSky() {
+  const m = new T.ShaderMaterial({
+    side: T.BackSide, depthWrite: false, fog: false,
+    uniforms: { top: { value: new T.Color() }, hor: { value: new T.Color() }, bot: { value: new T.Color() }, sunCol: { value: new T.Color() }, sunDir: { value: new T.Vector3(0, 1, 0) }, night: { value: 0 }, uTime: WIND },
+    vertexShader: 'varying vec3 vDir; void main(){ vDir = position; vec4 p = projectionMatrix * modelViewMatrix * vec4(position, 1.0); gl_Position = p.xyww; }',
+    fragmentShader: SKY_FS,
+  });
+  const s = new T.Mesh(new T.SphereGeometry(90, 32, 16), m); s.frustumCulled = false; s.renderOrder = -1; return s;
+}
+const SKYC = { d: { top: '#3f78bd', hor: '#d6e6ee', bot: '#7d936d', sun: '#fff0cc' }, n: { top: '#050a18', hor: '#1a2742', bot: '#0b1018', sun: '#a8bcff' } };
+function makeAtmos(r, scene) {
+  const A = { sky: makeSky(), pm: new T.PMREMGenerator(r), env: {} };
+  scene.add(A.sky);
+  A.set = (night, sunPos) => {
+    const c = night ? SKYC.n : SKYC.d, u = A.sky.material.uniforms;
+    u.top.value.set(c.top); u.hor.value.set(c.hor); u.bot.value.set(c.bot); u.sunCol.value.set(c.sun); u.night.value = night ? 1 : 0; u.sunDir.value.copy(sunPos).normalize();
+    const key = night ? 'n' : 'd';
+    if (!A.env[key]) {
+      const sc = new T.Scene(), sk = makeSky(), su = sk.material.uniforms;
+      for (const k of ['top', 'hor', 'bot', 'sunCol']) su[k].value.copy(u[k].value); su.night.value = u.night.value; su.sunDir.value.copy(u.sunDir.value); su.uTime = { value: 0 };
+      sc.add(sk); A.env[key] = A.pm.fromScene(sc, .04).texture; sk.geometry.dispose(); sk.material.dispose();
+    }
+    scene.environment = A.env[key]; scene.background = null;
+    if (scene.fog) scene.fog.color.set(c.hor);
+  };
+  A.update = cam => A.sky.position.copy(cam.position);
+  return A;
+}
+// ---------- görüntü sonrası işleme: parlama, ton eşleme, renk ayarı, kenar karartması ----------
+const POST_FS = `uniform sampler2D tScene, tBloom; uniform float exposure, bloom, vig, sat, contrast, useBloom; uniform vec3 tint; varying vec2 vUv;
+vec3 RRT(vec3 v){ vec3 a = v * (v + 0.0245786) - 0.000090537; vec3 b = v * (0.983729 * v + 0.4329510) + 0.238081; return a / b; }
+vec3 aces(vec3 c){ const mat3 I = mat3(vec3(0.59719, 0.07600, 0.02840), vec3(0.35458, 0.90834, 0.13383), vec3(0.04823, 0.01566, 0.83777)); const mat3 O = mat3(vec3(1.60475, -0.10208, -0.00327), vec3(-0.53108, 1.10813, -0.07276), vec3(-0.07367, -0.00605, 1.07602)); c *= exposure / .6; c = I * c; c = RRT(c); c = O * c; return clamp(c, 0., 1.); }
+vec3 srgb(vec3 c){ return mix(pow(c, vec3(.41666)) * 1.055 - .055, c * 12.92, vec3(lessThanEqual(c, vec3(.0031308)))); }
+void main(){
+  vec3 c = texture2D(tScene, vUv).rgb;
+  if (useBloom > .5) c += texture2D(tBloom, vUv).rgb * bloom;
+  c = srgb(aces(c));
+  float l = dot(c, vec3(.299, .587, .114)); c = mix(vec3(l), c, sat); c = (c - .5) * contrast + .5; c *= tint;
+  vec2 q = vUv - .5; c *= 1. - vig * smoothstep(.25, .85, dot(q, q) * 2.2);
+  gl_FragColor = vec4(clamp(c, 0., 1.), 1.);
+}`;
+function makePost(r) {
+  if (!QC().post) return null;
+  const e = r.extensions; if (!(e.has('EXT_color_buffer_float') || e.has('EXT_color_buffer_half_float'))) return null;
+  const vs = 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0., 1.); }';
+  const mk = (fs, un) => new T.ShaderMaterial({ uniforms: un, vertexShader: vs, fragmentShader: fs, depthTest: false, depthWrite: false });
+  const P = { rt: new T.WebGLRenderTarget(4, 4, { type: T.HalfFloatType, samples: r.capabilities.isWebGL2 ? 4 : 0 }), b1: new T.WebGLRenderTarget(4, 4, { type: T.HalfFloatType }), b2: new T.WebGLRenderTarget(4, 4, { type: T.HalfFloatType }),
+    cam: new T.OrthographicCamera(-1, 1, 1, -1, 0, 1), scene: new T.Scene(), bloomOn: QC().bloom };
+  P.quad = new T.Mesh(new T.PlaneGeometry(2, 2)); P.quad.frustumCulled = false; P.scene.add(P.quad);
+  P.bright = mk('uniform sampler2D t; uniform float th; varying vec2 vUv; void main(){ vec3 c = texture2D(t, vUv).rgb; float l = max(c.r, max(c.g, c.b)); gl_FragColor = vec4(c * smoothstep(th, th * 2.2, l), 1.); }', { t: { value: null }, th: { value: 1.1 } });
+  P.blur = mk('uniform sampler2D t; uniform vec2 dir; varying vec2 vUv; void main(){ vec3 s = texture2D(t, vUv).rgb * .227027; s += (texture2D(t, vUv + dir * 1.3846).rgb + texture2D(t, vUv - dir * 1.3846).rgb) * .316216; s += (texture2D(t, vUv + dir * 3.2308).rgb + texture2D(t, vUv - dir * 3.2308).rgb) * .070270; gl_FragColor = vec4(s, 1.); }', { t: { value: null }, dir: { value: new T.Vector2() } });
+  P.final = mk(POST_FS, { tScene: { value: null }, tBloom: { value: null }, exposure: { value: 1 }, bloom: { value: .55 }, vig: { value: .32 }, sat: { value: 1.1 }, contrast: { value: 1.05 }, tint: { value: new T.Color(1.03, 1.0, .96) }, useBloom: { value: 0 } });
+  P.w = 0; P.h = 0;
+  P.setSize = (w, h) => { if (w === P.w && h === P.h) return; P.w = w; P.h = h; P.rt.setSize(w, h); P.b1.setSize(Math.max(1, w >> 2), Math.max(1, h >> 2)); P.b2.setSize(Math.max(1, w >> 2), Math.max(1, h >> 2)); };
+  const pass = (m, target) => { P.quad.material = m; r.setRenderTarget(target); r.render(P.scene, P.cam); };
+  P.render = (scene, cam, night) => {
+    r.setRenderTarget(P.rt); r.render(scene, cam);
+    const f = P.final.uniforms; f.tScene.value = P.rt.texture; f.exposure.value = r.toneMappingExposure; f.useBloom.value = P.bloomOn ? 1 : 0;
+    f.bloom.value = night ? .9 : .45; f.vig.value = night ? .45 : .3;
+    if (P.bloomOn) {
+      P.bright.uniforms.t.value = P.rt.texture; P.bright.uniforms.th.value = night ? .55 : 1.15; pass(P.bright, P.b1);
+      const bw = 1 / P.b1.width, bh = 1 / P.b1.height;
+      for (const k of [1, 2.2]) { P.blur.uniforms.t.value = P.b1.texture; P.blur.uniforms.dir.value.set(bw * k, 0); pass(P.blur, P.b2); P.blur.uniforms.t.value = P.b2.texture; P.blur.uniforms.dir.value.set(0, bh * k); pass(P.blur, P.b1); }
+      f.tBloom.value = P.b1.texture;
+    }
+    pass(P.final, null);
+  };
+  return P;
+}
+// ---------- zemin boyaması: çimen, yumuşak kenarlı yollar, avlu, dere kıyısı ----------
+const SPL = { U0: -14, V0: -12, SZ: 40 };
+function detailTex() {
+  if (detailTex.t) return detailTex.t;
+  const n = 256, c = document.createElement('canvas'); c.width = c.height = n; const g = c.getContext('2d'), id = g.createImageData(n, n), d = id.data;
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) { const v = (vnoise(i / 6, j / 6, 41) * .5 + vnoise(i / 2.2, j / 2.2, 42) * .35 + hash2(i, j, 43) * .15) * 255; const o = (j * n + i) * 4; d[o] = d[o + 1] = d[o + 2] = v; d[o + 3] = 255; }
+  g.putImageData(id, 0, 0);
+  const t = new T.CanvasTexture(c); t.wrapS = t.wrapT = T.RepeatWrapping; t.anisotropy = 8; return detailTex.t = t;
+}
+function withDetail(m, rep, amp) {
+  m.onBeforeCompile = sh => { sh.uniforms.detail = { value: detailTex() }; sh.fragmentShader = 'uniform sampler2D detail;\n' + sh.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
+    diffuseColor.rgb *= ${(1 - amp).toFixed(2)} + ${(amp * 2).toFixed(2)} * texture2D(detail, vMapUv * ${rep.toFixed(1)}).r;`); };
+  m.customProgramCacheKey = () => 'detail' + rep + amp;
+  return m;
+}
+function splatTexture() {
+  if (!TEX) TEX = buildTex();
+  const N = QC().splat, k = N / SPL.SZ, P = (u, v) => [(u - SPL.U0) * k, (v - SPL.V0) * k];
+  const mkC = () => { const c = document.createElement('canvas'); c.width = c.height = N; return c; };
+  const c = mkC(), g = c.getContext('2d');
+  const gc = grassTex().image, gp = g.createPattern(gc, 'repeat'); gp.setTransform(new DOMMatrix().scale(k * 3.2 / gc.width));
+  g.fillStyle = gp; g.fillRect(0, 0, N, N);
+  const rnd = mul32(777);
+  for (let i = 0; i < 320; i++) { const x = rnd() * N, y = rnd() * N, r = (1 + rnd() * 3.5) * k, col = ['40,62,22', '168,176,92', '86,118,42', '120,140,60'][i % 4]; const gr = g.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, `rgba(${col},${.12 + rnd() * .14})`); gr.addColorStop(1, `rgba(${col},0)`); g.fillStyle = gr; g.fillRect(x - r, y - r, r * 2, r * 2); }
+  const mask = (draw, blur) => { const m = mkC(), mg = m.getContext('2d'); mg.filter = 'blur(' + blur + 'px)'; mg.fillStyle = mg.strokeStyle = '#fff'; mg.lineCap = mg.lineJoin = 'round'; draw(mg); return m; };
+  const layer = (tex, scale, m, tint, alpha = 1) => {
+    const l = mkC(), lg = l.getContext('2d'), src = TEX[tex], p = lg.createPattern(src, 'repeat');
+    p.setTransform(new DOMMatrix().scale(scale * k / src.width)); lg.fillStyle = p; lg.fillRect(0, 0, N, N);
+    if (tint) { lg.fillStyle = tint; lg.globalCompositeOperation = 'multiply'; lg.fillRect(0, 0, N, N); lg.globalCompositeOperation = 'source-over'; }
+    lg.globalCompositeOperation = 'destination-in'; lg.drawImage(m, 0, 0); g.globalAlpha = alpha; g.drawImage(l, 0, 0); g.globalAlpha = 1;
+  };
+  const river = mg => { mg.beginPath(); for (let v = -14; v <= 30; v += .25) { const [x, y] = P(riverU(v), v); v === -14 ? mg.moveTo(x, y) : mg.lineTo(x, y); } mg.stroke(); };
+  layer('dirt', 2.6, mask(mg => { mg.lineWidth = 2.3 * k; river(mg); }, k * .35), '#d8c49a');
+  const roads = (mg, extra) => { for (const r of ROADS) { mg.lineWidth = (r.w + extra) * k; mg.beginPath(); r.pts.forEach(([u, v], i) => { const [x, y] = P(u, v); i ? mg.lineTo(x, y) : mg.moveTo(x, y); }); mg.stroke(); } };
+  const yard = mg => { const [x0, y0] = P(WA + .25, WA + .25); mg.fillRect(x0, y0, (WB - WA - .5) * k, (WB - WA - .5) * k); };
+  layer('dirt', 2.2, mask(mg => { roads(mg, .35); yard(mg); }, k * .3), '#e8d8b8', .55);
+  layer('dirt', 2.2, mask(mg => { roads(mg, 0); yard(mg); }, k * .12));
+  // tekerlek izleri
+  g.strokeStyle = 'rgba(70,50,30,.22)'; g.lineWidth = k * .045;
+  for (const r of ROADS) for (const o of [-.1, .1]) { g.beginPath(); r.pts.forEach(([u, v], i) => { const a = r.pts[Math.max(0, i - 1)], b = r.pts[Math.min(r.pts.length - 1, i + 1)], dx = b[0] - a[0], dz = b[1] - a[1], L = Math.hypot(dx, dz) || 1; const [x, y] = P(u - dz / L * o, v + dx / L * o); i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.stroke(); }
+  // konağa giden taş yol
+  layer('pave', 2.2, mask(mg => { const [x0, y0] = P(GC - .27, 7.2), [x1, y1] = P(GC + .27, WB + .15); mg.fillRect(x0, y0, x1 - x0, y1 - y0); }, k * .04));
+  // çakıl
+  for (let i = 0; i < 1600; i++) { const u = WA + .3 + rnd() * (WB - WA - .6), v = WA + .3 + rnd() * (WB - WA - .6), [x, y] = P(u, v), s = (.012 + rnd() * .025) * k; g.fillStyle = rnd() < .5 ? 'rgba(90,70,48,.35)' : 'rgba(225,212,185,.45)'; g.beginPath(); g.arc(x, y, s, 0, 7); g.fill(); }
+  // kenarlarda kaybol
+  g.globalCompositeOperation = 'destination-in'; const fade = g.createRadialGradient(N / 2, N / 2, N * .36, N / 2, N / 2, N * .5); fade.addColorStop(0, 'rgba(0,0,0,1)'); fade.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = fade; g.fillRect(0, 0, N, N); g.globalCompositeOperation = 'source-over';
+  const t = new T.CanvasTexture(c); t.colorSpace = T.SRGBColorSpace; t.anisotropy = 8; return t;
+}
+// ---------- çimen öbekleri ----------
+function grassField(W) {
+  const n = QC().grass; if (!n) return;
+  const pos = [], col = [], nor = [], c0 = new T.Color('#34501c'), c1 = new T.Color('#a4c062');
+  for (let i = 0; i < 6; i++) {
+    const a = i / 6 * Math.PI * 2 + .3, w = .02, h = .1 + (i % 3) * .035, dx = Math.cos(a), dz = Math.sin(a), lean = .035 + (i % 2) * .02;
+    pos.push(-dz * w, 0, dx * w, dz * w, 0, -dx * w, dx * lean, h, dz * lean);
+    col.push(c0.r, c0.g, c0.b, c0.r, c0.g, c0.b, c1.r, c1.g, c1.b); nor.push(0, 1, 0, 0, 1, 0, 0, 1, 0);
+  }
+  const geo = new T.BufferGeometry(); geo.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); geo.setAttribute('color', new T.Float32BufferAttribute(col, 3)); geo.setAttribute('normal', new T.Float32BufferAttribute(nor, 3));
+  const mat = addWind(new T.MeshStandardMaterial({ vertexColors: true, side: T.DoubleSide, roughness: 1 }), .55);
+  const rnd = mul32(991), list = [];
+  for (let i = 0; i < n * 6 && list.length < n; i++) { const u = -12 + rnd() * 36, v = -10 + rnd() * 38; if (Math.hypot(u - 6, v - 8) > 19 || occupied(u, v)) continue; list.push([u, v, .7 + rnd() * .8, rnd()]); }
+  const im = new T.InstancedMesh(geo, mat, list.length), m4 = new T.Matrix4(), cc = new T.Color();
+  list.forEach((t, i) => { m4.compose(new T.Vector3(t[0], 0, t[1]), new T.Quaternion().setFromAxisAngle(new T.Vector3(0, 1, 0), t[3] * 6.28), new T.Vector3(t[2], t[2] * (.8 + t[3] * .5), t[2])); im.setMatrixAt(i, m4); cc.setHSL(.22 + t[3] * .06, .4, .55 + (t[3] - .5) * .2); im.setColorAt(i, cc); });
+  im.receiveShadow = true; W.add(im);
+  // çiçekler
+  const fl = new T.InstancedMesh(new T.SphereGeometry(.018, 6, 4), new T.MeshStandardMaterial({ roughness: .8 }), Math.round(n / 12)), FC = ['#f2e86a', '#ffffff', '#d96a9a', '#8fa8ff', '#ff9a4a'];
+  for (let i = 0; i < fl.count; i++) { const t = list[(i * 7) % list.length]; m4.makeTranslation(t[0] + .06, .08 + t[3] * .05, t[1] + .04); fl.setMatrixAt(i, m4); fl.setColorAt(i, cc.set(FC[i % FC.length])); }
+  W.add(fl);
+}
+// ---------- köy eşyaları ----------
+const LAMP = () => st.lamp || (st.lamp = new T.MeshStandardMaterial({ color: '#ffe2a0', emissive: '#ffb75a', emissiveIntensity: .2, roughness: .4 }));
+function awningTex(col) {
+  const c = document.createElement('canvas'); c.width = 64; c.height = 32; const g = c.getContext('2d');
+  for (let i = 0; i < 8; i++) { g.fillStyle = i % 2 ? '#f3ead8' : col; g.fillRect(i * 8, 0, 8, 32); }
+  g.fillStyle = 'rgba(0,0,0,.15)'; g.fillRect(0, 26, 64, 6);
+  const t = new T.CanvasTexture(c); t.colorSpace = T.SRGBColorSpace; return t;
+}
+function well(u, v) {
+  cyl(u, v, 0, .24, .22, 'stone'); const w = new T.Mesh(new T.CircleGeometry(.17, 20), colMat('#1d2a30', { roughness: .1, metalness: .3 })); w.rotation.x = -Math.PI / 2; w.position.set(X(u), .2, Z(v)); add(w, { shadow: false });
+  for (const s of [-1, 1]) box(u + s * .2 - .025, v - .025, .05, .05, .24, .42, 'wood', 'wood');
+  box(u - .24, v - .02, .48, .04, .64, .04, 'wood', 'wood'); hipRoof(u - .27, v - .2, .54, .4, .7, .16, 'roof', .03);
+  const b = new T.Mesh(new T.CylinderGeometry(.05, .04, .07, 10), colMat('#6e4a26')); b.position.set(X(u), .5, Z(v)); add(b);
+}
+function stall(u, v, col, goods) {
+  for (const [a, b] of [[0, 0], [.5, 0], [0, .38], [.5, .38]]) box(u + a, v + b, .035, .035, 0, .42, 'wood', 'wood');
+  box(u, v + .05, .53, .3, .2, .05, 'wood', 'wood');
+  const aw = new T.Mesh(new T.PlaneGeometry(.66, .5), new T.MeshStandardMaterial({ map: awningTex(col), side: T.DoubleSide, roughness: .9 }));
+  aw.rotation.x = -Math.PI / 2 + .35; aw.position.set(X(u + .27), .47, Z(v + .19)); add(aw);
+  const gm = goods.map(c2 => colMat(c2, { roughness: .6 }));
+  for (let i = 0; i < 7; i++) { const s = new T.Mesh(new T.SphereGeometry(.03 + (i % 3) * .006, 8, 6), gm[i % gm.length]); s.position.set(X(u + .07 + (i % 4) * .12), .28, Z(v + .12 + Math.floor(i / 4) * .12)); add(s); }
+}
+function barrel(u, v) { cyl(u, v, 0, .2, .075, 'wood', null, { r1: .065 }); for (const y of [.04, .16]) { const r = new T.Mesh(new T.TorusGeometry(.073, .007, 6, 18), colMat('#33302c', { metalness: .5, roughness: .5 })); r.rotation.x = Math.PI / 2; r.position.set(X(u), y, Z(v)); add(r); } }
+function lantern(u, v) {
+  cyl(u, v, 0, .62, .018, null, '#3a2a1e', { seg: 6 });
+  const arm = new T.Mesh(new T.BoxGeometry(.12, .015, .015), colMat('#3a2a1e')); arm.position.set(X(u) + .05, .6, Z(v)); add(arm);
+  const l = new T.Mesh(new T.BoxGeometry(.06, .08, .06), LAMP()); l.position.set(X(u) + .1, .54, Z(v)); add(l, { shadow: false });
+  const cap = new T.Mesh(new T.ConeGeometry(.05, .04, 4), colMat('#2a2420', { metalness: .4 })); cap.position.set(X(u) + .1, .6, Z(v)); cap.rotation.y = Math.PI / 4; add(cap);
+  st.lamps.push([X(u) + .1, .54, Z(v)]);
+}
+function cart3(u, v, rot) {
+  const g = new T.Group(); const bed = new T.Mesh(new T.BoxGeometry(.4, .08, .24), texMat('wood')); bed.position.y = .16; g.add(bed);
+  for (const z of [.13, -.13]) { const w = new T.Mesh(new T.CylinderGeometry(.11, .11, .025, 14), colMat('#5e3b1f')); w.rotation.x = Math.PI / 2; w.position.set(-.04, .11, z); g.add(w); }
+  for (const z of [.08, -.08]) { const s = new T.Mesh(new T.BoxGeometry(.4, .02, .02), colMat('#6e4a26')); s.position.set(.36, .1, z); s.rotation.z = .25; g.add(s); }
+  for (let i = 0; i < 3; i++) { const sk = new T.Mesh(new T.SphereGeometry(.06, 8, 6), colMat('#c9b07a', { roughness: 1 })); sk.scale.y = .8; sk.position.set(-.1 + i * .1, .25, (i % 2) * .05); g.add(sk); }
+  g.position.set(X(u), 0, Z(v)); g.rotation.y = rot; g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } }); G.add(g);
+}
+function bigTree(u, v, s) {
+  const tr = new T.Mesh(new T.CylinderGeometry(.06 * s, .1 * s, .7 * s, 8), colMat('#5a4030', { roughness: 1 })); tr.position.set(X(u), .35 * s, Z(v)); add(tr);
+  const m = addWind(new T.MeshStandardMaterial({ color: '#4f7a33', roughness: .95, flatShading: true }), .05);
+  for (const [x, y, z, r] of [[0, .95, 0, .45], [.28, .82, .12, .32], [-.26, .86, -.1, .34], [.05, 1.18, -.06, .32], [-.08, .8, .28, .3], [.12, .78, -.3, .28]]) { const b = new T.Mesh(new T.IcosahedronGeometry(r * s, 1), m); b.position.set(X(u) + x * s, y * s, Z(v) + z * s); b.userData.dyn = true; add(b); }
+}
+function props(v) {
+  const save = OFF3; OFF3 = [0, 0];
+  well(4.6, 8.4);
+  if (v.b.konak >= 3) for (const [u, w] of [[5.78, 7.9], [6.62, 7.9], [5.78, 9.4], [6.62, 9.4]]) lantern(u, w);
+  if (v.b.kervansaray > 0) { stall(4.95, 9.55, '#b8403a', ['#e24a3a', '#f2b33a', '#7ab84a']); stall(6.9, 9.75, '#2f6fa8', ['#d9c27a', '#8a5a32', '#e8e0cc']); if (v.b.kervansaray >= 5) stall(4.95, 10.25, '#2f9e76', ['#7d4ab0', '#e8a0c0', '#f2e86a']); }
+  if (v.b.ambar > 0) { for (const [a, b] of [[9.2, 3.35], [9.38, 3.5], [9.05, 3.55]]) barrel(a, b); box(9.6, 3.3, .16, .16, 0, .16, 'wood', 'wood'); box(9.62, 3.32, .12, .12, .16, .12, 'wood', 'wood'); }
+  if (v.b.kervansaray > 0) { cart3(5.4, 12.5, .4); for (const [a, b] of [[3.6, 14.55], [3.82, 14.62]]) barrel(a, b); box(4.4, 14.5, .18, .18, 0, .16, 'wood', 'wood'); }
+  bigTree(8.05, 7.35, 1); bigTree(3.95, 4.3, .9);
+  OFF3 = save;
+}
+
 // ---------- köy kurulumu ----------
 const BF = { konak, kervansaray, medrese, divan, kisla, ambar, tophane, ahir, kereste, tas, demir, ciftlik };
 function buildVillage(v) {
   if (st.bgrp) { st.scene.remove(st.bgrp); st.bgrp.traverse(o => { if (o.geometry) o.geometry.dispose(); }); }
-  st.flags = []; st.smokes = []; st.torches = []; st.cranes = []; st.mill = null; st.cart = null; st.horsePen = null;
+  st.flags = []; st.smokes = []; st.torches = []; st.cranes = []; st.lamps = []; st.mill = null; st.cart = null; st.horsePen = null;
   const root = new T.Group(); st.picks = []; st.anchors = {};
   const mkGroup = (b, fn) => { G = new T.Group(); OFF3 = (b && SH[b]) || [0, 0]; fn(); OFF3 = [0, 0]; mergeGroup(G, b); root.add(G); if (b) { st.picks.push(G); st.anchors[b] = G; } return G; };
   mkGroup('sur', () => walls(v.b.sur));
@@ -561,6 +787,7 @@ function buildVillage(v) {
     const n = Math.min(12, 1 + Math.floor(v.b.ciftlik / 2.5));
     for (let i = 0; i < n; i++) { const col = i % 3, row = Math.floor(i / 3), u0 = 9.85 + col * .93, v0 = 7.85 + row * .85, k = ['wheat', 'crop', 'plowed'][(i * 7 + row) % 3]; box(u0, v0, .85, .77, 0, k === 'wheat' ? .06 : .025, 'plowed', k); }
   });
+  { G = new T.Group(); props(v); mergeGroup(G, null); root.add(G); }
   if (v.b.ahir > 0) { G = new T.Group(); OFF3 = SH.ahir; const m = new T.Mesh(new T.PlaneGeometry(1.8, 1.6), texMat('dirt')); m.rotation.x = -Math.PI / 2; m.position.set(X(10.9), .018, Z(5.6)); m.receiveShadow = true; G.add(m); OFF3 = [0, 0]; root.add(G); }
   st.bgrp = root; st.scene.add(root); root.updateMatrixWorld(true); anchorBoxes();
   // hareketli: işçiler, atlar, araba, kuşlar, duman
@@ -575,6 +802,7 @@ function person3(col, hat) {
   const head = new T.Mesh(new T.SphereGeometry(.034, 8, 6), colMat('#d9b48c')); head.position.y = .29; g.add(head);
   const h = new T.Mesh(new T.CylinderGeometry(.03, .036, .03, 8), colMat(hat ? '#f1ece0' : '#5a3a22')); h.position.y = .32; g.add(h);
   const legs = []; for (const z of [.022, -.022]) { const l = new T.Mesh(new T.CylinderGeometry(.013, .013, .08, 5), colMat('#3a2a1e')); l.geometry.translate(0, -.04, 0); l.position.set(0, .08, z); g.add(l); legs.push(l); }
+  for (const z of [.05, -.05]) { const a = new T.Mesh(new T.CylinderGeometry(.011, .01, .11, 5), colMat(col, { roughness: .95 })); a.geometry.translate(0, -.05, 0); a.position.set(0, .24, z); a.rotation.x = z > 0 ? -.15 : .15; g.add(a); legs.push(a); }
   const sh = new T.Mesh(new T.CircleGeometry(.07, 12), new T.MeshBasicMaterial({ color: '#000', transparent: true, opacity: .25, depthWrite: false })); sh.rotation.x = -Math.PI / 2; sh.position.y = .012; g.add(sh);
   g.userData.legs = legs; return g;
 }
@@ -616,8 +844,9 @@ function horse3(i) {
   const sh = new T.Mesh(new T.CircleGeometry(.14, 12), new T.MeshBasicMaterial({ color: '#000', transparent: true, opacity: .22, depthWrite: false })); sh.scale.x = 1.6; sh.rotation.x = -Math.PI / 2; sh.position.y = .012; g.add(sh);
   g.userData.legs = legs; return g;
 }
+function draw3(o, W, H) { if (o.atmos) o.atmos.update(o.cam); if (o.post) { o.post.setSize(W, H); o.post.render(o.scene, o.cam, o.night); } else o.r.render(o.scene, o.cam); }
 function animate(t) {
-  const sec = t / 1000, v = st.vil;
+  const sec = t / 1000, v = st.vil; WIND.value = sec;
   for (const f of st.flags) { const p = f.mesh.geometry.attributes.position, b = f.base; for (let i = 0; i < p.count; i++) { const x = b[i * 3]; p.setZ(i, Math.sin(sec * 4 + x * 14 + f.ph) * .03 * x / .42); } p.needsUpdate = true; f.mesh.geometry.computeVertexNormals(); }
   for (const s of st.smokeSprites) { const p = (sec / 3.4 + s.i / 6 + s.s.ph) % 1; s.sp.position.set(s.s.x + Math.sin(p * 5 + s.s.ph * 9) * .08 + p * .25, s.s.y + p * .9, s.s.z - p * .1); const sz = .12 + p * .35; s.sp.scale.set(sz, sz, 1); s.sp.material.opacity = .45 * (1 - p); }
   for (const w of st.workers) {
@@ -639,10 +868,11 @@ function walkLegs(g, t, i) { const s = Math.sin(t / 140 + i) * .45; const L = g.
 // ---------- ışık, gece-gündüz ----------
 function setLight(night) {
   if (st.night === night) return; st.night = night;
-  st.scene.background = new T.Color(night ? '#0d1626' : '#a9c7d6');
-  st.scene.fog = new T.Fog(night ? '#0d1626' : '#a9c7d6', 26, 60);
-  st.sun.intensity = night ? .35 : 2.6; st.sun.color.set(night ? '#8fa6ff' : '#fff1d8');
-  st.hemi.intensity = night ? .35 : 1.05; st.hemi.color.set(night ? '#5a6c9a' : '#cfe4ff'); st.hemi.groundColor.set(night ? '#1a1a22' : '#5a4a32');
+  st.scene.fog = new T.Fog(night ? '#0d1626' : '#a9c7d6', 28, 70);
+  st.sun.intensity = night ? .35 : 2.8; st.sun.color.set(night ? '#8fa6ff' : '#fff1d8');
+  st.hemi.intensity = night ? .18 : .5;
+  if (st.atmos) st.atmos.set(night, st.sun.position.clone().sub(st.sun.target.position));
+  LAMP().emissiveIntensity = night ? 3.2 : .15; st.hemi.color.set(night ? '#5a6c9a' : '#cfe4ff'); st.hemi.groundColor.set(night ? '#1a1a22' : '#5a4a32');
   WIN().emissiveIntensity = night ? 2.2 : 0;
   st.r.toneMappingExposure = night ? 1.2 : 1.0;
   st.r.shadowMap.needsUpdate = true;
@@ -731,8 +961,9 @@ function start() {
     st.cam = new T.PerspectiveCamera(32, 1, .1, 200);
     st.hemi = new T.HemisphereLight('#cfe4ff', '#5a4a32', 1.05); st.scene.add(st.hemi);
     st.sun = new T.DirectionalLight('#fff1d8', 2.6); st.sun.position.set(6 - 10, 20, 7 + 6); st.sun.target.position.set(6, 0, 7);
-    st.sun.castShadow = true; st.sun.shadow.mapSize.set(2048, 2048); const sc = st.sun.shadow.camera; sc.left = -17; sc.right = 17; sc.top = 17; sc.bottom = -17; sc.near = 1; sc.far = 60; st.sun.shadow.bias = -.0004; st.sun.shadow.normalBias = .02; st.sun.shadow.radius = 3;
+    st.sun.castShadow = true; st.sun.shadow.mapSize.set(QC().shadow, QC().shadow); const sc = st.sun.shadow.camera; sc.left = -17; sc.right = 17; sc.top = 17; sc.bottom = -17; sc.near = 1; sc.far = 60; st.sun.shadow.bias = -.0004; st.sun.shadow.normalBias = .02; st.sun.shadow.radius = 3;
     st.scene.add(st.sun); st.scene.add(st.sun.target);
+    st.atmos = makeAtmos(st.r, st.scene); st.post = makePost(st.r);
     st.world = buildWorld(); st.scene.add(st.world);
     st.sig = ''; st.night = null; st.bgrp = null; st.dgrp = null; selRing = null;
   }
@@ -783,7 +1014,7 @@ function wireButtons() {
 function frame(t) {
   if (!S || !st.cv) return;
   const v = cur(); st.vil = v;
-  const r = st.cv.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, 2) * st.quality;
+  const r = st.cv.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, QC().pr) * st.quality;
   const W = Math.max(1, Math.round(r.width * dpr)), H = Math.max(1, Math.round(r.height * dpr));
   if (st.cv.width !== W || st.cv.height !== H) { st.r.setPixelRatio(dpr); st.r.setSize(r.width, r.height, false); st.cam.aspect = r.width / r.height; st.cam.updateProjectionMatrix(); }
   if (st.ov.width !== W || st.ov.height !== H) { st.ov.width = W; st.ov.height = H; }
@@ -792,7 +1023,7 @@ function frame(t) {
   const hr = SC.hour != null ? SC.hour : new Date().getHours(); setLight(hr >= 20 || hr < 6);
   animate(t);
   ringFor(SC.sel); if (selRing && selRing.visible) selRing.material.opacity = .6 + .35 * Math.sin(t / 250);
-  st.r.render(st.scene, st.cam);
+  draw3(st, W, H);
   // etiketler ve açılır pencere (2B sahnenin yardımcılarıyla)
   SC.body = bodyRects3();
   const g = st.ov.getContext('2d'); g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, W, H); g.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -822,7 +1053,8 @@ function thInit() {
   TH.r.outputColorSpace = T.SRGBColorSpace; TH.r.toneMapping = T.ACESFilmicToneMapping; TH.r.toneMappingExposure = 1.08;
   TH.r.shadowMap.enabled = true; TH.r.shadowMap.type = T.PCFSoftShadowMap;
   TH.scene = new T.Scene();
-  TH.scene.add(new T.HemisphereLight('#dfeeff', '#6a5a42', 1.25));
+  { const A = makeAtmos(TH.r, new T.Scene()); A.set(false, new T.Vector3(-1, 2, 1)); TH.scene.environment = A.env.d; }
+  TH.scene.add(new T.HemisphereLight('#dfeeff', '#6a5a42', .6));
   TH.sun = new T.DirectionalLight('#fff3dc', 2.6); TH.sun.castShadow = true; TH.sun.shadow.mapSize.set(1024, 1024); TH.sun.shadow.bias = -.0005; TH.sun.shadow.normalBias = .02;
   TH.scene.add(TH.sun); TH.scene.add(TH.sun.target);
   TH.ground = new T.Mesh(new T.PlaneGeometry(40, 40), new T.ShadowMaterial({ opacity: .32 })); TH.ground.rotation.x = -Math.PI / 2; TH.ground.receiveShadow = true; TH.scene.add(TH.ground);
@@ -1092,6 +1324,7 @@ function mapStart() {
     MP.hemi = new T.HemisphereLight('#cfe4ff', '#5a4a32', 1.05); MP.scene.add(MP.hemi);
     MP.sun = new T.DirectionalLight('#fff1d8', 2.5); MP.sun.castShadow = true; MP.sun.shadow.mapSize.set(2048, 2048); MP.sun.shadow.bias = -.0004; MP.sun.shadow.normalBias = .02; MP.sun.shadow.camera.near = 1; MP.sun.shadow.camera.far = 60;
     MP.scene.add(MP.sun); MP.scene.add(MP.sun.target);
+    MP.atmos = makeAtmos(MP.r, MP.scene); MP.post = makePost(MP.r); MP.sun.shadow.mapSize.set(Math.min(2048, QC().shadow), Math.min(2048, QC().shadow));
     MP.world = mapWorld(); MP.scene.add(MP.world); MP.worldSeed = S.seed;
     const sr = new T.Mesh(new T.RingGeometry(.5, .56, 40), new T.MeshBasicMaterial({ color: '#ffffff', transparent: true, depthWrite: false })); sr.rotation.x = -Math.PI / 2; sr.visible = false; MP.scene.add(sr); MP.selRing = sr;
     cv.style.touchAction = 'none';
@@ -1137,13 +1370,14 @@ function mapWire(cv) {
 }
 function mapLight(night) {
   if (MP.night === night) return; MP.night = night;
-  MP.scene.background = new T.Color(night ? '#0d1626' : '#a9c7d6'); MP.scene.fog = new T.Fog(night ? '#0d1626' : '#a9c7d6', 22, 55);
-  MP.sun.intensity = night ? .35 : 2.5; MP.sun.color.set(night ? '#8fa6ff' : '#fff1d8'); MP.hemi.intensity = night ? .35 : 1.05;
+  MP.scene.fog = new T.Fog(night ? '#0d1626' : '#a9c7d6', 24, 62);
+  MP.sun.intensity = night ? .35 : 2.7; MP.sun.color.set(night ? '#8fa6ff' : '#fff1d8'); MP.hemi.intensity = night ? .18 : .5;
+  MP.atmos.set(night, new T.Vector3(-8, 16, 5));
   MP.r.toneMappingExposure = night ? 1.2 : 1; MP.r.shadowMap.needsUpdate = true;
 }
 function mapFrame() {
   if (!MP.cv || !S) return;
-  const r = MP.cv.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, 2) * MP.quality;
+  const r = MP.cv.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, QC().pr) * MP.quality; WIND.value = performance.now() / 1000;
   const W = Math.max(1, Math.round(r.width * dpr)), H = Math.max(1, Math.round(r.height * dpr));
   if (MP.cv.width !== W || MP.cv.height !== H) { MP.r.setPixelRatio(dpr); MP.r.setSize(r.width, r.height, false); MP.cam.aspect = r.width / r.height; MP.cam.updateProjectionMatrix(); mapCam(); }
   if (MP.ov.width !== W || MP.ov.height !== H) { MP.ov.width = W; MP.ov.height = H; }
@@ -1151,7 +1385,7 @@ function mapFrame() {
   const hr = SC.hour != null ? SC.hour : new Date().getHours(); mapLight(hr >= 20 || hr < 6);
   const sv = map.sel != null ? S.vil[map.sel] : null;
   MP.selRing.visible = !!sv; if (sv) { MP.selRing.position.set(sv.x + .5, .04, sv.y + .5); MP.selRing.material.opacity = .55 + .4 * Math.sin(performance.now() / 250); }
-  MP.r.render(MP.scene, MP.cam);
+  draw3(MP, W, H);
   // kaplama: güç plakaları, yollar ve ordular (2B çizimler 3B konumlara yansıtılır)
   const a = mapProj(MP.view.tx, MP.view.tz), b = mapProj(MP.view.tx + 1, MP.view.tz); map.T = Math.max(14, Math.hypot(b.x - a.x, b.y - a.y));
   const g = MP.ov.getContext('2d'); g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, W, H); g.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -1175,8 +1409,9 @@ function showcase(cv) {
     st.scene = new T.Scene(); st.cam = new T.PerspectiveCamera(32, 1, .1, 200);
     st.hemi = new T.HemisphereLight('#cfe4ff', '#5a4a32', 1.05); st.scene.add(st.hemi);
     st.sun = new T.DirectionalLight('#fff1d8', 2.6); st.sun.position.set(-4, 20, 13); st.sun.target.position.set(6, 0, 7);
-    st.sun.castShadow = true; st.sun.shadow.mapSize.set(2048, 2048); const sc = st.sun.shadow.camera; sc.left = -17; sc.right = 17; sc.top = 17; sc.bottom = -17; sc.near = 1; sc.far = 60; st.sun.shadow.bias = -.0004; st.sun.shadow.normalBias = .02;
+    st.sun.castShadow = true; st.sun.shadow.mapSize.set(QC().shadow, QC().shadow); const sc = st.sun.shadow.camera; sc.left = -17; sc.right = 17; sc.top = 17; sc.bottom = -17; sc.near = 1; sc.far = 60; st.sun.shadow.bias = -.0004; st.sun.shadow.normalBias = .02;
     st.scene.add(st.sun); st.scene.add(st.sun.target);
+    st.atmos = makeAtmos(st.r, st.scene); st.post = makePost(st.r);
     st.world = buildWorld(); st.scene.add(st.world);
     st.night = null;
   } else if (cv !== st.r.domElement) { cv.replaceWith(st.r.domElement); cv = st.r.domElement; }
@@ -1191,7 +1426,7 @@ function showcase(cv) {
     if (cv.width !== Math.round(r.width * dpr)) { st.r.setPixelRatio(dpr); st.r.setSize(r.width, r.height, false); st.cam.aspect = r.width / r.height; st.cam.updateProjectionMatrix(); }
     const a = Math.PI / 4 + (ts - t0) / 24000;
     st.view = { tx: 6.4, tz: 7.4, yaw: a, pitch: .62, dist: 19 }; applyCam();
-    animate(ts); st.r.render(st.scene, st.cam);
+    animate(ts); draw3(st, cv.width, cv.height);
     requestAnimationFrame(loop);
   };
   requestAnimationFrame(loop);
