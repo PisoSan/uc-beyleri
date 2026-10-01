@@ -1531,9 +1531,13 @@ async function syncClock() {
   }
   return offset;
 }
+// anlık bildirimler (Firebase): telefon kimliğini kaydet, başka oyuncuya bildirim sıraya koy
+const registerPush = token => rpc('register_push', { p_token: token });
+const unregisterPush = token => rpc('unregister_push', { p_token: token });
+const queuePush = (world, hid, delaySec, title, body, tag, ch) => rpc('queue_push', { p_world: world, p_hid: hid, p_delay: Math.max(0, Math.round(delaySec)), p_title: title, p_body: body, p_tag: tag, p_ch: ch || 'saldiri' });
 async function leaveWorld(id) { const a = await session(); return api('/rest/v1/world_players?world_id=eq.' + id + '&user_id=eq.' + a.uid, { method: 'DELETE' }); }
 
-return { syncClock, get offset() { return offset; }, session, createWorld, joinWorld, load, save, version, myWorlds, players, leaveWorld, localize, delocalize, addHuman, normCode, get uid() { return auth && auth.uid; } };
+return { registerPush, unregisterPush, queuePush, syncClock, get offset() { return offset; }, session, createWorld, joinWorld, load, save, version, myWorlds, players, leaveWorld, localize, delocalize, addHuman, normCode, get uid() { return auth && auth.uid; } };
 })();
 
 </script>
@@ -1789,7 +1793,7 @@ const myVillages = () => S.vil.filter(v => v.owner === 'P');
 
 const LS = { get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }, del(k) { try { localStorage.removeItem(k); } catch (e) {} } };
 function save() {
-  if (!S) return; S.lastT = now(); lastSave = now();
+  if (!S) return; S.lastT = now(); lastSave = now(); notifySoon();
   if (MPX) { LS.set('ub-mp-cache-' + MPX.id, { S, ver: MPX.ver }); return; }
   store.set(JSON.stringify(S));
 }
@@ -2034,9 +2038,72 @@ function showCode(first) {
 }
 
 function hideSplash() { const sp = $('splash'); if (!sp || sp.classList.contains('hide')) return; requestAnimationFrame(() => setTimeout(() => { sp.classList.add('hide'); setTimeout(() => sp.remove(), 500); }, 250)); }
+// ---------- bildirimler ----------
+// Yerel: inşaat/eğitim/araştırma bitince, ordu dönünce, köye saldırı ulaşınca, günlük sandık (telefon alarmı).
+// Anlık: başka oyuncu sana saldırı yollayınca ya da klana çağırınca (Firebase + Supabase send-push).
+const NB = () => !!(window.UB && UB.notifySet);
+const notifOn = () => LS.get('ub-notif') !== false;
+let notifTimer = 0;
+function notifyPlan() {
+  if (!NB() || !S) return;
+  if (!notifOn()) { UB.notifySet('[]'); return; }
+  const t = now(), off = MPX ? Net.offset : 0, L = [];
+  const add = (k, at, title, body, ch) => { if (at > t + 3000 && isFinite(at)) L.push({ k: (MPX ? 'w' + MPX.code + '-' : '') + k, t: Math.round(at - off), title, body, ch: ch || 'zaman' }); };
+  for (const v of S.vil) {
+    if (v.owner !== 'P') continue;
+    const q = v.bq[v.bq.length - 1];
+    if (q) add('bq' + v.id, q.done, 'İnşaat tamamlandı', v.bq.length > 1 ? `${v.name}: inşaat sırası bitti (${C.B[q.b].n} ${q.lvl}. seviye)` : `${v.name}: ${C.B[q.b].n} ${q.lvl}. seviyeye çıktı`);
+    for (const b of C.REC_B) {
+      const rq = v.rq[b]; if (!rq.length || rq[0].next == null) continue;
+      let end = rq[0].next + rq[0].each * (rq[0].n - 1); for (let i = 1; i < rq.length; i++) end += rq[i].each * rq[i].n;
+      add('rq' + v.id + b, end, 'Eğitim bitti', `${v.name}: ${C.B[b].n} sırasındaki birlikler hazır`);
+    }
+  }
+  if (S.techq) add('tech', S.techq.done, 'Araştırma bitti', (C.TECH[S.techq.id] || {}).n + ' ' + S.techq.lvl + '. seviye öğrenildi');
+  const mine = new Set(S.vil.filter(v => v.owner === 'P').map(v => v.id));
+  for (const m of S.moves) {
+    if (m.owner === 'P' && m.type === 'return') add('mv' + m.id, m.arrive, 'Ordun döndü', `${C.vil(m.to).name} köyüne geri geldi` + (m.loot && m.loot.some(x => x > 0) ? ' · ganimet ' + m.loot.map(fmt).join(' / ') : ''));
+    else if (m.owner !== 'P' && m.type === 'attack' && mine.has(m.to)) add('arr' + m.id, m.arrive, 'Köyüne saldırı ulaştı', `${C.ownerName(m.owner)} → ${C.vil(m.to).name}. Raporuna bak.`, 'saldiri');
+  }
+  try { if (!dailyState().claimed) add('gun', t + 3 * 3600000, 'Günlük sandık seni bekliyor', 'Bugünkü ödülünü almayı unutma'); else add('gun', (dayNo() + 1) * 86400000 - 3 * 3600000 + 9 * 3600000, 'Yeni günlük sandık hazır', 'Seriyi bozmamak için bugünkü ödülünü al'); } catch (e) {}
+  L.sort((a, b) => a.t - b.t);
+  try { UB.notifySet(JSON.stringify(L.slice(0, 40))); } catch (e) {}
+}
+const notifySoon = () => { clearTimeout(notifTimer); notifTimer = setTimeout(notifyPlan, 1500); };
+window.__onPause = () => { try { if (S) save(); notifyPlan(); } catch (e) {} };
+window.__onResume = () => { try { if (MPX) pushRegister(); } catch (e) {} };
+// Firebase kimliğini bu dünyanın hesabına bağla (kimlik geç gelirse birkaç kez dener)
+let pushReg = '';
+function pushRegister(tries = 0) {
+  if (!NB() || !MPX || !notifOn()) return;
+  const tok = UB.pushToken && UB.pushToken();
+  if (!tok) { if (tries < 6) setTimeout(() => pushRegister(tries + 1), 5000); return; }
+  const key = tok + '|' + Net.uid; if (pushReg === key) return;
+  Net.registerPush(tok).then(() => { pushReg = key; }).catch(() => {});
+}
+// başka gerçek oyuncuya anlık bildirim (yalnızca çok oyunculuda)
+function pushTo(hid, delayMs, title, body, tag, ch) {
+  if (!MPX || !hid || hid === 'P' || !C.isHuman(hid)) return;
+  Net.queuePush(MPX.id, hid, delayMs / 1000, title, body, 'w' + MPX.code + '-' + tag, ch).catch(() => {});
+}
+window.__notifPerm = ok => { LS.set('ub-notif', !!ok); if (ok) { toast('Bildirimler açık', 'good'); pushRegister(); notifyPlan(); } else toast('Bildirim izni verilmedi. Ayarlar\'dan tekrar açabilirsin.', 'bad'); };
+function notifPrompt() {
+  if (!NB() || !UB.notifState || LS.get('ub-notif-asked') || !S || X().tut !== 'done') return;
+  const st = UB.notifState(); if (st !== 'ask') { LS.set('ub-notif-asked', 1); return; }
+  setTimeout(() => {
+    if ($('ov') || !S || $('start')) return;
+    LS.set('ub-notif-asked', 1);
+    sheet(`<h3>Haberin olsun mu?</h3><div class="muted">İnşaatın bitince, ordun dönünce ve <b>köyüne saldırı geldiğinde</b> telefonuna bildirim gönderelim. Ayarlar'dan istediğin an kapatabilirsin.</div><div class="chips"><button class="btn firuze" id="nYes">Bildirimleri aç</button><button class="btn sec" data-close>Şimdi değil</button></div>`, () => {
+      $('nYes').onclick = () => { closeSheet(); UB.askNotify(); };
+    });
+    $('ov').classList.add('center');
+  }, 2500);
+}
 function showGame() {
   hideSplash();
   setTimeout(dailyPrompt, 600);
+  setTimeout(notifPrompt, 900);
+  pushRegister(); notifySoon();
   $('top').hidden = false; $('tabs').hidden = false;
   renderTabs(); sig = ''; render();
 }
@@ -2188,6 +2255,10 @@ function tutTick() {
   if (!S || $('start') || !tutActive()) return;
   const i = X().tut | 0, st = TUT[i]; if (!st) { tutSkip(); return; }
   if (st.done && st.done()) { tutNext(); return; }
+  // açık bir pencere varken rehber geri çekilir (pencerenin düğmelerini kapatmasın)
+  const ov = $('ov'), pause = ov && !(st.el && ov.querySelector(st.el));
+  for (const id of ['tutbox', 'tutring']) { const e = $(id); if (e) e.style.display = pause ? 'none' : ''; }
+  if (pause) return;
   const wrongTab = st.tab && tab !== st.tab;
   let box = $('tutbox');
   const key = i + '|' + wrongTab;
@@ -2284,6 +2355,7 @@ $('setBtn').onclick = () => {
     <div><b>Acemi koruması:</b> ${now() < S.protectUntil ? dur(S.protectUntil - now()) + ' kaldı' : 'bitti'}</div></div>
     <section class="card"><b>Grafik kalitesi</b><div class="muted small">Yüksek: gerçek gölgeler, parlama, rüzgârda çimen. Telefon ısınır ya da takılırsa bir alt seviyeye geç.</div><div class="chips">${[['high', '3B Yüksek'], ['med', '3B Orta'], ['low', '3B Düşük'], ['2d', '2B']].map(([k, n]) => `<button class="btn ${gq() === k ? 'firuze' : 'sec'}" data-gq="${k}">${n}</button>`).join('')}</div></section>
     <section class="card"><b>Ses</b><div class="chips"><button class="btn ${Sfx.fx ? 'firuze' : 'sec'}" id="sfxT">Efektler: ${Sfx.fx ? 'Açık' : 'Kapalı'}</button><button class="btn ${Sfx.music ? 'firuze' : 'sec'}" id="muT">Müzik: ${Sfx.music ? 'Açık' : 'Kapalı'}</button></div></section>
+    ${NB() ? `<section class="card"><b>Bildirimler</b><div class="muted small">İnşaat, eğitim, ordu dönüşü, günlük sandık${MPX ? ' ve diğer oyuncuların saldırıları' : ''}.</div><div class="chips"><button class="btn ${notifOn() && UB.notifState() === 'granted' ? 'firuze' : 'sec'}" id="nfT">Bildirimler: ${notifOn() && UB.notifState() === 'granted' ? 'Açık' : 'Kapalı'}</button></div></section>` : ''}
     ${MPX ? `<section class="card"><b>Çok oyunculu dünya</b><div class="bigcode" style="font-size:26px">${esc(MPX.code)}</div>
       <div class="small">${S.beys.filter(b => b.human).length + 1} oyuncu: <b style="color:${S.player.color}">${esc(S.player.name)}</b>${S.beys.filter(b => b.human).map(b => `, <b style="color:${b.color}">${esc(b.name)}</b>`).join('')}</div>
       <div class="small muted">Bağlantı: ${{ ok: 'senkron', sync: 'kaydediliyor…', off: 'internet yok, tekrar deneniyor' }[MPX.net || 'ok']}</div>
@@ -2302,6 +2374,15 @@ $('setBtn').onclick = () => {
     });
     $('sfxT').onclick = () => { Sfx.setFx(!Sfx.fx); sb('sfxT', Sfx.fx, 'Efektler'); };
     $('muT').onclick = () => { Sfx.setMusic(!Sfx.music); sb('muT', Sfx.music, 'Müzik'); };
+    if ($('nfT')) $('nfT').onclick = () => {
+      const on = notifOn() && UB.notifState() === 'granted';
+      if (on) { LS.set('ub-notif', false); notifyPlan(); const tk = UB.pushToken && UB.pushToken(); if (MPX && tk) Net.unregisterPush(tk).catch(() => {}); pushReg = ''; sb('nfT', false, 'Bildirimler'); return; }
+      LS.set('ub-notif', true);
+      const st = UB.notifState();
+      if (st === 'granted') { sb('nfT', true, 'Bildirimler'); pushRegister(); notifyPlan(); }
+      else if (st === 'ask') { closeSheet(); UB.askNotify(); }
+      else toast('Telefonun Ayarlar > Uygulamalar > Uç Beyleri > Bildirimler kısmından izin ver', 'bad');
+    };
     if (MPX) {
       $('mpShare').onclick = () => showCode(false);
       $('mpMenu').onclick = leaveToMenu;
@@ -6093,6 +6174,14 @@ function sendSheet(target, type) {
     const go = $('sendGo');
     if (go) go.onclick = () => {
       const vid = v.id, tid = target.id, us = read(), r = act(() => C.send(C.vil(vid), C.vil(tid), us, type, now()));
+      if (r === 'ok' && type === 'attack' && MPX && C.isHuman(target.owner)) {
+        const mv = S.moves.filter(m => m.owner === 'P' && m.from === vid && m.to === tid && m.type === 'attack').pop();
+        if (mv) {
+          const left = mv.arrive - now(), who = S.player.name;
+          pushTo(target.owner, 0, '⚔ Saldırı geliyor!', `${who} ordusunu ${target.name} köyüne yolladı. Varışa ${dur(left)} var.`, 'go' + mv.id, 'saldiri');
+          pushTo(target.owner, left, 'Köyüne saldırı ulaştı', `${who} → ${target.name}. Raporuna bak.`, 'arr' + mv.id, 'saldiri');
+        }
+      }
       if (r === 'ok') { Sfx.play(type === 'attack' ? 'attack' : type === 'spy' ? 'spy' : 'march'); toast(title + ' yola çıktı', 'info'); closeSheet(); save(); drawMap(); renderTop(); }
       else toast({ own: 'Kendi köyüne saldıramazsın', notown: 'Destek sadece kendi köylerine', empty: 'Birlik seçmedin' }[r] || 'Gönderilemedi', 'bad');
     };
@@ -6210,7 +6299,7 @@ $('view').addEventListener('click', e => {
     const iid = inv.dataset.invite, r = act(() => C.inviteBey(iid, now()));
     toast(r === 'ok' ? b.name + ' klana katıldı!' : r === 'refused' ? b.name + ' davetini şimdilik reddetti. Güçlendikçe tekrar dene.' : r === 'full' ? 'Klan dolu' : 'Davet gönderilemedi', r === 'ok' ? 'good' : 'bad'); save(); sig = ''; render(); return; }
   const hi = e.target.closest('[data-hinvite]');
-  if (hi) { const id = hi.dataset.hinvite, r = act(() => C.inviteHuman(id, now())); toast(r === 'ok' ? 'Davet gönderildi' : r === 'full' ? 'Klan dolu' : 'Davet gönderilemedi', r === 'ok' ? 'good' : 'bad'); save(); sig = ''; render(); return; }
+  if (hi) { const id = hi.dataset.hinvite, r = act(() => C.inviteHuman(id, now())); if (r === 'ok' && S.clan) pushTo(id, 0, 'Klan daveti', `${S.player.name} seni [${S.clan.tag}] ${S.clan.name} klanına çağırıyor.`, 'inv' + S.clan.tag + id, 'klan'); toast(r === 'ok' ? 'Davet gönderildi' : r === 'full' ? 'Klan dolu' : 'Davet gönderilemedi', r === 'ok' ? 'good' : 'bad'); save(); sig = ''; render(); return; }
   const ia = e.target.closest('[data-iacc]');
   if (ia) { const id = +ia.dataset.iacc, r = act(() => C.acceptInvite(id, now())); toast(r === 'ok' ? 'Klana katıldın!' : r === 'full' ? 'Klan dolu' : 'Davet artık geçerli değil', r === 'ok' ? 'good' : 'bad'); if (r === 'ok') Sfx.play('good'); save(); sig = ''; render(); return; }
   const idc = e.target.closest('[data-idec]');
@@ -6292,7 +6381,7 @@ window.__back = () => {
     return true;
   } catch (e) { return false; }
 };
-window.__ub = { SC, viewInfo, selectBuilding, clampCam, V3 };
+window.__ub = { get S() { return S; }, C, act, save, now, cur, sendSheet, tutSkip, closeSheet, notifPrompt, notifyPlan,  SC, viewInfo, selectBuilding, clampCam, V3 };
 boot();
 })();
 </script>

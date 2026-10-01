@@ -165,7 +165,11 @@ async function syncClock() {
   }
   return offset;
 }
+// anlık bildirimler (Firebase): telefon kimliğini kaydet, başka oyuncuya bildirim sıraya koy
+const registerPush = token => rpc('register_push', { p_token: token });
+const unregisterPush = token => rpc('unregister_push', { p_token: token });
+const queuePush = (world, hid, delaySec, title, body, tag, ch) => rpc('queue_push', { p_world: world, p_hid: hid, p_delay: Math.max(0, Math.round(delaySec)), p_title: title, p_body: body, p_tag: tag, p_ch: ch || 'saldiri' });
 async function leaveWorld(id) { const a = await session(); return api('/rest/v1/world_players?world_id=eq.' + id + '&user_id=eq.' + a.uid, { method: 'DELETE' }); }
 
-return { syncClock, get offset() { return offset; }, session, createWorld, joinWorld, load, save, version, myWorlds, players, leaveWorld, localize, delocalize, addHuman, normCode, get uid() { return auth && auth.uid; } };
+return { registerPush, unregisterPush, queuePush, syncClock, get offset() { return offset; }, session, createWorld, joinWorld, load, save, version, myWorlds, players, leaveWorld, localize, delocalize, addHuman, normCode, get uid() { return auth && auth.uid; } };
 })();

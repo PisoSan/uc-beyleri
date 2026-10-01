@@ -2,6 +2,12 @@ plugins {
     id 'com.android.application'
 }
 
+// Firebase (anlık bildirim): app/google-services.json eklendiğinde kendiliğinden devreye girer.
+// Dosya yoksa APK yine derlenir, oyun bildirimsiz çalışır.
+if (file('google-services.json').exists()) {
+    apply plugin: 'com.google.gms.google-services'
+}
+
 android {
     namespace 'com.ahmetkaragoz.ucbeyleri'
     compileSdk 34
@@ -24,4 +30,9 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+}
+
+dependencies {
+    implementation platform('com.google.firebase:firebase-bom:33.7.0')
+    implementation 'com.google.firebase:firebase-messaging'
 }
