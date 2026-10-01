@@ -208,7 +208,21 @@ const queuePush = (world, hid, delaySec, title, body, tag, ch) => rpc('queue_pus
 // istatistikler: bu dünyadaki sayılar sunucuda saklanır, tüm dünyaların toplamı oyuncu kartında gösterilir
 const putStats = (world, name, stats) => rpc('put_stats', { p_world: world, p_name: name, p_stats: stats });
 const globalStats = uid => rpc('global_stats', { p_uid: uid });
+// ---------- yönetim ----------
+const amAdmin = () => rpc('am_admin', {});
+const myBan = () => rpc('my_ban', {});
+const admin = {
+  worlds: () => rpc('admin_worlds', {}),
+  players: w => rpc('admin_players', { p_world: w }),
+  async load(w) { const rows = await rpc('admin_load', { p_world: w }); if (!rows || !rows.length) throw new Error('Dünya bulunamadı'); return { W: await unpack(rows[0].state), version: rows[0].version, code: rows[0].code, name: rows[0].name }; },
+  async save(w, W, ver) { return rpc('admin_save', { p_world: w, p_state: await pack(W), p_version: ver }); },
+  ban: (u, reason, hours) => rpc('admin_ban', { p_user: u, p_reason: reason, p_hours: hours }),
+  unban: u => rpc('admin_unban', { p_user: u }),
+  bans: () => rpc('admin_bans', {}),
+  kick: (w, hid) => rpc('admin_kick', { p_world: w, p_hid: hid }),
+  del: w => rpc('admin_delete_world', { p_world: w }),
+};
 async function leaveWorld(id) { const a = await session(); return api('/rest/v1/world_players?world_id=eq.' + id + '&user_id=eq.' + a.uid, { method: 'DELETE' }); }
 
-return { register, login, logout, changePassword, normUser, get account() { return auth && auth.user; }, get hasAuth() { return !!(auth && auth.refresh); }, putStats, globalStats, registerPush, unregisterPush, queuePush, syncClock, get offset() { return offset; }, session, createWorld, joinWorld, load, save, version, myWorlds, players, leaveWorld, localize, delocalize, addHuman, normCode, get uid() { return auth && auth.uid; } };
+return { amAdmin, myBan, admin, register, login, logout, changePassword, normUser, get account() { return auth && auth.user; }, get hasAuth() { return !!(auth && auth.refresh); }, putStats, globalStats, registerPush, unregisterPush, queuePush, syncClock, get offset() { return offset; }, session, createWorld, joinWorld, load, save, version, myWorlds, players, leaveWorld, localize, delocalize, addHuman, normCode, get uid() { return auth && auth.uid; } };
 })();

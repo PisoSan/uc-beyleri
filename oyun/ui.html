@@ -156,6 +156,18 @@ h2.sec{font-family:var(--display);font-size:17px;font-weight:700;margin:4px 0 0;
 .clog{font-size:13px;display:grid;gap:3px}
 .clog div{display:flex;gap:8px} .clog .tm{color:var(--muted);flex:none;font-variant-numeric:tabular-nums}
 .cdesc{font-style:italic;color:var(--text);opacity:.9}
+#adm{position:fixed;inset:0;z-index:95;background:var(--bg);display:flex;flex-direction:column}
+#adm .ahead{display:flex;align-items:center;gap:8px;padding:12px 12px 8px;padding-top:calc(12px + env(safe-area-inset-top,0px));border-bottom:1px solid var(--line);background:var(--panel)}
+#adm .ahead h3{margin:0;flex:1;font-family:var(--display);color:var(--gold);font-size:20px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#adm .abody{flex:1;overflow-y:auto;padding:12px;display:grid;gap:10px;align-content:start}
+#adm .arow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 10px;align-items:center;padding:8px 0;border-top:1px solid var(--line);width:100%;background:none;border-left:0;border-right:0;border-bottom:0;color:inherit;font:inherit;text-align:left}
+#adm .arow:first-child{border-top:0}
+#adm .ban{color:#fff;background:#c0392b;border-radius:5px;padding:0 5px;font-size:11px;font-weight:800}
+#adm .agrid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
+#adm .agrid input,#adm select,#adm textarea,#adm .ain{width:100%;box-sizing:border-box;min-width:0}
+#adm input,#adm select,#adm textarea{background:var(--panel-2);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:9px 10px;font:inherit;font-size:15px}
+#adm input::placeholder,#adm textarea::placeholder{color:var(--muted)}
+#adm .admtag{font-size:11px;font-weight:800;color:#0f1829;background:var(--gold);border-radius:5px;padding:1px 6px}
 [data-pc],[data-cc]{cursor:pointer}
 b[data-pc]:hover,span[data-pc]:hover{text-decoration:underline}
 .pchead{display:flex;gap:12px;align-items:center}
@@ -631,6 +643,8 @@ async function mpOpen(info, me) {
     adopt(R.W, R.version);
     M.lastPush = now(); M.pushedT = S.lastT;
   } catch (e) {
+    let ban = null; try { ban = await Net.myBan(); } catch (x) {}
+    if (ban) { MPX = null; LS.set('ub-mode', { sp: true }); showStart(banText(ban)); return; }
     const c = LS.get('ub-mp-cache-' + info.id);
     if (MPX !== M) return;
     if (!c || !c.S) { MPX = null; showStart(e.message || 'Bağlanılamadı'); return; }
@@ -638,6 +652,7 @@ async function mpOpen(info, me) {
     toast('İnternet yok: son kayıttan devam ediliyor', 'bad');
   }
   LS.set('ub-mode', { mp: { id: M.id, code: M.code, hid: M.hid, name: M.name } });
+  checkAdmin();
   save(); tab = 'koy'; map.ox = null; overShown = false; showGame(); setNet(M.net || 'ok');
 }
 function leaveToMenu() {
@@ -667,13 +682,168 @@ function boot() {
   showStart();
 }
 
+// ---------- YÖNETİM PANELİ (sadece yöneticiler; yetki sunucuda denetlenir) ----------
+const ADM = { on: false, stack: [] };
+async function checkAdmin() { try { ADM.on = Net.hasAuth && !!(await Net.amAdmin()); } catch (e) { ADM.on = false; } return ADM.on; }
+const admT = () => Date.now() + (Net.offset || 0);
+function admShell(title, body, back) {
+  let el = $('adm'); if (!el) { el = document.createElement('div'); el.id = 'adm'; document.body.appendChild(el); }
+  el.innerHTML = `<div class="ahead">${back ? '<button class="btn sec" id="admBack">‹</button>' : ''}<h3>${title}</h3><span class="admtag">YÖNETİM</span><button class="x" id="admX" aria-label="Kapat">×</button></div><div class="abody" id="admBody">${body}</div>`;
+  $('admX').onclick = () => { el.remove(); if (S && MPX) { sig = ''; render(); } };
+  if (back) $('admBack').onclick = back;
+  return $('admBody');
+}
+const admErr = e => toast((e && e.message) || 'İşlem yapılamadı', 'bad');
+async function openAdmin() {
+  const b = admShell('Yönetim paneli', '<div class="muted">Yükleniyor…</div>');
+  try { await Net.syncClock(); } catch (e) {}
+  try {
+    const ws = await Net.admin.worlds();
+    b.innerHTML = `<div class="chips"><button class="btn sec" id="admBans">Yasaklı oyuncular</button></div>
+      <section class="card"><b>Dünyalar (${ws.length})</b><div>${ws.map(w => `<button class="arow" data-aw="${w.id}"><span><b>${esc(w.name)}</b> <span class="ctag">${esc(w.code)}</span><div class="muted small">${w.players} oyuncu · ${w.speed}× · son hareket ${clock(Date.parse(w.updated_at))}</div></span><span class="muted">›</span></button>`).join('') || '<div class="muted small">Henüz dünya yok.</div>'}</div></section>`;
+    b.onclick = e => { const w = e.target.closest('[data-aw]'); if (w) admWorld(w.dataset.aw); if (e.target.id === 'admBans') admBans(); };
+  } catch (e) { b.innerHTML = `<div class="mperr">${esc(netErr(e))}</div>`; }
+}
+async function admBans() {
+  const b = admShell('Yasaklı oyuncular', '<div class="muted">Yükleniyor…</div>', openAdmin);
+  const draw = async () => {
+    const list = await Net.admin.bans();
+    b.innerHTML = `<section class="card">${list.map(x => `<div class="arow"><span><b>${esc(x.username || x.user_id.slice(0, 8))}</b><div class="muted small">${esc(x.reason || 'sebep yok')} · ${x.until ? clock(Date.parse(x.until)) + ' tarihine kadar' : 'kalıcı'}</div></span><button class="btn sec" data-unban="${x.user_id}">Kaldır</button></div>`).join('') || '<div class="muted small">Yasaklı oyuncu yok.</div>'}</section>`;
+  };
+  b.onclick = async e => { const u = e.target.closest('[data-unban]'); if (!u) return; try { await Net.admin.unban(u.dataset.unban); toast('Yasak kaldırıldı', 'good'); draw(); } catch (ex) { admErr(ex); } };
+  try { await draw(); } catch (e) { b.innerHTML = `<div class="mperr">${esc(netErr(e))}</div>`; }
+}
+// dünyada değişiklik: en güncel hali yükle, uygula, kaydet; araya biri girerse tekrar dene
+async function admEdit(wid, fn) {
+  for (let i = 0; i < 6; i++) {
+    const R = await Net.admin.load(wid), prev = C.S, t = admT();
+    let out;
+    try { C.S = R.W; out = fn(R.W, t); } finally { C.S = prev; }
+    if (out === false) return false;
+    const v = await Net.admin.save(wid, R.W, R.version);
+    if (v != null) { if (MPX && MPX.id === wid) setTimeout(poll, 300); return true; }
+  }
+  throw new Error('Dünya çok hareketli, tekrar dene');
+}
+const admBey = (W, id) => W.beys.find(b => b.id === id);
+const admOwnerName = (W, o) => o == null ? 'Terk edilmiş' : (admBey(W, o) || {}).name || o;
+function admPts(W, o) { const prev = C.S; C.S = W; try { return C.ownerPts(o); } finally { C.S = prev; } }
+async function admWorld(wid, sub) {
+  sub = sub || 'oyuncu';
+  const b = admShell('Dünya', '<div class="muted">Yükleniyor…</div>', openAdmin);
+  let R, P;
+  try { [R, P] = await Promise.all([Net.admin.load(wid), Net.admin.players(wid)]); } catch (e) { b.innerHTML = `<div class="mperr">${esc(netErr(e))}</div>`; return; }
+  const W = R.W; document.querySelector('#adm .ahead h3').textContent = R.name + ' · ' + R.code;
+  const tabs = `<div class="seg">${[['oyuncu', 'Oyuncular'], ['koy', 'Köyler'], ['duyuru', 'Duyuru'], ['dunya', 'Dünya']].map(([k, n]) => `<button class="${sub === k ? 'on' : ''}" data-asub="${k}">${n}</button>`).join('')}</div>`;
+  let h = tabs;
+  if (sub === 'oyuncu') {
+    h += `<section class="card">${P.map(p => { const bey = admBey(W, p.hid), vc = W.vil.filter(v => v.owner === p.hid).length;
+      return `<div class="arow"><span><b style="color:${bey ? bey.color : 'inherit'}">${esc(p.name)}</b> ${p.username ? `<span class="muted small">@${esc(p.username)}</span>` : '<span class="muted small">misafir</span>'} ${p.banned ? '<span class="ban">YASAKLI</span>' : ''}
+        <div class="muted small num">${p.hid} · ${vc} köy · ${fmt(admPts(W, p.hid))} puan${bey && bey.clan ? ' · [' + esc(bey.clan) + ']' : ''}${bey && bey.protectUntil > admT() ? ' · korumada' : ''}${p.banned ? ' · ' + esc(p.ban_reason || '') : ''}</div></span>
+        <button class="btn sec" data-ap="${p.hid}">Yönet</button></div>`; }).join('') || '<div class="muted small">Oyuncu yok.</div>'}</section>`;
+  } else if (sub === 'koy') {
+    h += `<input class="ain" id="admQ" placeholder="Köy ya da sahip ara" autocomplete="off"><section class="card" id="admVl"></section>`;
+  } else if (sub === 'duyuru') {
+    h += `<section class="card"><b>Dünyaya duyuru</b><div class="muted small">Genel sohbete "Yönetim" adıyla düşer; herkes görür.</div><textarea id="admMsg" rows="3" maxlength="300"></textarea><button class="btn firuze" id="admSend">Gönder</button></section>`;
+  } else {
+    h += `<section class="card"><div class="stg"><span>Kod</span><span>${esc(R.code)}</span><span>Hız</span><span>${W.speed}×</span><span>Oyuncu</span><span>${P.length}</span><span>Köy</span><span>${W.vil.length}</span><span>Hareket halindeki ordu</span><span>${W.moves.length}</span><span>Sürüm</span><span>${R.version}</span></div></section>
+      <section class="card"><b>Herkese kaynak</b><div class="muted small">Bütün oyuncuların bütün köylerine eklenir.</div><div class="chips"><button class="btn sec" data-allres="5000">+5.000</button><button class="btn sec" data-allres="50000">+50.000</button></div></section>
+      <button class="btn red" id="admDel">Dünyayı sil</button>`;
+  }
+  b.innerHTML = h;
+  const vlist = () => { const q = ($('admQ').value || '').toLocaleLowerCase('tr'); $('admVl').innerHTML = W.vil.filter(v => !q || v.name.toLocaleLowerCase('tr').includes(q) || admOwnerName(W, v.owner).toLocaleLowerCase('tr').includes(q)).sort((a, c) => (a.owner === null) - (c.owner === null) || a.id - c.id).slice(0, 80)
+    .map(v => `<button class="arow" data-av="${v.id}"><span><b>${esc(v.name)}</b> <span class="muted num">(${v.x}|${v.y})</span><div class="muted small">${esc(admOwnerName(W, v.owner))}</div></span><span class="muted">›</span></button>`).join('') || '<div class="muted small">Sonuç yok.</div>'; };
+  if (sub === 'koy') { $('admQ').oninput = vlist; vlist(); }
+  b.onclick = async e => {
+    const t = e.target.closest('[data-asub]'); if (t) { admWorld(wid, t.dataset.asub); return; }
+    const p = e.target.closest('[data-ap]'); if (p) { admPlayer(wid, P.find(x => x.hid === p.dataset.ap), W); return; }
+    const v = e.target.closest('[data-av]'); if (v) { admVillage(wid, +v.dataset.av); return; }
+    try {
+      if (e.target.id === 'admSend') { const msg = $('admMsg').value.trim(); if (!msg) return;
+        await admEdit(wid, W2 => { W2.chat.genel.push({ id: ++W2.uid, t: admT(), from: 'SYS', text: '📢 Yönetim: ' + msg.slice(0, 300) }); }); toast('Duyuru gönderildi', 'good'); $('admMsg').value = ''; }
+      const ar = e.target.closest('[data-allres]'); if (ar) { const n = +ar.dataset.allres;
+        await admEdit(wid, (W2, tt) => { for (const vv of W2.vil) if (vv.owner && admBey(W2, vv.owner) && admBey(W2, vv.owner).human) { C.syncRes(vv, tt); const c = C.cap(vv) * 50; vv.res = vv.res.map(x => Math.min(c, x + n)); } }); toast('Kaynaklar eklendi', 'good'); }
+      if (e.target.id === 'admDel') { const d = e.target; if (d.dataset.armed !== '1') { d.dataset.armed = '1'; d.textContent = 'Emin misin? Geri alınamaz, tekrar dokun'; return; }
+        await Net.admin.del(wid); toast('Dünya silindi', 'info'); openAdmin(); }
+    } catch (ex) { admErr(ex); }
+  };
+}
+function admPlayer(wid, p, W) {
+  const bey = admBey(W, p.hid);
+  const b = admShell(p.name, '', () => admWorld(wid, 'oyuncu'));
+  b.innerHTML = `<section class="card"><div class="stg"><span>Kullanıcı adı</span><span>${p.username ? '@' + esc(p.username) : 'misafir'}</span><span>Dünyadaki kimlik</span><span>${p.hid}</span><span>Köy</span><span>${W.vil.filter(v => v.owner === p.hid).length}</span><span>Puan</span><span>${fmt(admPts(W, p.hid))}</span><span>Katılma</span><span>${clock(Date.parse(p.joined_at))}</span><span>Durum</span><span>${p.banned ? 'Yasaklı' + (p.ban_until ? ' · ' + clock(Date.parse(p.ban_until)) + "'e kadar" : ' · kalıcı') : 'Aktif'}</span></div></section>
+    ${p.banned ? `<button class="btn firuze" id="apUnban">Yasağı kaldır</button>` : `<section class="card"><b>Yasakla</b><div class="muted small">Yasaklı oyuncu hiçbir dünyaya giremez, yeni dünya kuramaz ve katılamaz. Bildirimleri de kesilir.</div>
+      <input class="ain" id="apReason" maxlength="200" placeholder="Sebep (oyuncuya gösterilir)"><div class="chips"><button class="btn red" data-ban="24">1 gün</button><button class="btn red" data-ban="168">7 gün</button><button class="btn red" data-ban="720">30 gün</button><button class="btn red" data-ban="0">Kalıcı</button></div></section>`}
+    <section class="card"><b>Bütün köylerine kaynak</b><div class="chips"><button class="btn sec" data-pres="1000">+1.000</button><button class="btn sec" data-pres="10000">+10.000</button><button class="btn sec" data-pres="100000">+100.000</button></div></section>
+    <section class="card"><b>Koruma</b><div class="muted small">Korumadaki oyuncuya saldırılamaz.${bey && bey.protectUntil > admT() ? ' Şu an korumada: ' + dur(bey.protectUntil - admT()) + ' kaldı.' : ''}</div><div class="chips"><button class="btn sec" data-prot="24">24 saat ver</button><button class="btn sec" data-prot="0">Korumayı kaldır</button></div></section>
+    <section class="card"><b>Köyleri</b><div>${W.vil.filter(v => v.owner === p.hid).map(v => `<button class="arow" data-av="${v.id}"><span><b>${esc(v.name)}</b> <span class="muted num">(${v.x}|${v.y})</span></span><span class="muted">›</span></button>`).join('') || '<div class="muted small">Köyü yok.</div>'}</div></section>
+    <button class="btn red" id="apKick">Dünyadan çıkar</button><div class="muted small">Dünyadan çıkarılan oyuncunun köyleri terk edilmiş köye döner. Oyuncu kodla tekrar katılabilir; engellemek için yasakla.</div>`;
+  b.onclick = async e => {
+    try {
+      const v = e.target.closest('[data-av]'); if (v) { admVillage(wid, +v.dataset.av, () => admWorld(wid, 'oyuncu')); return; }
+      const bn = e.target.closest('[data-ban]'); if (bn) { await Net.admin.ban(p.user_id, $('apReason').value.trim(), +bn.dataset.ban); toast(p.name + ' yasaklandı', 'good'); p.banned = true; admWorld(wid, 'oyuncu'); return; }
+      if (e.target.id === 'apUnban') { await Net.admin.unban(p.user_id); toast('Yasak kaldırıldı', 'good'); admWorld(wid, 'oyuncu'); return; }
+      const pr = e.target.closest('[data-pres]'); if (pr) { const n = +pr.dataset.pres; await admEdit(wid, (W2, t) => { for (const vv of W2.vil) if (vv.owner === p.hid) { C.syncRes(vv, t); const c = C.cap(vv) * 50; vv.res = vv.res.map(x => Math.min(c, x + n)); } }); toast('Kaynak eklendi', 'good'); return; }
+      const pt = e.target.closest('[data-prot]'); if (pt) { const hrs = +pt.dataset.prot; await admEdit(wid, (W2, t) => { const bb = admBey(W2, p.hid); if (!bb) return false; bb.protectUntil = hrs ? t + hrs * 3600000 : 0; }); toast(hrs ? 'Koruma verildi' : 'Koruma kaldırıldı', 'good'); return; }
+      if (e.target.id === 'apKick') { const k = e.target; if (k.dataset.armed !== '1') { k.dataset.armed = '1'; k.textContent = 'Emin misin? Tekrar dokun'; return; }
+        await admEdit(wid, (W2, t) => {
+          for (const vv of W2.vil) if (vv.owner === p.hid) { vv.owner = null; vv.base = Object.assign({}, vv.units); vv.bq = []; }
+          for (const vv of W2.vil) if (vv.sup) vv.sup = vv.sup.filter(x => x.owner !== p.hid);
+          W2.moves = W2.moves.filter(m => m.owner !== p.hid);
+          W2.beys = W2.beys.filter(bb => bb.id !== p.hid);
+          W2.chat.genel.push({ id: ++W2.uid, t, from: 'SYS', text: p.name + ' dünyadan çıkarıldı.' });
+        });
+        await Net.admin.kick(wid, p.hid); toast(p.name + ' dünyadan çıkarıldı', 'good'); admWorld(wid, 'oyuncu'); }
+    } catch (ex) { admErr(ex); }
+  };
+}
+async function admVillage(wid, vid, back) {
+  back = back || (() => admWorld(wid, 'koy'));
+  const b = admShell('Köy', '<div class="muted">Yükleniyor…</div>', back);
+  let R; try { R = await Net.admin.load(wid); } catch (e) { b.innerHTML = `<div class="mperr">${esc(netErr(e))}</div>`; return; }
+  const W = R.W, prev = C.S; C.S = W; let v, capv;
+  try { v = W.vil[vid]; C.syncRes(v, admT()); capv = C.cap(v); } finally { C.S = prev; }
+  document.querySelector('#adm .ahead h3').textContent = v.name;
+  const owners = [['', 'Terk edilmiş'], ...W.beys.map(bb => [bb.id, bb.name + (bb.human ? ' (oyuncu)' : '')])];
+  b.innerHTML = `<section class="card"><div class="stg"><span>Sahibi</span><span>${esc(admOwnerName(W, v.owner))}</span><span>Konum</span><span>(${v.x}|${v.y})</span><span>Bağlılık</span><span>${Math.floor(v.loy)}</span><span>Ambar sınırı</span><span>${fmt(capv)}</span></div></section>
+    <section class="card"><b>Kaynaklar</b><div class="muted small num">Şu an: ${v.res.map(x => fmt(x)).join(' / ')} (kereste / taş / demir)</div>
+      <div class="agrid"><input type="number" id="avR0" placeholder="kereste" inputmode="numeric"><input type="number" id="avR1" placeholder="taş" inputmode="numeric"><input type="number" id="avR2" placeholder="demir" inputmode="numeric"></div>
+      <div class="chips"><button class="btn firuze" id="avRes">Ekle</button><button class="btn sec" data-avq="10000">Hepsine +10.000</button><button class="btn sec" id="avFill">Ambarı doldur</button><button class="btn sec" id="avZero">Sıfırla</button></div></section>
+    <section class="card"><b>Askerler</b><div class="muted small num">${C.U_ORDER.filter(u => v.units[u] > 0).map(u => fmt(v.units[u]) + ' ' + C.U[u].n).join(', ') || 'Köyde asker yok'}</div>
+      <div class="agrid" style="grid-template-columns:1.4fr 1fr"><select id="avU">${C.U_ORDER.map(u => `<option value="${u}">${C.U[u].n} (${fmt(v.units[u] || 0)})</option>`).join('')}</select><input type="number" id="avUn" placeholder="adet" inputmode="numeric"></div>
+      <div class="chips"><button class="btn firuze" data-avu="add">Ekle</button><button class="btn sec" data-avu="set">Bu sayıya ayarla</button><button class="btn sec" data-avu="clear">Bütün askerleri sil</button></div></section>
+    <section class="card"><b>Binalar</b><div class="agrid" style="grid-template-columns:1.4fr 1fr"><select id="avB">${C.B_ORDER.map(k => `<option value="${k}">${C.B[k].n} (Sv. ${v.b[k] || 0} / ${C.B[k].max})</option>`).join('')}</select><input type="number" id="avBl" placeholder="seviye" inputmode="numeric"></div>
+      <div class="chips"><button class="btn firuze" id="avBset">Seviyeyi ayarla</button><button class="btn sec" id="avBmax">Bütün binalar son seviye</button></div></section>
+    <section class="card"><b>Sahip ve bağlılık</b><div class="agrid" style="grid-template-columns:1.4fr 1fr"><select id="avO">${owners.map(([id, n]) => `<option value="${id}" ${String(v.owner || '') === id ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select><button class="btn sec" id="avOset">Sahibi değiştir</button></div>
+      <div class="chips"><button class="btn sec" id="avLoy">Bağlılığı 100 yap</button></div></section>`;
+  const num = id => Math.max(0, Math.floor(+($(id).value || 0)));
+  const edit = async (fn, msg) => { try { await admEdit(wid, (W2, t) => { const vv = W2.vil[vid]; C.syncRes(vv, t); return fn(vv, W2, t); }); toast(msg, 'good'); admVillage(wid, vid, back); } catch (ex) { admErr(ex); } };
+  b.onclick = e => {
+    const id = e.target.id;
+    if (id === 'avRes') { const add = [num('avR0'), num('avR1'), num('avR2')]; if (!add.some(x => x)) return; edit(vv => { const c = C.cap(vv) * 50; vv.res = vv.res.map((x, i) => Math.min(c, x + add[i])); }, 'Kaynak eklendi'); }
+    const q = e.target.closest('[data-avq]'); if (q) { const n = +q.dataset.avq; edit(vv => { const c = C.cap(vv) * 50; vv.res = vv.res.map(x => Math.min(c, x + n)); }, 'Kaynak eklendi'); }
+    if (id === 'avFill') edit(vv => { const c = C.cap(vv); vv.res = vv.res.map(x => Math.max(x, c)); }, 'Ambar dolduruldu');
+    if (id === 'avZero') edit(vv => { vv.res = [0, 0, 0]; }, 'Kaynaklar sıfırlandı');
+    const u = e.target.closest('[data-avu]');
+    if (u) { const k = u.dataset.avu, un = $('avU').value, n = num('avUn');
+      if (k !== 'clear' && !n && k === 'add') return;
+      edit(vv => { if (k === 'clear') { vv.units = {}; return; } vv.units[un] = k === 'add' ? (vv.units[un] || 0) + n : n; if (vv.owner === null) vv.base = Object.assign({}, vv.units); }, k === 'clear' ? 'Askerler silindi' : 'Askerler güncellendi'); }
+    if (id === 'avBset') { const bk = $('avB').value, l = Math.min(C.B[bk].max, num('avBl')); edit(vv => { vv.b[bk] = l; vv.bq = vv.bq.filter(x => x.b !== bk); }, C.B[bk].n + ' ' + l + '. seviye'); }
+    if (id === 'avBmax') edit(vv => { for (const k of C.B_ORDER) vv.b[k] = C.B[k].max; vv.bq = []; }, 'Bütün binalar son seviyede');
+    if (id === 'avLoy') edit(vv => { vv.loy = 100; }, 'Bağlılık 100');
+    if (id === 'avOset') { const o = $('avO').value || null; edit((vv, W2, t) => { if (vv.owner === o) return false; vv.owner = o; vv.loy = 100; vv.lt = t; vv.bq = []; vv.base = o === null ? Object.assign({}, vv.units) : null; W2.chat.genel.push({ id: ++W2.uid, t, from: 'SYS', text: vv.name + ' köyü yönetim kararıyla ' + admOwnerName(W2, o) + ' beyliğine geçti.' }); }, 'Sahip değiştirildi'); }
+  };
+}
+
 // ---------- hesap: kullanıcı adı + şifre ----------
+const banText = b => 'Hesabın yönetim tarafından yasaklandı' + (b.reason ? ': ' + b.reason : '') + '. ' + (b.until ? clock(Date.parse(b.until)) + ' tarihinde açılacak.' : 'Yasak kalıcı.');
 function accHTML() {
   const u = Net.account;
-  return u ? `<b>Hesabın</b><div class="small">Giriş yapıldı: <b style="color:var(--gold)">@${esc(u)}</b></div><div class="muted small">Başka bir telefonda bu kullanıcı adı ve şifreyle giriş yaparak aynı dünyalarda oynayabilirsin.</div><div class="chips"><button class="btn sec" data-acc="pass">Şifre değiştir</button><button class="btn sec" data-acc="out">Çıkış yap</button></div>`
-    : `<b>Hesap</b><div class="muted small">Şu an misafir olarak oynuyorsun; dünyaların sadece bu cihazda. Hesabını kaydet ki telefon değişse de beyliğin kaybolmasın.</div><div class="chips"><button class="btn firuze" data-acc="reg">Hesabını kaydet</button><button class="btn sec" data-acc="in">Giriş yap</button></div>`;
+  return (ADM.on ? `<button class="btn" data-acc="adm">Yönetim paneli</button>` : '') + (u ? `<b>Hesabın</b><div class="small">Giriş yapıldı: <b style="color:var(--gold)">@${esc(u)}</b></div><div class="muted small">Başka bir telefonda bu kullanıcı adı ve şifreyle giriş yaparak aynı dünyalarda oynayabilirsin.</div><div class="chips"><button class="btn sec" data-acc="pass">Şifre değiştir</button><button class="btn sec" data-acc="out">Çıkış yap</button></div>`
+    : `<b>Hesap</b><div class="muted small">Şu an misafir olarak oynuyorsun; dünyaların sadece bu cihazda. Hesabını kaydet ki telefon değişse de beyliğin kaybolmasın.</div><div class="chips"><button class="btn firuze" data-acc="reg">Hesabını kaydet</button><button class="btn sec" data-acc="in">Giriş yap</button></div>`);
 }
 function accSheet(kind, done) {
+  if (kind === 'adm') { openAdmin(); return; }
   const T = { reg: 'Hesabını kaydet', in: 'Giriş yap', pass: 'Şifre değiştir', out: 'Çıkış yap' }[kind];
   if (kind === 'out') {
     sheet(`<h3>Çıkış yapılsın mı?</h3><div class="muted">Dünyaların hesabında kayıtlı kalır. Tekrar girmek için kullanıcı adın ve şifren gerekir: <b>@${esc(Net.account || '')}</b></div><div class="chips"><button class="btn red" id="accGo">Çıkış yap</button><button class="btn sec" data-close>Vazgeç</button></div>`, () => {
@@ -772,8 +942,10 @@ function showStart(err) {
       const ws = await Net.myWorlds(); if (!$('mpList')) return;
       box.innerHTML = ws.length ? ws.map(w => `<button data-world="${w.id}" data-hid="${esc(w.hid)}" data-code="${esc(w.code)}"><span><b>${esc(w.name)}</b><div class="muted small">${esc(w.pname)} · ${w.speed}× · ${w.updated ? clock(Date.parse(w.updated)) : ''}</div></span><span class="code">${esc(w.code)}</span></button>`).join('')
         : '<div class="muted small">Henüz bir dünyan yok. Kur ya da arkadaşının kodunu yaz.</div>';
+      try { const ban = await Net.myBan(); if (ban && $('mpList')) box.innerHTML = `<div class="mperr">${esc(banText(ban))}</div>`; } catch (x) {}
     } catch (e) { if ($('mpList')) box.innerHTML = `<div class="mperr">${esc(netErr(e))}</div>`; }
   }
+  checkAdmin().then(on => { const ab = $('accBox'); if (on && ab) ab.innerHTML = accHTML(); });
   $('accBox').onclick = e => { const b = e.target.closest('[data-acc]'); if (b) accSheet(b.dataset.acc, () => showStart()); };
   $('mpList').onclick = e => { const b = e.target.closest('[data-world]'); if (!b) return; el.remove(); mpOpen({ id: b.dataset.world, hid: b.dataset.hid, code: b.dataset.code }); };
   $('mpNew').onclick = async () => {
@@ -1150,9 +1322,11 @@ $('setBtn').onclick = () => {
       <button class="btn red" id="mpLeave">Bu dünyadan ayrıl</button>` : `
     <div class="muted small">Oyun bu cihazda kaydedilir. Uygulamayı kapatsan da dünya işlemeye devam eder; geri döndüğünde aradaki her şey hesaplanır.</div>
     <button class="btn firuze" id="spMenu">Ana menü · Arkadaşlarla oyna</button>
+    ${ADM.on ? '<button class="btn" id="admB2">Yönetim paneli</button>' : ''}
     <section class="card"><b>Test araçları</b><div class="muted small">Oyunu denerken kullanman için. ${S.test ? 'Bu oyun test modunda.' : ''}</div>
       <div class="chips"><button class="btn firuze" id="tFill">Kaynakları doldur</button><button class="btn sec" id="tMines">Madenleri en üst seviyeye çıkar</button><button class="btn" id="tMax">Bütün binaları son seviyeye çıkar</button></div></section>
     <button class="btn red" id="resetBtn">Yeni oyun başlat</button>`}`, box => {
+    const a2 = $('admB2'); if (a2) a2.onclick = () => { closeSheet(); openAdmin(); };
     const ab = $('accBox2'); if (ab) ab.onclick = e => { const b = e.target.closest('[data-acc]'); if (!b) return; const k = b.dataset.acc; accSheet(k, () => { if (k === 'out' || k === 'in') showStart(); }); };
     const sb = (id, on, n) => { const b = $(id); b.textContent = n + ': ' + (on ? 'Açık' : 'Kapalı'); b.className = 'btn ' + (on ? 'firuze' : 'sec'); };
     box.querySelectorAll('[data-gq]').forEach(b => b.onclick = () => {
