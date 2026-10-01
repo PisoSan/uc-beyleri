@@ -7,6 +7,8 @@ const page = src('ui.html')
   .replace('/*NET*/', () => src('net.js'))
   .replace('/*SFX*/', () => src('sfx.js'))
   .replace('/*SCENE*/', () => src('scene.js'))
+  .replace('/*SCENE3D*/', () => src('scene3d.js'))
+  .replace('/*THREE*/', () => src('vendor/three.min.js'))
   .replace('/*MAPCASTLE*/', () => src('mapcastle.js'))
   .replace('/*MAPMOVES*/', () => src('mapmoves.js'));
 const head = '<!doctype html>\n<html lang="tr">\n<head>\n<meta charset="utf-8">\n' +

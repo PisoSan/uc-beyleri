@@ -358,6 +358,9 @@ input.qty{width:74px;background:var(--bg);border:1px solid var(--line);border-ra
 </div>
 
 <script>
+/*THREE*/
+</script>
+<script>
 /*CORE*/
 </script>
 <script>
@@ -776,6 +779,7 @@ $('setBtn').onclick = () => {
     <div class="card small"><div><b>Beylik:</b> ${esc(S.player.name)}</div><div><b>Dünya hızı:</b> ${S.speed}×</div>
     <div><b>Başlangıç:</b> ${clock(S.created)}</div>
     <div><b>Acemi koruması:</b> ${now() < S.protectUntil ? dur(S.protectUntil - now()) + ' kaldı' : 'bitti'}</div></div>
+    <section class="card"><b>Grafik</b><div class="muted small">3B köy en güzel görünümdür. Telefonun zorlanırsa 2B görünüme geçebilirsin.</div><div class="chips"><button class="btn ${use2D() ? 'sec' : 'firuze'}" id="g3d">3B</button><button class="btn ${use2D() ? 'firuze' : 'sec'}" id="g2d">2B</button></div></section>
     <section class="card"><b>Ses</b><div class="chips"><button class="btn ${Sfx.fx ? 'firuze' : 'sec'}" id="sfxT">Efektler: ${Sfx.fx ? 'Açık' : 'Kapalı'}</button><button class="btn ${Sfx.music ? 'firuze' : 'sec'}" id="muT">Müzik: ${Sfx.music ? 'Açık' : 'Kapalı'}</button></div></section>
     ${MPX ? `<section class="card"><b>Çok oyunculu dünya</b><div class="bigcode" style="font-size:26px">${esc(MPX.code)}</div>
       <div class="small">${S.beys.filter(b => b.human).length + 1} oyuncu: <b style="color:${S.player.color}">${esc(S.player.name)}</b>${S.beys.filter(b => b.human).map(b => `, <b style="color:${b.color}">${esc(b.name)}</b>`).join('')}</div>
@@ -788,6 +792,8 @@ $('setBtn').onclick = () => {
       <div class="chips"><button class="btn firuze" id="tFill">Kaynakları doldur</button><button class="btn sec" id="tMines">Madenleri en üst seviyeye çıkar</button><button class="btn" id="tMax">Bütün binaları son seviyeye çıkar</button></div></section>
     <button class="btn red" id="resetBtn">Yeni oyun başlat</button>`}`, box => {
     const sb = (id, on, n) => { const b = $(id); b.textContent = n + ': ' + (on ? 'Açık' : 'Kapalı'); b.className = 'btn ' + (on ? 'firuze' : 'sec'); };
+    const setG = two => { try { localStorage.setItem('ub-2d', two ? '1' : '0'); } catch (e) {} closeSheet(); if (tab === 'koy') { sig = ''; render(); } toast(two ? '2B görünüm' : '3B görünüm', 'info'); };
+    $('g3d').onclick = () => setG(false); $('g2d').onclick = () => setG(true);
     $('sfxT').onclick = () => { Sfx.setFx(!Sfx.fx); sb('sfxT', Sfx.fx, 'Efektler'); };
     $('muT').onclick = () => { Sfx.setMusic(!Sfx.music); sb('muT', Sfx.music, 'Müzik'); };
     if (MPX) {
@@ -837,6 +843,7 @@ const activeQuest = () => QUESTS.find(q => !S.quests.claimed.includes(q.id));
 const questState = () => { const q = activeQuest(); return q ? q.id + (q.ok() ? '1' : '0') : 'done'; };
 
 /*SCENE*/
+/*SCENE3D*/
 // ---------- KÖY ----------
 function renderKoy() {
   const v = cur();
@@ -852,7 +859,7 @@ function renderKoy() {
   $('techB').onclick = () => openBuilding('medrese');
   const fb = $('fillB'); if (fb) fb.onclick = () => { C.fillRes(cur(), now()); save(); renderTop(); toast('Ambar dolduruldu', 'good'); };
   hudSig = {}; liveKoy();
-  sceneStart();
+  if (V3.ok && !use2D()) V3.start(); else sceneStart();
 }
 let hudSig = {};
 function setHTML(id, html) { const el = $(id); if (el && hudSig[id] !== html) { hudSig[id] = html; el.innerHTML = html; } }
@@ -887,6 +894,7 @@ $('view').addEventListener('click', e => {
     if (r === 'ok') { Sfx.play('build'); toast(C.B[b].n + ' inşaatı başladı', 'info'); save(); liveKoy(); renderTop(); }
   }
 });
+function use2D() { try { return localStorage.getItem('ub-2d') === '1'; } catch (e) { return false; } }
 function selectBuilding(b) { SC.sel = b; const pop = $('pop'); if (pop) { pop.dataset.sig = ''; if (!b) pop.hidden = true; } livePop(); }
 function popHTML(b) {
   const v = cur(), B = C.B[b], l = v.b[b], nl = C.effLevel(v, b) + 1, max = nl > B.max, t = now(), inq = v.bq.filter(q => q.b === b);
@@ -1537,7 +1545,7 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) save(
 addEventListener('pagehide', save);
 addEventListener('resize', () => { if (tab === 'harita') { sig = ''; render(); } });
 
-window.__ub = { SC, viewInfo, selectBuilding, clampCam };
+window.__ub = { SC, viewInfo, selectBuilding, clampCam, V3 };
 boot();
 })();
 </script>

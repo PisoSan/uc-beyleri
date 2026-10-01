@@ -1182,7 +1182,7 @@ function drawLabels(g, v, vi) {
 
 function drawScene(t) {
   const vi = viewInfo(); if (!vi || !S) return;
-  const v = cur(), cv = vi.cv, g = cv.getContext('2d');
+  const v = cur(), cv = vi.cv, g = cv.getContext('2d'); if (!g) return;
   const W = Math.round(vi.r.width * vi.dpr), H = Math.round(vi.r.height * vi.dpr);
   if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; clampCam(); }
   const hr = SC.hour != null ? SC.hour : new Date().getHours(), night = hr >= 20 || hr < 6;
@@ -1217,7 +1217,7 @@ function placePop(vi) {
 }
 function sceneLoop(ts) {
   SC.raf = 0;
-  if (tab !== 'koy' || !$('scene')) return;
+  const scv = $('scene'); if (tab !== 'koy' || !scv || scv.__wired) return;   // 3B tuvali devraldıysa dur
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
   if (ts - SC.last > (reduce ? 500 : 33)) { SC.last = ts; drawScene(reduce ? 0 : ts); }
   SC.raf = requestAnimationFrame(sceneLoop);
