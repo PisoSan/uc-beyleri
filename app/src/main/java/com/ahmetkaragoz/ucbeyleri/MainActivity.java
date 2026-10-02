@@ -38,6 +38,8 @@ public class MainActivity extends Activity {
         // oyun içinden "Çık" denince uygulamayı kapatmak için
         webView.addJavascriptInterface(new Object() {
             @JavascriptInterface public void exit() { runOnUiThread(() -> finish()); }
+            // tarayıcıda bağlantı aç (yeni sürüm indirme)
+            @JavascriptInterface public void openUrl(String u) { runOnUiThread(() -> { try { startActivity(new android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(u))); } catch (Exception ignored) {} }); }
             // Firebase anlık bildirim kimliği ("" = Firebase bağlı değil / henüz hazır değil)
             @JavascriptInterface public String pushToken() {
                 if (pushToken.isEmpty()) pushToken = getSharedPreferences(Notif.PREFS, MODE_PRIVATE).getString("token", "");

@@ -1311,6 +1311,8 @@ const Net = (() => {
 'use strict';
 const URL = 'https://tgiqiybqfbikmdoblwba.supabase.co';
 const KEY = 'sb_publishable__r4MnoM3ecwE4T5RQR-2zw_7W046pR4';
+// oyun kurallarını değiştiren her sürümde artır; sunucu daha eski sürümlerin kaydını reddeder
+const CLIENT_VER = 23;
 const AUTH_K = (typeof window !== 'undefined' && window.UB_AUTH_KEY) || 'ub-auth';   // yönetim uygulaması ayrı oturum tutar
 const ls = { get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }, del(k) { try { localStorage.removeItem(k); } catch (e) {} } };
 
@@ -1484,7 +1486,7 @@ async function load(id) {
 async function save(id, W, version) {
   const rows = await api('/rest/v1/worlds?id=eq.' + id + '&version=eq.' + version + '&select=version', {
     method: 'PATCH', headers: { Prefer: 'return=representation' },
-    body: { state: await pack(W), version: version + 1, updated_at: new Date().toISOString() } });
+    body: { state: await pack(W), version: version + 1, updated_at: new Date().toISOString(), client_ver: CLIENT_VER, stamp: Date.now().toString(36) + Math.random().toString(36).slice(2) } });
   return rows && rows.length ? rows[0].version : null;
 }
 async function version(id) { const rows = await api('/rest/v1/worlds?id=eq.' + id + '&select=version'); return rows && rows.length ? rows[0].version : null; }
@@ -1513,6 +1515,7 @@ const putStats = (world, name, stats) => rpc('put_stats', { p_world: world, p_na
 const globalStats = uid => rpc('global_stats', { p_uid: uid });
 // ---------- yönetim ----------
 const amAdmin = () => rpc('am_admin', {});
+const minClient = () => rpc('min_client', {});
 const myBan = () => rpc('my_ban', {});
 const admin = {
   worlds: () => rpc('admin_worlds', {}),
@@ -1526,10 +1529,11 @@ const admin = {
   del: w => rpc('admin_delete_world', { p_world: w }),
   search: q => rpc('admin_search', { p_q: q }),
   overview: () => rpc('admin_overview', {}),
+  setMinClient: v => rpc('admin_set_min_client', { p_ver: v }),
 };
 async function leaveWorld(id) { const a = await session(); return api('/rest/v1/world_players?world_id=eq.' + id + '&user_id=eq.' + a.uid, { method: 'DELETE' }); }
 
-return { amAdmin, myBan, admin, register, login, logout, changePassword, normUser, get account() { return auth && auth.user; }, get hasAuth() { return !!(auth && auth.refresh); }, putStats, globalStats, registerPush, unregisterPush, queuePush, syncClock, get offset() { return offset; }, session, createWorld, joinWorld, load, save, version, myWorlds, players, leaveWorld, localize, delocalize, addHuman, normCode, get uid() { return auth && auth.uid; } };
+return { CLIENT_VER, minClient, amAdmin, myBan, admin, register, login, logout, changePassword, normUser, get account() { return auth && auth.user; }, get hasAuth() { return !!(auth && auth.refresh); }, putStats, globalStats, registerPush, unregisterPush, queuePush, syncClock, get offset() { return offset; }, session, createWorld, joinWorld, load, save, version, myWorlds, players, leaveWorld, localize, delocalize, addHuman, normCode, get uid() { return auth && auth.uid; } };
 })();
 
 </script>
@@ -1643,8 +1647,12 @@ async function vOzet() {
         <div class="tile"><b>${fmt(o.accounts)}</b><span>kayıtlı hesap</span></div>
         <div class="tile${o.bans ? ' warn' : ''}"><b>${fmt(o.bans)}</b><span>yasaklı</span></div>
         <div class="tile"><b>${fmt(o.push)}</b><span>bildirim açık cihaz</span></div></div>
+      <section class="card"><h2>Zorunlu güncelleme</h2><div class="muted small">Oyun kuralları değişince eski sürümler dünyayı bozmasın diye, bu sürümden eski uygulamaların kayıt yapması engellenir ve oyuncuya "Yeni sürüm gerekli" ekranı çıkar. Şu anki en düşük sürüm: <b id="minv">…</b></div>
+        <div class="g2" style="grid-template-columns:1fr auto"><input id="minIn" type="number" inputmode="numeric" placeholder="sürüm no (örn. 23)"><button class="btn sec" id="minSet">Kaydet</button></div></section>
       <section class="card"><h2>Son hareket eden dünyalar</h2>${worldRows(ws.slice(0, 6))}</section>`;
     c.onclick = worldClick;
+    Net.minClient().then(v => { if ($('minv')) $('minv').textContent = v; }).catch(() => { if ($('minv')) $('minv').textContent = 'kurulu değil'; });
+    $('minSet').onclick = async () => { const v = Math.floor(+$('minIn').value); if (!(v >= 0)) return; if (!(await ask('En düşük oyun sürümü ' + v + ' yapılsın mı? Daha eski uygulamalar dünyalara kayıt yapamaz.'))) return; run(() => Net.admin.setMinClient(v), 'Zorunlu sürüm ' + v, draw); };
   } catch (e) { fail(c, e); }
 }
 const worldRows = ws => ws.length ? ws.map(w => `<button class="row" data-w="${w.id}"><span><b>${esc(w.name)}</b> <span class="tag code">${esc(w.code)}</span><div class="muted small num">${w.players} oyuncu · ${w.speed}× · ${clock(Date.parse(w.updated_at))}</div></span><span class="chev">›</span></button>`).join('') : '<div class="empty">Henüz dünya yok.</div>';

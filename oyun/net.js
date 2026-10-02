@@ -8,6 +8,8 @@ const Net = (() => {
 'use strict';
 const URL = 'https://tgiqiybqfbikmdoblwba.supabase.co';
 const KEY = 'sb_publishable__r4MnoM3ecwE4T5RQR-2zw_7W046pR4';
+// oyun kurallarını değiştiren her sürümde artır; sunucu daha eski sürümlerin kaydını reddeder
+const CLIENT_VER = 23;
 const AUTH_K = (typeof window !== 'undefined' && window.UB_AUTH_KEY) || 'ub-auth';   // yönetim uygulaması ayrı oturum tutar
 const ls = { get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }, del(k) { try { localStorage.removeItem(k); } catch (e) {} } };
 
@@ -181,7 +183,7 @@ async function load(id) {
 async function save(id, W, version) {
   const rows = await api('/rest/v1/worlds?id=eq.' + id + '&version=eq.' + version + '&select=version', {
     method: 'PATCH', headers: { Prefer: 'return=representation' },
-    body: { state: await pack(W), version: version + 1, updated_at: new Date().toISOString() } });
+    body: { state: await pack(W), version: version + 1, updated_at: new Date().toISOString(), client_ver: CLIENT_VER, stamp: Date.now().toString(36) + Math.random().toString(36).slice(2) } });
   return rows && rows.length ? rows[0].version : null;
 }
 async function version(id) { const rows = await api('/rest/v1/worlds?id=eq.' + id + '&select=version'); return rows && rows.length ? rows[0].version : null; }
@@ -210,6 +212,7 @@ const putStats = (world, name, stats) => rpc('put_stats', { p_world: world, p_na
 const globalStats = uid => rpc('global_stats', { p_uid: uid });
 // ---------- yönetim ----------
 const amAdmin = () => rpc('am_admin', {});
+const minClient = () => rpc('min_client', {});
 const myBan = () => rpc('my_ban', {});
 const admin = {
   worlds: () => rpc('admin_worlds', {}),
@@ -223,8 +226,9 @@ const admin = {
   del: w => rpc('admin_delete_world', { p_world: w }),
   search: q => rpc('admin_search', { p_q: q }),
   overview: () => rpc('admin_overview', {}),
+  setMinClient: v => rpc('admin_set_min_client', { p_ver: v }),
 };
 async function leaveWorld(id) { const a = await session(); return api('/rest/v1/world_players?world_id=eq.' + id + '&user_id=eq.' + a.uid, { method: 'DELETE' }); }
 
-return { amAdmin, myBan, admin, register, login, logout, changePassword, normUser, get account() { return auth && auth.user; }, get hasAuth() { return !!(auth && auth.refresh); }, putStats, globalStats, registerPush, unregisterPush, queuePush, syncClock, get offset() { return offset; }, session, createWorld, joinWorld, load, save, version, myWorlds, players, leaveWorld, localize, delocalize, addHuman, normCode, get uid() { return auth && auth.uid; } };
+return { CLIENT_VER, minClient, amAdmin, myBan, admin, register, login, logout, changePassword, normUser, get account() { return auth && auth.user; }, get hasAuth() { return !!(auth && auth.refresh); }, putStats, globalStats, registerPush, unregisterPush, queuePush, syncClock, get offset() { return offset; }, session, createWorld, joinWorld, load, save, version, myWorlds, players, leaveWorld, localize, delocalize, addHuman, normCode, get uid() { return auth && auth.uid; } };
 })();

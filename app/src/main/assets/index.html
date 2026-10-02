@@ -1672,6 +1672,8 @@ const Net = (() => {
 'use strict';
 const URL = 'https://tgiqiybqfbikmdoblwba.supabase.co';
 const KEY = 'sb_publishable__r4MnoM3ecwE4T5RQR-2zw_7W046pR4';
+// oyun kurallarını değiştiren her sürümde artır; sunucu daha eski sürümlerin kaydını reddeder
+const CLIENT_VER = 23;
 const AUTH_K = (typeof window !== 'undefined' && window.UB_AUTH_KEY) || 'ub-auth';   // yönetim uygulaması ayrı oturum tutar
 const ls = { get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }, del(k) { try { localStorage.removeItem(k); } catch (e) {} } };
 
@@ -1845,7 +1847,7 @@ async function load(id) {
 async function save(id, W, version) {
   const rows = await api('/rest/v1/worlds?id=eq.' + id + '&version=eq.' + version + '&select=version', {
     method: 'PATCH', headers: { Prefer: 'return=representation' },
-    body: { state: await pack(W), version: version + 1, updated_at: new Date().toISOString() } });
+    body: { state: await pack(W), version: version + 1, updated_at: new Date().toISOString(), client_ver: CLIENT_VER, stamp: Date.now().toString(36) + Math.random().toString(36).slice(2) } });
   return rows && rows.length ? rows[0].version : null;
 }
 async function version(id) { const rows = await api('/rest/v1/worlds?id=eq.' + id + '&select=version'); return rows && rows.length ? rows[0].version : null; }
@@ -1874,6 +1876,7 @@ const putStats = (world, name, stats) => rpc('put_stats', { p_world: world, p_na
 const globalStats = uid => rpc('global_stats', { p_uid: uid });
 // ---------- yönetim ----------
 const amAdmin = () => rpc('am_admin', {});
+const minClient = () => rpc('min_client', {});
 const myBan = () => rpc('my_ban', {});
 const admin = {
   worlds: () => rpc('admin_worlds', {}),
@@ -1887,10 +1890,11 @@ const admin = {
   del: w => rpc('admin_delete_world', { p_world: w }),
   search: q => rpc('admin_search', { p_q: q }),
   overview: () => rpc('admin_overview', {}),
+  setMinClient: v => rpc('admin_set_min_client', { p_ver: v }),
 };
 async function leaveWorld(id) { const a = await session(); return api('/rest/v1/world_players?world_id=eq.' + id + '&user_id=eq.' + a.uid, { method: 'DELETE' }); }
 
-return { amAdmin, myBan, admin, register, login, logout, changePassword, normUser, get account() { return auth && auth.user; }, get hasAuth() { return !!(auth && auth.refresh); }, putStats, globalStats, registerPush, unregisterPush, queuePush, syncClock, get offset() { return offset; }, session, createWorld, joinWorld, load, save, version, myWorlds, players, leaveWorld, localize, delocalize, addHuman, normCode, get uid() { return auth && auth.uid; } };
+return { CLIENT_VER, minClient, amAdmin, myBan, admin, register, login, logout, changePassword, normUser, get account() { return auth && auth.user; }, get hasAuth() { return !!(auth && auth.refresh); }, putStats, globalStats, registerPush, unregisterPush, queuePush, syncClock, get offset() { return offset; }, session, createWorld, joinWorld, load, save, version, myWorlds, players, leaveWorld, localize, delocalize, addHuman, normCode, get uid() { return auth && auth.uid; } };
 })();
 
 </script>
@@ -2183,6 +2187,18 @@ function adopt(W, ver) {
   }
   if (had && !$('start')) { sig = ''; render(); }
 }
+// eski sürüm: sunucu kaydı reddetti ya da daha yeni sürüm zorunlu
+const isOld = e => /ESKI_SURUM/.test((e && e.message) || '');
+function showUpdate() {
+  if ($('ov') && $('ov').dataset.upd) return;
+  const url = 'https://github.com/PisoSan/uc-beyleri/releases/latest', app = !!(window.UB && UB.exit);
+  sheet(`<div class="over"><h3>Yeni sürüm gerekli</h3><p>Oyunun kuralları güncellendi. Bu dünyada herkesin aynı kurallarla oynaması için yeni sürümü yüklemen gerekiyor; ilerlemen kaybolmaz.</p>
+    <button class="btn firuze" id="updGo">${app ? 'Yeni sürümü indir' : 'Sayfayı yenile'}</button><button class="btn sec" id="updMenu">Ana menüye dön</button></div>`, () => {
+    $('updGo').onclick = () => { if (!app) { location.reload(); return; } if (UB.openUrl) UB.openUrl(url); else location.href = url; };
+    $('updMenu').onclick = () => { const o = $('ov'); if (o) delete o.dataset.lock; leaveToMenu(); };
+  });
+  const ov = $('ov'); ov.classList.add('center'); ov.dataset.lock = '1'; ov.dataset.upd = '1';
+}
 async function pushNow() {
   if (!MPX || MPX.pushing) return;
   const M = MPX; M.pushing = true; setNet('sync');
@@ -2201,7 +2217,7 @@ async function pushNow() {
       save();
     }
     setNet('ok'); M.fails = 0;
-  } catch (e) { M.fails = (M.fails || 0) + 1; M.retryAt = now() + Math.min(30000, 3000 * M.fails); setNet('off'); }
+  } catch (e) { if (isOld(e)) { M.pending = []; M.retryAt = Infinity; setNet('off'); showUpdate(); return; } M.fails = (M.fails || 0) + 1; M.retryAt = now() + Math.min(30000, 3000 * M.fails); setNet('off'); }
   finally { M.pushing = false; }
 }
 async function poll() {
@@ -2233,6 +2249,7 @@ async function mpOpen(info, me) {
   const M = MPX;
   try {
     try { await Net.syncClock(); } catch (e) {}
+    try { if ((await Net.minClient()) > Net.CLIENT_VER) throw new Error('ESKI_SURUM'); } catch (e) { if (isOld(e)) { MPX = null; showStart(null, 'mp'); showUpdate(); return; } }
     let R = await Net.load(info.id);
     M.code = R.code; M.name = R.name;
     for (let i = 0; i < 8 && !R.W.beys.some(b => b.id === info.hid); i++) {

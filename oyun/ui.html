@@ -576,6 +576,18 @@ function adopt(W, ver) {
   }
   if (had && !$('start')) { sig = ''; render(); }
 }
+// eski sürüm: sunucu kaydı reddetti ya da daha yeni sürüm zorunlu
+const isOld = e => /ESKI_SURUM/.test((e && e.message) || '');
+function showUpdate() {
+  if ($('ov') && $('ov').dataset.upd) return;
+  const url = 'https://github.com/PisoSan/uc-beyleri/releases/latest', app = !!(window.UB && UB.exit);
+  sheet(`<div class="over"><h3>Yeni sürüm gerekli</h3><p>Oyunun kuralları güncellendi. Bu dünyada herkesin aynı kurallarla oynaması için yeni sürümü yüklemen gerekiyor; ilerlemen kaybolmaz.</p>
+    <button class="btn firuze" id="updGo">${app ? 'Yeni sürümü indir' : 'Sayfayı yenile'}</button><button class="btn sec" id="updMenu">Ana menüye dön</button></div>`, () => {
+    $('updGo').onclick = () => { if (!app) { location.reload(); return; } if (UB.openUrl) UB.openUrl(url); else location.href = url; };
+    $('updMenu').onclick = () => { const o = $('ov'); if (o) delete o.dataset.lock; leaveToMenu(); };
+  });
+  const ov = $('ov'); ov.classList.add('center'); ov.dataset.lock = '1'; ov.dataset.upd = '1';
+}
 async function pushNow() {
   if (!MPX || MPX.pushing) return;
   const M = MPX; M.pushing = true; setNet('sync');
@@ -594,7 +606,7 @@ async function pushNow() {
       save();
     }
     setNet('ok'); M.fails = 0;
-  } catch (e) { M.fails = (M.fails || 0) + 1; M.retryAt = now() + Math.min(30000, 3000 * M.fails); setNet('off'); }
+  } catch (e) { if (isOld(e)) { M.pending = []; M.retryAt = Infinity; setNet('off'); showUpdate(); return; } M.fails = (M.fails || 0) + 1; M.retryAt = now() + Math.min(30000, 3000 * M.fails); setNet('off'); }
   finally { M.pushing = false; }
 }
 async function poll() {
@@ -626,6 +638,7 @@ async function mpOpen(info, me) {
   const M = MPX;
   try {
     try { await Net.syncClock(); } catch (e) {}
+    try { if ((await Net.minClient()) > Net.CLIENT_VER) throw new Error('ESKI_SURUM'); } catch (e) { if (isOld(e)) { MPX = null; showStart(null, 'mp'); showUpdate(); return; } }
     let R = await Net.load(info.id);
     M.code = R.code; M.name = R.name;
     for (let i = 0; i < 8 && !R.W.beys.some(b => b.id === info.hid); i++) {
