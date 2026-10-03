@@ -61,6 +61,7 @@ const PLACE = ['Karapınar', 'Akçakale', 'Yenice', 'Kızılcaköy', 'Sarıçam'
   'Kestanelik', 'Yeşilova', 'Göller', 'Akpınar', 'Çayırlı', 'Sultanhanı', 'Kuşadası', 'Oğuzlar', 'Beypazarı', 'Karacasu', 'Elmalı', 'Ardıçlı'];
 
 const WORLD = 25;
+const WS = () => (S && S.size) || WORLD;   // dünyanın kenar uzunluğu (eski dünyalar 25)
 
 // ---------- seviyeye bağlı bina şartları ----------
 function reqFor(b, lvl) {
@@ -80,7 +81,7 @@ function reqFor(b, lvl) {
 // ---------- klanlar ve sohbet ----------
 // Bu sürümde klan üyeleri ve sohbetteki diğer beyler bilgisayar tarafından yönetilir.
 // Online sürümde aynı veri yapısı sunucudan gelen gerçek oyuncu mesajlarıyla dolacak.
-const CHAT_MAX = 150, CLAN_MAX = 5;
+const CHAT_MAX = 150, CLAN_MAX = 100;
 const AI_CLANS = [{ tag: 'KRM', name: 'Konya Divanı', m: ['B0', 'B5'] }, { tag: 'EGE', name: 'Ege Uçları', m: ['B2', 'B3', 'B4'] }];
 function clanOf(o) { if (!o) return null; if (o === 'P') return S.clan ? S.clan.tag : null; const b = beyOf(o); return b ? b.clan || null : null; }
 function sameClan(a, b) { const ca = clanOf(a), cb = clanOf(b); return !!ca && ca === cb; }
@@ -446,16 +447,17 @@ function newGame(opts) {
   const seed = opts.seed != null ? opts.seed : Math.floor(Math.random() * 1e9);
   const rnd = mulberry32(seed);
   const ri = (a, b) => a + Math.floor(rnd() * (b - a + 1));
-  S = { ver: 1, rs: seed ^ 0x5bd1e995, mp: !!opts.mp, extra: {}, invites: [], rel: [], dipl: [], clanMeta: {}, market: [], tech: {}, techq: null, clan: null, chat: { genel: [], klan: [] }, chatq: [], chatSeen: { genel: 0, klan: 0 }, nextChat: t + 30000, seed, speed: opts.speed, created: t, lastT: t, protectUntil: t + 3 * 24 * HOUR / opts.speed,
+  S = { size: Math.max(WORLD, Math.min(80, opts.size || WORLD)), ver: 1, rs: seed ^ 0x5bd1e995, mp: !!opts.mp, extra: {}, invites: [], rel: [], dipl: [], clanMeta: {}, market: [], tech: {}, techq: null, clan: null, chat: { genel: [], klan: [] }, chatq: [], chatSeen: { genel: 0, klan: 0 }, nextChat: t + 30000, seed, speed: opts.speed, created: t, lastT: t, protectUntil: t + 3 * 24 * HOUR / opts.speed,
     nextAi: t + HOUR / opts.speed, uid: 100, player: { name: opts.name || 'Kızılırmak Beyliği', color: '#e3b341' },
     beys: [], vil: [], moves: [], reports: [], quests: { claimed: [] },
     stats: { trained: {}, barbWins: 0, spies: 0 }, cur: 0, over: false };
   const names = PLACE.slice().sort(() => rnd() - .5);
   const taken = [];
-  const free = (x, y, min) => x >= 0 && y >= 0 && x < WORLD && y < WORLD && taken.every(p => Math.hypot(p.x - x, p.y - y) >= min);
-  const place = (test, min) => { for (let i = 0; i < 4000; i++) { const x = ri(0, WORLD - 1), y = ri(0, WORLD - 1); if (free(x, y, min) && test(x, y)) { taken.push({ x, y }); return { x, y }; } } return null; };
+  const N = S.size, MID = Math.floor(N / 2), sc = N / WORLD;
+  const free = (x, y, min) => x >= 0 && y >= 0 && x < N && y < N && taken.every(p => Math.hypot(p.x - x, p.y - y) >= min);
+  const place = (test, min) => { for (let i = 0; i < 6000; i++) { const x = ri(0, N - 1), y = ri(0, N - 1); if (free(x, y, min) && test(x, y)) { taken.push({ x, y }); return { x, y }; } } return null; };
 
-  const pp = place((x, y) => Math.abs(x - 12) <= 2 && Math.abs(y - 12) <= 2, 0);
+  const pp = place((x, y) => Math.abs(x - MID) <= 2 && Math.abs(y - MID) <= 2, 0);
   const pv = mkVillage(0, pp.x, pp.y, opts.village || 'Kızılcahamam', 'P',
     { konak: 1, kereste: 1, tas: 1, demir: 1, ambar: 1, ciftlik: 1 }, {}, [500, 500, 400], t);
   S.vil.push(pv);
@@ -476,9 +478,10 @@ function newGame(opts) {
   });
 
   let n = 0;
-  while (n < 34) {
+  const NB = Math.round(34 * sc * sc);   // terk edilmiş köy sayısı harita alanıyla büyür
+  while (n < NB) {
     const p = place(() => true, 1.9); if (!p) break;
-    const dd = Math.hypot(p.x - pp.x, p.y - pp.y), far = Math.min(1, dd / 12);
+    const dd = Math.hypot(p.x - pp.x, p.y - pp.y), far = Math.min(1, dd / (12 * sc));
     const v = mkVillage(S.vil.length, p.x, p.y, names[n % names.length], null,
       { konak: ri(1, 3), kereste: ri(1, 3 + Math.round(far * 4)), tas: ri(1, 3 + Math.round(far * 4)), demir: ri(1, 2 + Math.round(far * 4)),
         ambar: ri(2, 3 + Math.round(far * 3)), ciftlik: ri(2, 4), sur: ri(0, Math.round(far * 3)) },
@@ -800,7 +803,7 @@ function respawn(t, name) {
     if (v.owner !== null || S.moves.some(m => m.to === v.id && m.type === 'attack')) continue;
     const near = occupied.length ? Math.min(...occupied.map(o => dist(o, v))) : 9;
     if (near < 3) continue;
-    const sc = Math.abs(near - 5) * 2 + dist(v, { x: 12, y: 12 }) * .3;
+    const sc = Math.abs(near - 5) * 2 + dist(v, { x: WS() / 2, y: WS() / 2 }) * .3;
     if (sc < bs) { bs = sc; best = v; }
   }
   if (!best) best = S.vil.find(v => v.owner === null);
@@ -1190,7 +1193,7 @@ const AI = (() => {
 
 return {
   HOUR, RES_NAMES, MINES, B, B_ORDER, U, U_ORDER, REC_B, WORLD, TECH, TECH_ORDER,
-  reqFor, simulate, defBonus, HOME_BONUS, NIGHT_BONUS, WALL_MULT, sancakOf, SANCAK_MAX, dayPhase, statsOf, addSup, supUnits, recallSup, respawn, RANKS, RELS, DIPK, members, leaderOf, rankOf, canDo, cmeta, setRank, kickMember, setDesc, relOf, relEntry, relOwners, clanPts, clanName, humanDecider, declareWar, proposeRel, answerRel, cancelRel, breakRel, inviteHuman, acceptInvite, declineInvite, isHuman, protectOf, mkVillage, clanOf, sameClan, clanList, ownerPts, createClan, inviteBey, joinClan, leaveClan, playerSay, CLAN_MAX, techCost, techTime, canResearch, research, migrate, medreseMax, TL,
+  WS, reqFor, simulate, defBonus, HOME_BONUS, NIGHT_BONUS, WALL_MULT, sancakOf, SANCAK_MAX, dayPhase, statsOf, addSup, supUnits, recallSup, respawn, RANKS, RELS, DIPK, members, leaderOf, rankOf, canDo, cmeta, setRank, kickMember, setDesc, relOf, relEntry, relOwners, clanPts, clanName, humanDecider, declareWar, proposeRel, answerRel, cancelRel, breakRel, inviteHuman, acceptInvite, declineInvite, isHuman, protectOf, mkVillage, clanOf, sameClan, clanList, ownerPts, createClan, inviteBey, joinClan, leaveClan, playerSay, CLAN_MAX, techCost, techTime, canResearch, research, migrate, medreseMax, TL,
   get S() { return S; }, set S(x) { S = x; },
   onNotify(fn) { log = fn; },
   maxAll(v, t) { syncRes(v, t); for (const b of B_ORDER) v.b[b] = B[b].max; v.bq = []; const c = cap(v); v.res = [c, c, c]; },

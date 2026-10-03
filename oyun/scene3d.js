@@ -1291,9 +1291,9 @@ function mapTemplate(tier, barb) {
   return MP.tpl[key] = { g, flags };
 }
 function mapWorld() {
-  const W = new T.Group(), N = C.WORLD;
+  const W = new T.Group(), N = C.WS();
   // zemin
-  const ground = new T.PlaneGeometry(N + 40, N + 40, 120, 120); ground.rotateX(-Math.PI / 2);
+  const gs = Math.min(260, Math.round((N + 40) * 1.85)), ground = new T.PlaneGeometry(N + 40, N + 40, gs, gs); ground.rotateX(-Math.PI / 2);
   const gp = ground.attributes.position, gc = [], VC = S.vil.map(v => [v.x + .5, v.y + .5]);
   const mixc = (a, b, t) => a.map((x, i) => x + (b[i] - x) * Math.max(0, Math.min(1, t)));
   for (let i = 0; i < gp.count; i++) {
@@ -1356,13 +1356,17 @@ function mapWorld() {
 function mapVillages() {
   if (MP.vg) { MP.scene.remove(MP.vg); }
   const g = new T.Group(); MP.vg = g; MP.tiers = {};
+  // köyler 10×10 karelik bölgelerde birleşir: ekran dışındaki bölgeler hiç çizilmez
+  const chunks = new Map();
   for (const v of S.vil) {
     const tier = tierOf(C.vPoints(v)), barb = v.owner === null, t = mapTemplate(tier, barb), c = t.g.clone();
     c.position.set(v.x + .5, 0, v.y + .5); c.rotation.y = (hash2(v.x, v.y, 3) - .5) * .5;
     if (!barb) for (const f of t.flags) mapFlag(c, f, C.ownerColor(v.owner));
-    c.userData.vid = v.id; g.add(c); MP.tiers[v.id] = tier;
+    c.userData.vid = v.id; MP.tiers[v.id] = tier;
+    const key = Math.floor(v.x / 10) + ',' + Math.floor(v.y / 10); let cg = chunks.get(key); if (!cg) { cg = new T.Group(); chunks.set(key, cg); }
+    cg.add(c);
   }
-  mergeGroup(g, null);
+  for (const cg of chunks.values()) { mergeGroup(cg, null); g.add(cg); }
   // kendi köylerin altında altın halka
   const ringG = new T.RingGeometry(.44, .5, 40), mine = new T.MeshBasicMaterial({ color: '#dcaa45', transparent: true, opacity: .8, depthWrite: false });
   for (const v of S.vil.filter(v => v.owner === 'P')) { const r = new T.Mesh(ringG, mine); r.rotation.x = -Math.PI / 2; r.position.set(v.x + .5, .035, v.y + .5); g.add(r); }
@@ -1370,11 +1374,13 @@ function mapVillages() {
 }
 function mapSig() { return S.vil.map(v => (v.owner || '-') + tierOf(C.vPoints(v))).join(',') + S.player.color; }
 function mapCam() {
-  const vw = MP.view, N = C.WORLD; vw.dist = Math.max(3.5, Math.min(30, vw.dist)); vw.pitch = Math.max(.55, Math.min(1.4, vw.pitch));
+  const vw = MP.view, N = C.WS(); vw.dist = Math.max(3.5, Math.min(30, vw.dist)); vw.pitch = Math.max(.55, Math.min(1.4, vw.pitch));
   vw.tx = Math.max(-1, Math.min(N + 1, vw.tx)); vw.tz = Math.max(-1, Math.min(N + 1, vw.tz));
   const c = MP.cam, cp = Math.cos(vw.pitch);
   c.position.set(vw.tx + Math.sin(vw.yaw) * cp * vw.dist, Math.sin(vw.pitch) * vw.dist, vw.tz + Math.cos(vw.yaw) * cp * vw.dist); c.lookAt(vw.tx, 0, vw.tz);
-  if (!MP.shadowSet) { MP.shadowSet = true; const sc = MP.sun.shadow.camera, N2 = N / 2 + 2; sc.left = sc.bottom = -N2 * 1.15; sc.right = sc.top = N2 * 1.15; sc.near = 1; sc.far = 80; sc.updateProjectionMatrix(); MP.sun.position.set(N / 2 - 12, 26, N / 2 + 8); MP.sun.target.position.set(N / 2, 0, N / 2); MP.r.shadowMap.needsUpdate = true; }
+  // gölge, kameranın baktığı bölgeye odaklanır (büyük haritada da net kalır); bölge değişince bir kez yeniden çizilir
+  const H2 = Math.min(N / 2 + 2, 18), cx = N <= 30 ? N / 2 : Math.round(vw.tx / 6) * 6, cz = N <= 30 ? N / 2 : Math.round(vw.tz / 6) * 6, key = cx + ',' + cz + ',' + H2;
+  if (!MP.shadowSet || MP.shadowKey !== key) { MP.shadowSet = true; MP.shadowKey = key; const sc = MP.sun.shadow.camera; sc.left = sc.bottom = -H2 * 1.15; sc.right = sc.top = H2 * 1.15; sc.near = 1; sc.far = 80; sc.updateProjectionMatrix(); MP.sun.position.set(cx - 12, 26, cz + 8); MP.sun.target.position.set(cx, 0, cz); MP.sun.target.updateMatrixWorld(); MP.r.shadowMap.needsUpdate = true; }
 }
 function mapProj(x, z) { const r = MP.cv.getBoundingClientRect(), p = new T.Vector3(x, 0, z).project(MP.cam); return { x: (p.x + 1) / 2 * r.width, y: (1 - p.y) / 2 * r.height, z: p.z }; }
 function mapPan(dx, dy) {
@@ -1399,7 +1405,7 @@ function mapStart() {
     cv.style.touchAction = 'none';
     mapWire(cv);
   }
-  if (MP.worldSeed !== S.seed) { MP.scene.remove(MP.world); MP.world = mapWorld(); MP.scene.add(MP.world); MP.worldSeed = S.seed; }
+  if (MP.worldSeed !== S.seed) { MP.scene.remove(MP.world); MP.world = mapWorld(); MP.scene.add(MP.world); MP.worldSeed = S.seed; MP.shadowSet = false; MP.r.shadowMap.needsUpdate = true; }
   let ov = $('mapOv');
   if (!ov) { ov = document.createElement('canvas'); ov.id = 'mapOv'; ov.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none'; cv.after(ov); }
   MP.ov = ov; MP.vsig = ''; MP.night = null;

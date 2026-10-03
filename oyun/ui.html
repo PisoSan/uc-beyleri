@@ -603,7 +603,8 @@ async function pushNow() {
   if (!MPX || MPX.pushing) return;
   const M = MPX; M.pushing = true; setNet('sync');
   try {
-    for (let tries = 0; tries < 8; tries++) {
+    for (let tries = 0; tries < 24; tries++) {
+      if (tries) await new Promise(r => setTimeout(r, 120 + Math.random() * 300 * Math.min(tries, 5)));   // çakışmada rastgele bekle
       const n = M.pending.length;
       C.processUntil(now());
       const v = await Net.save(M.id, Net.delocalize(S), M.ver);
@@ -783,7 +784,12 @@ function showStart(err, step) {
       <section class="card mpbox"><b>Dünyaların</b><div class="wlist" id="mpList"><div class="muted small">Yükleniyor…</div></div></section>
       <section class="card mpbox"><b>Beylik bilgilerin</b><div class="muted small">Yeni kurduğun ya da katıldığın dünyada bu adlarla başlarsın.</div>${nameFields()}</section>
       <section class="card mpbox"><b>Koda katıl</b><div class="muted small">Arkadaşının verdiği 6 harfli kodu yaz.</div><div class="mprow"><input id="mpCode" maxlength="6" placeholder="KOD" autocomplete="off" aria-label="Dünya kodu"><button class="btn" id="mpJoin">Katıl</button></div></section>
-      <section class="card mpbox"><b>Yeni dünya kur</b><div class="muted small">Sana bir kod verilir; arkadaşların bu kodla katılır.</div>${speeds()}<button class="bigbtn" id="mpNew">Dünya kur</button></section>
+      <section class="card mpbox"><b>Yeni dünya kur</b><div class="muted small">Sana bir kod verilir; arkadaşların bu kodla katılır.</div>${speeds()}
+        <div class="field">Harita büyüklüğü<div class="speeds">
+          <label><input type="radio" name="wsz" value="25"><b>Küçük · 25×25</b><span>~40 köy, 10 oyuncuya kadar. Herkes birbirine yakın.</span></label>
+          <label><input type="radio" name="wsz" value="40" checked><b>Orta · 40×40</b><span>~90 köy, 40 oyuncuya kadar.</span></label>
+          <label><input type="radio" name="wsz" value="60"><b>Büyük · 60×60</b><span>~200 köy, 100 oyuncuya kadar. Büyük ekipler için.</span></label></div></div>
+        <button class="bigbtn" id="mpNew">Dünya kur</button></section>
       ${u ? `<div class="chips" style="justify-content:center"><button class="linkbtn" data-acc="pass">Şifre değiştir</button></div>` : ''}`;
   } else {
     body = `${hero(true)}${backBtn}${err ? `<div class="mperr">${esc(err)}</div>` : ''}
@@ -836,7 +842,8 @@ function showStart(err, step) {
     const { name, village } = names(); busy(true, 'Dünya kuruluyor…');
     try {
       await Net.session();
-      const S0 = C.newGame({ now: now(), speed: speedV(), name, village, mp: true });
+      const sz = +((document.querySelector('input[name=wsz]:checked') || {}).value || 40);
+      const S0 = C.newGame({ now: now(), speed: speedV(), name, village, mp: true, size: sz });
       S0._me = { hid: 'H1', idx: S0.beys.length, uid: Net.uid }; S0.clanChat = {};
       const r = await Net.createWorld(Net.delocalize(S0), name.replace(/ Beyliği$/, '') + ' Dünyası', name);
       el.remove(); await mpOpen({ id: r.id, hid: r.hid, code: r.code });
@@ -1712,14 +1719,14 @@ function renderMap() {
 }
 function mapPt(x, y) { return map.three ? V3.map.proj(x, y) : { x: x * map.T - map.ox, y: y * map.T - map.oy }; }
 function centerOn(v) { if (map.three) { V3.map.center(v); return; } const cv = $('map'); if (!cv) return; const r = cv.getBoundingClientRect(); map.ox = (v.x + .5) * map.T - r.width / 2; map.oy = (v.y + .5) * map.T - r.height * .42; clampMap(); }
-function clampMap() { const cv = $('map'), r = cv.getBoundingClientRect(), W = C.WORLD * map.T; map.ox = Math.max(-60, Math.min(W - r.width + 60, map.ox)); map.oy = Math.max(-60, Math.min(W - r.height + 180, map.oy)); }
+function clampMap() { const cv = $('map'), r = cv.getBoundingClientRect(), W = C.WS() * map.T; map.ox = Math.max(-60, Math.min(W - r.width + 60, map.ox)); map.oy = Math.max(-60, Math.min(W - r.height + 180, map.oy)); }
 const hash = (x, y) => { let h = x * 374761393 + y * 668265263 + S.seed; h = (h ^ (h >>> 13)) * 1274126177; return ((h ^ (h >>> 16)) >>> 0); };
 function drawMap() {
   if (map.three) { if ($('map')) V3.map.frame(); return; }
   const cv = $('map'); if (!cv) return; const g = cv.getContext('2d'), r = cv.getBoundingClientRect(), T = map.T;
   g.fillStyle = '#0c1422'; g.fillRect(0, 0, r.width, r.height);
   const x0 = Math.max(0, Math.floor(map.ox / T)), y0 = Math.max(0, Math.floor(map.oy / T));
-  const x1 = Math.min(C.WORLD - 1, Math.ceil((map.ox + r.width) / T)), y1 = Math.min(C.WORLD - 1, Math.ceil((map.oy + r.height) / T));
+  const x1 = Math.min(C.WS() - 1, Math.ceil((map.ox + r.width) / T)), y1 = Math.min(C.WS() - 1, Math.ceil((map.oy + r.height) / T));
   const occ = new Set(S.vil.map(v => v.x + ',' + v.y));
   for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
     const h = hash(x, y), px = x * T - map.ox, py = y * T - map.oy;
@@ -1736,8 +1743,8 @@ function drawMap() {
   }
   // 5'lik ızgara
   g.strokeStyle = 'rgba(255,255,255,.07)'; g.lineWidth = 1;
-  for (let i = 0; i <= C.WORLD; i += 5) { g.beginPath(); g.moveTo(i * T - map.ox, -map.oy); g.lineTo(i * T - map.ox, C.WORLD * T - map.oy); g.stroke(); g.beginPath(); g.moveTo(-map.ox, i * T - map.oy); g.lineTo(C.WORLD * T - map.ox, i * T - map.oy); g.stroke(); }
-  g.strokeStyle = 'rgba(220,170,69,.35)'; g.strokeRect(-map.ox, -map.oy, C.WORLD * T, C.WORLD * T);
+  for (let i = 0; i <= C.WS(); i += 5) { g.beginPath(); g.moveTo(i * T - map.ox, -map.oy); g.lineTo(i * T - map.ox, C.WS() * T - map.oy); g.stroke(); g.beginPath(); g.moveTo(-map.ox, i * T - map.oy); g.lineTo(C.WS() * T - map.ox, i * T - map.oy); g.stroke(); }
+  g.strokeStyle = 'rgba(220,170,69,.35)'; g.strokeRect(-map.ox, -map.oy, C.WS() * T, C.WS() * T);
   // hareketler (yollar altta, ordular kalelerin üstünde)
   const armies = drawMoves(g, T);
   // köyler

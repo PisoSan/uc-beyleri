@@ -94,6 +94,8 @@ function swapIds(x, a, b) {
   if (Array.isArray(x)) { for (const y of x) if (y && typeof y === 'object') swapIds(y, a, b); return; }
   for (const k in x) { const v = x[k]; if (v === a && OWN_KEYS.has(k)) x[k] = b; else if (v && typeof v === 'object') swapIds(v, a, b); }
 }
+// 8'den fazla oyuncuda altın oran açısıyla ayrışan renkler
+function hcol(n) { if (n < HCOL.length) return HCOL[n]; const h = (n * 137.508) % 360, s = .62, l = .6, k = x => (x + h / 30) % 12, a = s * Math.min(l, 1 - l), f = x => Math.round(255 * (l - a * Math.max(-1, Math.min(k(x) - 3, 9 - k(x), 1)))).toString(16).padStart(2, '0'); return '#' + f(0) + f(8) + f(4); }
 const HCOL = ['#e3b341', '#4fc3f7', '#f06292', '#aed581', '#ffb74d', '#ce93d8', '#4db6ac', '#ff8a65'];
 function localize(W, hid) {
   const S = JSON.parse(JSON.stringify(W));
@@ -135,7 +137,7 @@ function addHuman(W, hid, uid, name, village, t) {
     if (v.owner !== null) continue;
     const near = Math.min(...occupied.map(o => d(o, v)));
     if (near < 3.5) continue;
-    const s = Math.abs(near - 5) * 2 + d(v, { x: 12, y: 12 }) * .4;
+    const s = Math.abs(near - 5) * 2 + d(v, { x: (W.size || 25) / 2, y: (W.size || 25) / 2 }) * .4;
     if (s < bs) { bs = s; best = v; }
   }
   if (!best) best = W.vil.find(v => v.owner === null);
@@ -145,7 +147,7 @@ function addHuman(W, hid, uid, name, village, t) {
   W.vil[best.id] = nv;
   W.moves = W.moves.filter(m => m.to !== best.id || m.type === 'return' || m.type === 'tradeback');
   const n = W.beys.filter(b => b.human).length;
-  W.beys.push({ id: hid, human: true, uid, name: String(name || 'Beylik').slice(0, 28), color: HCOL[n % HCOL.length], aggr: 0, lastHitP: 0,
+  W.beys.push({ id: hid, human: true, uid, name: String(name || 'Beylik').slice(0, 28), color: hcol(n), aggr: 0, lastHitP: 0,
     clan: null, clanName: null, clanJoinedAi: false, tech: {}, techq: null, stats: { trained: {}, barbWins: 0, spies: 0 },
     protectUntil: t + 3 * 24 * Core.HOUR / W.speed, reports: [], quests: { claimed: [] }, cur: best.id });
   W.chat.genel.push({ id: ++W.uid, t, from: 'SYS', text: String(name || 'Yeni bir bey') + ' dünyaya katıldı.' });

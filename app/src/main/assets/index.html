@@ -540,6 +540,7 @@ const PLACE = ['Karapınar', 'Akçakale', 'Yenice', 'Kızılcaköy', 'Sarıçam'
   'Kestanelik', 'Yeşilova', 'Göller', 'Akpınar', 'Çayırlı', 'Sultanhanı', 'Kuşadası', 'Oğuzlar', 'Beypazarı', 'Karacasu', 'Elmalı', 'Ardıçlı'];
 
 const WORLD = 25;
+const WS = () => (S && S.size) || WORLD;   // dünyanın kenar uzunluğu (eski dünyalar 25)
 
 // ---------- seviyeye bağlı bina şartları ----------
 function reqFor(b, lvl) {
@@ -559,7 +560,7 @@ function reqFor(b, lvl) {
 // ---------- klanlar ve sohbet ----------
 // Bu sürümde klan üyeleri ve sohbetteki diğer beyler bilgisayar tarafından yönetilir.
 // Online sürümde aynı veri yapısı sunucudan gelen gerçek oyuncu mesajlarıyla dolacak.
-const CHAT_MAX = 150, CLAN_MAX = 5;
+const CHAT_MAX = 150, CLAN_MAX = 100;
 const AI_CLANS = [{ tag: 'KRM', name: 'Konya Divanı', m: ['B0', 'B5'] }, { tag: 'EGE', name: 'Ege Uçları', m: ['B2', 'B3', 'B4'] }];
 function clanOf(o) { if (!o) return null; if (o === 'P') return S.clan ? S.clan.tag : null; const b = beyOf(o); return b ? b.clan || null : null; }
 function sameClan(a, b) { const ca = clanOf(a), cb = clanOf(b); return !!ca && ca === cb; }
@@ -925,16 +926,17 @@ function newGame(opts) {
   const seed = opts.seed != null ? opts.seed : Math.floor(Math.random() * 1e9);
   const rnd = mulberry32(seed);
   const ri = (a, b) => a + Math.floor(rnd() * (b - a + 1));
-  S = { ver: 1, rs: seed ^ 0x5bd1e995, mp: !!opts.mp, extra: {}, invites: [], rel: [], dipl: [], clanMeta: {}, market: [], tech: {}, techq: null, clan: null, chat: { genel: [], klan: [] }, chatq: [], chatSeen: { genel: 0, klan: 0 }, nextChat: t + 30000, seed, speed: opts.speed, created: t, lastT: t, protectUntil: t + 3 * 24 * HOUR / opts.speed,
+  S = { size: Math.max(WORLD, Math.min(80, opts.size || WORLD)), ver: 1, rs: seed ^ 0x5bd1e995, mp: !!opts.mp, extra: {}, invites: [], rel: [], dipl: [], clanMeta: {}, market: [], tech: {}, techq: null, clan: null, chat: { genel: [], klan: [] }, chatq: [], chatSeen: { genel: 0, klan: 0 }, nextChat: t + 30000, seed, speed: opts.speed, created: t, lastT: t, protectUntil: t + 3 * 24 * HOUR / opts.speed,
     nextAi: t + HOUR / opts.speed, uid: 100, player: { name: opts.name || 'Kızılırmak Beyliği', color: '#e3b341' },
     beys: [], vil: [], moves: [], reports: [], quests: { claimed: [] },
     stats: { trained: {}, barbWins: 0, spies: 0 }, cur: 0, over: false };
   const names = PLACE.slice().sort(() => rnd() - .5);
   const taken = [];
-  const free = (x, y, min) => x >= 0 && y >= 0 && x < WORLD && y < WORLD && taken.every(p => Math.hypot(p.x - x, p.y - y) >= min);
-  const place = (test, min) => { for (let i = 0; i < 4000; i++) { const x = ri(0, WORLD - 1), y = ri(0, WORLD - 1); if (free(x, y, min) && test(x, y)) { taken.push({ x, y }); return { x, y }; } } return null; };
+  const N = S.size, MID = Math.floor(N / 2), sc = N / WORLD;
+  const free = (x, y, min) => x >= 0 && y >= 0 && x < N && y < N && taken.every(p => Math.hypot(p.x - x, p.y - y) >= min);
+  const place = (test, min) => { for (let i = 0; i < 6000; i++) { const x = ri(0, N - 1), y = ri(0, N - 1); if (free(x, y, min) && test(x, y)) { taken.push({ x, y }); return { x, y }; } } return null; };
 
-  const pp = place((x, y) => Math.abs(x - 12) <= 2 && Math.abs(y - 12) <= 2, 0);
+  const pp = place((x, y) => Math.abs(x - MID) <= 2 && Math.abs(y - MID) <= 2, 0);
   const pv = mkVillage(0, pp.x, pp.y, opts.village || 'Kızılcahamam', 'P',
     { konak: 1, kereste: 1, tas: 1, demir: 1, ambar: 1, ciftlik: 1 }, {}, [500, 500, 400], t);
   S.vil.push(pv);
@@ -955,9 +957,10 @@ function newGame(opts) {
   });
 
   let n = 0;
-  while (n < 34) {
+  const NB = Math.round(34 * sc * sc);   // terk edilmiş köy sayısı harita alanıyla büyür
+  while (n < NB) {
     const p = place(() => true, 1.9); if (!p) break;
-    const dd = Math.hypot(p.x - pp.x, p.y - pp.y), far = Math.min(1, dd / 12);
+    const dd = Math.hypot(p.x - pp.x, p.y - pp.y), far = Math.min(1, dd / (12 * sc));
     const v = mkVillage(S.vil.length, p.x, p.y, names[n % names.length], null,
       { konak: ri(1, 3), kereste: ri(1, 3 + Math.round(far * 4)), tas: ri(1, 3 + Math.round(far * 4)), demir: ri(1, 2 + Math.round(far * 4)),
         ambar: ri(2, 3 + Math.round(far * 3)), ciftlik: ri(2, 4), sur: ri(0, Math.round(far * 3)) },
@@ -1279,7 +1282,7 @@ function respawn(t, name) {
     if (v.owner !== null || S.moves.some(m => m.to === v.id && m.type === 'attack')) continue;
     const near = occupied.length ? Math.min(...occupied.map(o => dist(o, v))) : 9;
     if (near < 3) continue;
-    const sc = Math.abs(near - 5) * 2 + dist(v, { x: 12, y: 12 }) * .3;
+    const sc = Math.abs(near - 5) * 2 + dist(v, { x: WS() / 2, y: WS() / 2 }) * .3;
     if (sc < bs) { bs = sc; best = v; }
   }
   if (!best) best = S.vil.find(v => v.owner === null);
@@ -1669,7 +1672,7 @@ const AI = (() => {
 
 return {
   HOUR, RES_NAMES, MINES, B, B_ORDER, U, U_ORDER, REC_B, WORLD, TECH, TECH_ORDER,
-  reqFor, simulate, defBonus, HOME_BONUS, NIGHT_BONUS, WALL_MULT, sancakOf, SANCAK_MAX, dayPhase, statsOf, addSup, supUnits, recallSup, respawn, RANKS, RELS, DIPK, members, leaderOf, rankOf, canDo, cmeta, setRank, kickMember, setDesc, relOf, relEntry, relOwners, clanPts, clanName, humanDecider, declareWar, proposeRel, answerRel, cancelRel, breakRel, inviteHuman, acceptInvite, declineInvite, isHuman, protectOf, mkVillage, clanOf, sameClan, clanList, ownerPts, createClan, inviteBey, joinClan, leaveClan, playerSay, CLAN_MAX, techCost, techTime, canResearch, research, migrate, medreseMax, TL,
+  WS, reqFor, simulate, defBonus, HOME_BONUS, NIGHT_BONUS, WALL_MULT, sancakOf, SANCAK_MAX, dayPhase, statsOf, addSup, supUnits, recallSup, respawn, RANKS, RELS, DIPK, members, leaderOf, rankOf, canDo, cmeta, setRank, kickMember, setDesc, relOf, relEntry, relOwners, clanPts, clanName, humanDecider, declareWar, proposeRel, answerRel, cancelRel, breakRel, inviteHuman, acceptInvite, declineInvite, isHuman, protectOf, mkVillage, clanOf, sameClan, clanList, ownerPts, createClan, inviteBey, joinClan, leaveClan, playerSay, CLAN_MAX, techCost, techTime, canResearch, research, migrate, medreseMax, TL,
   get S() { return S; }, set S(x) { S = x; },
   onNotify(fn) { log = fn; },
   maxAll(v, t) { syncRes(v, t); for (const b of B_ORDER) v.b[b] = B[b].max; v.bq = []; const c = cap(v); v.res = [c, c, c]; },
@@ -1778,6 +1781,8 @@ function swapIds(x, a, b) {
   if (Array.isArray(x)) { for (const y of x) if (y && typeof y === 'object') swapIds(y, a, b); return; }
   for (const k in x) { const v = x[k]; if (v === a && OWN_KEYS.has(k)) x[k] = b; else if (v && typeof v === 'object') swapIds(v, a, b); }
 }
+// 8'den fazla oyuncuda altın oran açısıyla ayrışan renkler
+function hcol(n) { if (n < HCOL.length) return HCOL[n]; const h = (n * 137.508) % 360, s = .62, l = .6, k = x => (x + h / 30) % 12, a = s * Math.min(l, 1 - l), f = x => Math.round(255 * (l - a * Math.max(-1, Math.min(k(x) - 3, 9 - k(x), 1)))).toString(16).padStart(2, '0'); return '#' + f(0) + f(8) + f(4); }
 const HCOL = ['#e3b341', '#4fc3f7', '#f06292', '#aed581', '#ffb74d', '#ce93d8', '#4db6ac', '#ff8a65'];
 function localize(W, hid) {
   const S = JSON.parse(JSON.stringify(W));
@@ -1819,7 +1824,7 @@ function addHuman(W, hid, uid, name, village, t) {
     if (v.owner !== null) continue;
     const near = Math.min(...occupied.map(o => d(o, v)));
     if (near < 3.5) continue;
-    const s = Math.abs(near - 5) * 2 + d(v, { x: 12, y: 12 }) * .4;
+    const s = Math.abs(near - 5) * 2 + d(v, { x: (W.size || 25) / 2, y: (W.size || 25) / 2 }) * .4;
     if (s < bs) { bs = s; best = v; }
   }
   if (!best) best = W.vil.find(v => v.owner === null);
@@ -1829,7 +1834,7 @@ function addHuman(W, hid, uid, name, village, t) {
   W.vil[best.id] = nv;
   W.moves = W.moves.filter(m => m.to !== best.id || m.type === 'return' || m.type === 'tradeback');
   const n = W.beys.filter(b => b.human).length;
-  W.beys.push({ id: hid, human: true, uid, name: String(name || 'Beylik').slice(0, 28), color: HCOL[n % HCOL.length], aggr: 0, lastHitP: 0,
+  W.beys.push({ id: hid, human: true, uid, name: String(name || 'Beylik').slice(0, 28), color: hcol(n), aggr: 0, lastHitP: 0,
     clan: null, clanName: null, clanJoinedAi: false, tech: {}, techq: null, stats: { trained: {}, barbWins: 0, spies: 0 },
     protectUntil: t + 3 * 24 * Core.HOUR / W.speed, reports: [], quests: { claimed: [] }, cur: best.id });
   W.chat.genel.push({ id: ++W.uid, t, from: 'SYS', text: String(name || 'Yeni bir bey') + ' dünyaya katıldı.' });
@@ -2241,7 +2246,8 @@ async function pushNow() {
   if (!MPX || MPX.pushing) return;
   const M = MPX; M.pushing = true; setNet('sync');
   try {
-    for (let tries = 0; tries < 8; tries++) {
+    for (let tries = 0; tries < 24; tries++) {
+      if (tries) await new Promise(r => setTimeout(r, 120 + Math.random() * 300 * Math.min(tries, 5)));   // çakışmada rastgele bekle
       const n = M.pending.length;
       C.processUntil(now());
       const v = await Net.save(M.id, Net.delocalize(S), M.ver);
@@ -2421,7 +2427,12 @@ function showStart(err, step) {
       <section class="card mpbox"><b>Dünyaların</b><div class="wlist" id="mpList"><div class="muted small">Yükleniyor…</div></div></section>
       <section class="card mpbox"><b>Beylik bilgilerin</b><div class="muted small">Yeni kurduğun ya da katıldığın dünyada bu adlarla başlarsın.</div>${nameFields()}</section>
       <section class="card mpbox"><b>Koda katıl</b><div class="muted small">Arkadaşının verdiği 6 harfli kodu yaz.</div><div class="mprow"><input id="mpCode" maxlength="6" placeholder="KOD" autocomplete="off" aria-label="Dünya kodu"><button class="btn" id="mpJoin">Katıl</button></div></section>
-      <section class="card mpbox"><b>Yeni dünya kur</b><div class="muted small">Sana bir kod verilir; arkadaşların bu kodla katılır.</div>${speeds()}<button class="bigbtn" id="mpNew">Dünya kur</button></section>
+      <section class="card mpbox"><b>Yeni dünya kur</b><div class="muted small">Sana bir kod verilir; arkadaşların bu kodla katılır.</div>${speeds()}
+        <div class="field">Harita büyüklüğü<div class="speeds">
+          <label><input type="radio" name="wsz" value="25"><b>Küçük · 25×25</b><span>~40 köy, 10 oyuncuya kadar. Herkes birbirine yakın.</span></label>
+          <label><input type="radio" name="wsz" value="40" checked><b>Orta · 40×40</b><span>~90 köy, 40 oyuncuya kadar.</span></label>
+          <label><input type="radio" name="wsz" value="60"><b>Büyük · 60×60</b><span>~200 köy, 100 oyuncuya kadar. Büyük ekipler için.</span></label></div></div>
+        <button class="bigbtn" id="mpNew">Dünya kur</button></section>
       ${u ? `<div class="chips" style="justify-content:center"><button class="linkbtn" data-acc="pass">Şifre değiştir</button></div>` : ''}`;
   } else {
     body = `${hero(true)}${backBtn}${err ? `<div class="mperr">${esc(err)}</div>` : ''}
@@ -2474,7 +2485,8 @@ function showStart(err, step) {
     const { name, village } = names(); busy(true, 'Dünya kuruluyor…');
     try {
       await Net.session();
-      const S0 = C.newGame({ now: now(), speed: speedV(), name, village, mp: true });
+      const sz = +((document.querySelector('input[name=wsz]:checked') || {}).value || 40);
+      const S0 = C.newGame({ now: now(), speed: speedV(), name, village, mp: true, size: sz });
       S0._me = { hid: 'H1', idx: S0.beys.length, uid: Net.uid }; S0.clanChat = {};
       const r = await Net.createWorld(Net.delocalize(S0), name.replace(/ Beyliği$/, '') + ' Dünyası', name);
       el.remove(); await mpOpen({ id: r.id, hid: r.hid, code: r.code });
@@ -5477,9 +5489,9 @@ function mapTemplate(tier, barb) {
   return MP.tpl[key] = { g, flags };
 }
 function mapWorld() {
-  const W = new T.Group(), N = C.WORLD;
+  const W = new T.Group(), N = C.WS();
   // zemin
-  const ground = new T.PlaneGeometry(N + 40, N + 40, 120, 120); ground.rotateX(-Math.PI / 2);
+  const gs = Math.min(260, Math.round((N + 40) * 1.85)), ground = new T.PlaneGeometry(N + 40, N + 40, gs, gs); ground.rotateX(-Math.PI / 2);
   const gp = ground.attributes.position, gc = [], VC = S.vil.map(v => [v.x + .5, v.y + .5]);
   const mixc = (a, b, t) => a.map((x, i) => x + (b[i] - x) * Math.max(0, Math.min(1, t)));
   for (let i = 0; i < gp.count; i++) {
@@ -5542,13 +5554,17 @@ function mapWorld() {
 function mapVillages() {
   if (MP.vg) { MP.scene.remove(MP.vg); }
   const g = new T.Group(); MP.vg = g; MP.tiers = {};
+  // köyler 10×10 karelik bölgelerde birleşir: ekran dışındaki bölgeler hiç çizilmez
+  const chunks = new Map();
   for (const v of S.vil) {
     const tier = tierOf(C.vPoints(v)), barb = v.owner === null, t = mapTemplate(tier, barb), c = t.g.clone();
     c.position.set(v.x + .5, 0, v.y + .5); c.rotation.y = (hash2(v.x, v.y, 3) - .5) * .5;
     if (!barb) for (const f of t.flags) mapFlag(c, f, C.ownerColor(v.owner));
-    c.userData.vid = v.id; g.add(c); MP.tiers[v.id] = tier;
+    c.userData.vid = v.id; MP.tiers[v.id] = tier;
+    const key = Math.floor(v.x / 10) + ',' + Math.floor(v.y / 10); let cg = chunks.get(key); if (!cg) { cg = new T.Group(); chunks.set(key, cg); }
+    cg.add(c);
   }
-  mergeGroup(g, null);
+  for (const cg of chunks.values()) { mergeGroup(cg, null); g.add(cg); }
   // kendi köylerin altında altın halka
   const ringG = new T.RingGeometry(.44, .5, 40), mine = new T.MeshBasicMaterial({ color: '#dcaa45', transparent: true, opacity: .8, depthWrite: false });
   for (const v of S.vil.filter(v => v.owner === 'P')) { const r = new T.Mesh(ringG, mine); r.rotation.x = -Math.PI / 2; r.position.set(v.x + .5, .035, v.y + .5); g.add(r); }
@@ -5556,11 +5572,13 @@ function mapVillages() {
 }
 function mapSig() { return S.vil.map(v => (v.owner || '-') + tierOf(C.vPoints(v))).join(',') + S.player.color; }
 function mapCam() {
-  const vw = MP.view, N = C.WORLD; vw.dist = Math.max(3.5, Math.min(30, vw.dist)); vw.pitch = Math.max(.55, Math.min(1.4, vw.pitch));
+  const vw = MP.view, N = C.WS(); vw.dist = Math.max(3.5, Math.min(30, vw.dist)); vw.pitch = Math.max(.55, Math.min(1.4, vw.pitch));
   vw.tx = Math.max(-1, Math.min(N + 1, vw.tx)); vw.tz = Math.max(-1, Math.min(N + 1, vw.tz));
   const c = MP.cam, cp = Math.cos(vw.pitch);
   c.position.set(vw.tx + Math.sin(vw.yaw) * cp * vw.dist, Math.sin(vw.pitch) * vw.dist, vw.tz + Math.cos(vw.yaw) * cp * vw.dist); c.lookAt(vw.tx, 0, vw.tz);
-  if (!MP.shadowSet) { MP.shadowSet = true; const sc = MP.sun.shadow.camera, N2 = N / 2 + 2; sc.left = sc.bottom = -N2 * 1.15; sc.right = sc.top = N2 * 1.15; sc.near = 1; sc.far = 80; sc.updateProjectionMatrix(); MP.sun.position.set(N / 2 - 12, 26, N / 2 + 8); MP.sun.target.position.set(N / 2, 0, N / 2); MP.r.shadowMap.needsUpdate = true; }
+  // gölge, kameranın baktığı bölgeye odaklanır (büyük haritada da net kalır); bölge değişince bir kez yeniden çizilir
+  const H2 = Math.min(N / 2 + 2, 18), cx = N <= 30 ? N / 2 : Math.round(vw.tx / 6) * 6, cz = N <= 30 ? N / 2 : Math.round(vw.tz / 6) * 6, key = cx + ',' + cz + ',' + H2;
+  if (!MP.shadowSet || MP.shadowKey !== key) { MP.shadowSet = true; MP.shadowKey = key; const sc = MP.sun.shadow.camera; sc.left = sc.bottom = -H2 * 1.15; sc.right = sc.top = H2 * 1.15; sc.near = 1; sc.far = 80; sc.updateProjectionMatrix(); MP.sun.position.set(cx - 12, 26, cz + 8); MP.sun.target.position.set(cx, 0, cz); MP.sun.target.updateMatrixWorld(); MP.r.shadowMap.needsUpdate = true; }
 }
 function mapProj(x, z) { const r = MP.cv.getBoundingClientRect(), p = new T.Vector3(x, 0, z).project(MP.cam); return { x: (p.x + 1) / 2 * r.width, y: (1 - p.y) / 2 * r.height, z: p.z }; }
 function mapPan(dx, dy) {
@@ -5585,7 +5603,7 @@ function mapStart() {
     cv.style.touchAction = 'none';
     mapWire(cv);
   }
-  if (MP.worldSeed !== S.seed) { MP.scene.remove(MP.world); MP.world = mapWorld(); MP.scene.add(MP.world); MP.worldSeed = S.seed; }
+  if (MP.worldSeed !== S.seed) { MP.scene.remove(MP.world); MP.world = mapWorld(); MP.scene.add(MP.world); MP.worldSeed = S.seed; MP.shadowSet = false; MP.r.shadowMap.needsUpdate = true; }
   let ov = $('mapOv');
   if (!ov) { ov = document.createElement('canvas'); ov.id = 'mapOv'; ov.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none'; cv.after(ov); }
   MP.ov = ov; MP.vsig = ''; MP.night = null;
@@ -6172,14 +6190,14 @@ function renderMap() {
 }
 function mapPt(x, y) { return map.three ? V3.map.proj(x, y) : { x: x * map.T - map.ox, y: y * map.T - map.oy }; }
 function centerOn(v) { if (map.three) { V3.map.center(v); return; } const cv = $('map'); if (!cv) return; const r = cv.getBoundingClientRect(); map.ox = (v.x + .5) * map.T - r.width / 2; map.oy = (v.y + .5) * map.T - r.height * .42; clampMap(); }
-function clampMap() { const cv = $('map'), r = cv.getBoundingClientRect(), W = C.WORLD * map.T; map.ox = Math.max(-60, Math.min(W - r.width + 60, map.ox)); map.oy = Math.max(-60, Math.min(W - r.height + 180, map.oy)); }
+function clampMap() { const cv = $('map'), r = cv.getBoundingClientRect(), W = C.WS() * map.T; map.ox = Math.max(-60, Math.min(W - r.width + 60, map.ox)); map.oy = Math.max(-60, Math.min(W - r.height + 180, map.oy)); }
 const hash = (x, y) => { let h = x * 374761393 + y * 668265263 + S.seed; h = (h ^ (h >>> 13)) * 1274126177; return ((h ^ (h >>> 16)) >>> 0); };
 function drawMap() {
   if (map.three) { if ($('map')) V3.map.frame(); return; }
   const cv = $('map'); if (!cv) return; const g = cv.getContext('2d'), r = cv.getBoundingClientRect(), T = map.T;
   g.fillStyle = '#0c1422'; g.fillRect(0, 0, r.width, r.height);
   const x0 = Math.max(0, Math.floor(map.ox / T)), y0 = Math.max(0, Math.floor(map.oy / T));
-  const x1 = Math.min(C.WORLD - 1, Math.ceil((map.ox + r.width) / T)), y1 = Math.min(C.WORLD - 1, Math.ceil((map.oy + r.height) / T));
+  const x1 = Math.min(C.WS() - 1, Math.ceil((map.ox + r.width) / T)), y1 = Math.min(C.WS() - 1, Math.ceil((map.oy + r.height) / T));
   const occ = new Set(S.vil.map(v => v.x + ',' + v.y));
   for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
     const h = hash(x, y), px = x * T - map.ox, py = y * T - map.oy;
@@ -6196,8 +6214,8 @@ function drawMap() {
   }
   // 5'lik ızgara
   g.strokeStyle = 'rgba(255,255,255,.07)'; g.lineWidth = 1;
-  for (let i = 0; i <= C.WORLD; i += 5) { g.beginPath(); g.moveTo(i * T - map.ox, -map.oy); g.lineTo(i * T - map.ox, C.WORLD * T - map.oy); g.stroke(); g.beginPath(); g.moveTo(-map.ox, i * T - map.oy); g.lineTo(C.WORLD * T - map.ox, i * T - map.oy); g.stroke(); }
-  g.strokeStyle = 'rgba(220,170,69,.35)'; g.strokeRect(-map.ox, -map.oy, C.WORLD * T, C.WORLD * T);
+  for (let i = 0; i <= C.WS(); i += 5) { g.beginPath(); g.moveTo(i * T - map.ox, -map.oy); g.lineTo(i * T - map.ox, C.WS() * T - map.oy); g.stroke(); g.beginPath(); g.moveTo(-map.ox, i * T - map.oy); g.lineTo(C.WS() * T - map.ox, i * T - map.oy); g.stroke(); }
+  g.strokeStyle = 'rgba(220,170,69,.35)'; g.strokeRect(-map.ox, -map.oy, C.WS() * T, C.WS() * T);
   // hareketler (yollar altta, ordular kalelerin üstünde)
   const armies = drawMoves(g, T);
   // köyler
