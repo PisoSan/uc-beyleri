@@ -854,7 +854,7 @@ function netErr(e) {
   const m = (e && e.message) || '';
   if (/Failed to fetch|NetworkError|Load failed/i.test(m)) return 'Sunucuya ulaşılamadı. İnternet bağlantını kontrol et.';
   if (/anonymous/i.test(m)) return 'Supabase\'de anonim giriş kapalı görünüyor.';
-  if (/relation|function .* does not exist|schema cache/i.test(m)) return 'Sunucu henüz hazır değil (SQL kurulumu eksik).';
+  if (/relation|function .* does not exist|schema cache/i.test(m)) return 'Sunucu kurulumu eksik (Supabase SQL): ' + m.slice(0, 120);
   return m || 'Bir şeyler ters gitti';
 }
 function showCode(first) {

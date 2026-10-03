@@ -1502,10 +1502,18 @@ async function load(id) {
   return { W: await unpack(r.state), version: r.version, code: r.code, name: r.name };
 }
 // sürüm tutarsa kaydeder ve yeni sürümü döner; başka biri önce kaydettiyse null
+// sunucuda sürüm sütunları yoksa (sürüm kontrolü SQL'i kurulmamış) kayıt onlarsız yapılır; ilerleme asla kaybolmaz
+let noVerCols = false;
 async function save(id, W, version) {
-  const rows = await api('/rest/v1/worlds?id=eq.' + id + '&version=eq.' + version + '&select=version', {
-    method: 'PATCH', headers: { Prefer: 'return=representation' },
-    body: { state: await pack(W), version: version + 1, updated_at: new Date().toISOString(), client_ver: CLIENT_VER, stamp: Date.now().toString(36) + Math.random().toString(36).slice(2) } });
+  const body = { state: await pack(W), version: version + 1, updated_at: new Date().toISOString() };
+  if (!noVerCols) Object.assign(body, { client_ver: CLIENT_VER, stamp: Date.now().toString(36) + Math.random().toString(36).slice(2) });
+  const send = b => api('/rest/v1/worlds?id=eq.' + id + '&version=eq.' + version + '&select=version', { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: b });
+  let rows;
+  try { rows = await send(body); }
+  catch (e) {
+    if (noVerCols || !/client_ver|stamp/.test(e.message || '')) throw e;
+    noVerCols = true; delete body.client_ver; delete body.stamp; rows = await send(body);
+  }
   return rows && rows.length ? rows[0].version : null;
 }
 async function version(id) { const rows = await api('/rest/v1/worlds?id=eq.' + id + '&select=version'); return rows && rows.length ? rows[0].version : null; }
