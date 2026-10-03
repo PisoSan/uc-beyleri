@@ -5083,9 +5083,48 @@ function animate(t) {
 }
 function walkLegs(g, t, i) { const b = g.userData.body; if (!b) return; const s = Math.sin(t / 140 + i); b.position.y = Math.abs(s) * .012; b.rotation.x = s * .06; }
 
+// ---------- bulut gölgeleri ve gün batımı ----------
+let CLOUDT = null;
+function cloudTex() {
+  if (CLOUDT) return CLOUDT;
+  const n = 256, c = document.createElement('canvas'); c.width = c.height = n; const g = c.getContext('2d'), im = g.createImageData(n, n);
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+    // döşenebilir gürültü: dört köşeden harmanlanır
+    const f = (a, b) => fbm(a / 34, b / 34, 31), u = x / n, w = y / n;
+    const v = f(x, y) * (1 - u) * (1 - w) + f(x - n, y) * u * (1 - w) + f(x, y - n) * (1 - u) * w + f(x - n, y - n) * u * w;
+    const k = 255 - Math.round(Math.max(0, Math.min(1, (v - .48) * 3)) * 95);   // beyaz = gölge yok, gri = bulut gölgesi
+    const i = (y * n + x) * 4; im.data[i] = im.data[i + 1] = im.data[i + 2] = k; im.data[i + 3] = 255;
+  }
+  g.putImageData(im, 0, 0);
+  CLOUDT = new T.CanvasTexture(c); CLOUDT.wrapS = CLOUDT.wrapT = T.RepeatWrapping; CLOUDT.colorSpace = T.SRGBColorSpace;
+  return CLOUDT;
+}
+function cloudLayer(size, rep, y) {
+  const t = cloudTex().clone(); t.needsUpdate = true; t.repeat.set(rep, rep);
+  const m = new T.MeshBasicMaterial({ map: t, blending: T.MultiplyBlending, premultipliedAlpha: true, transparent: true, depthWrite: false, fog: false });
+  const p = new T.Mesh(new T.PlaneGeometry(size, size), m); p.rotation.x = -Math.PI / 2; p.position.y = y; p.renderOrder = 1; p.userData.dyn = true;
+  return p;
+}
+function driftClouds(p, night) {
+  if (!p) return; p.visible = !night && QUAL() !== 'low';
+  const t = performance.now() / 1000, m = p.material.map; m.offset.set(t * .0045, t * .0028);
+}
+// gün batımı (gecenin 6 dk öncesi) ve şafak (sabahın ilk 4 dk'sı): güneş turuncuya döner, ışık yumuşar
+const DUSK = new T.Color('#ff9f5a'), DAYSUN = new T.Color('#fff1d8'), DUSKFOG = new T.Color('#d9b08e'), DAYFOG = new T.Color('#a9c7d6');
+function goldenHour(o, night, base) {
+  if (night) { o.dusk = 0; return; }
+  let f = 0;
+  if (SC.dusk != null) f = SC.dusk;
+  else if (SC.hour == null) { const d = Core.dayPhase(Date.now()), el = 60 * 60000 - d.left; f = Math.max(d.left < 6 * 60000 ? 1 - d.left / (6 * 60000) : 0, el < 4 * 60000 ? 1 - el / (4 * 60000) : 0); }
+  if (Math.abs((o.dusk || 0) - f) < .004) return; o.dusk = f;
+  o.sun.color.copy(DAYSUN).lerp(DUSK, f); o.sun.intensity = base * (1 - .38 * f);
+  if (o.scene.fog) o.scene.fog.color.copy(DAYFOG).lerp(DUSKFOG, f * .8);
+  o.r.toneMappingExposure = 1 + .06 * f;
+}
+
 // ---------- ışık, gece-gündüz ----------
 function setLight(night) {
-  if (st.night === night) return; st.night = night;
+  if (st.night === night) return; st.night = night; st.dusk = -1;
   st.scene.fog = new T.Fog(night ? '#142039' : '#a9c7d6', 28, 70);
   st.sun.intensity = night ? .8 : 2.8; st.sun.color.set(night ? '#9fb6ff' : '#fff1d8');
   st.hemi.intensity = night ? .5 : .5;
@@ -5239,6 +5278,9 @@ function frame(t) {
   const sig = v.id + '|' + JSON.stringify(v.b) + '|' + v.bq.map(q => q.b).join() + '|' + PCOL();
   if (sig !== st.sig) { st.sig = sig; buildVillage(v); }
   setLight(SC.hour != null ? (SC.hour >= 20 || SC.hour < 6) : Core.dayPhase(Date.now()).night);
+  goldenHour(st, st.night, 2.8);
+  if (!st.clouds && st.scene) { st.clouds = cloudLayer(90, 2.2, .09); st.clouds.position.set(6, .09, 7); st.scene.add(st.clouds); }
+  driftClouds(st.clouds, st.night);
   animate(t);
   ringFor(SC.sel); if (selRing && selRing.visible) selRing.material.opacity = .6 + .35 * Math.sin(t / 250);
   draw3(st, W, H);
@@ -5642,7 +5684,7 @@ function mapWire(cv) {
   cv.addEventListener('wheel', e => { e.preventDefault(); if (e.shiftKey) MP.view.yaw += e.deltaY * .003; else MP.view.dist *= Math.exp(e.deltaY * .0015); mapCam(); }, { passive: false });
 }
 function mapLight(night) {
-  if (MP.night === night) return; MP.night = night;
+  if (MP.night === night) return; MP.night = night; MP.dusk = -1;
   MP.scene.fog = new T.Fog(night ? '#142039' : '#a9c7d6', 24, 62);
   MP.sun.intensity = night ? .85 : 2.7; MP.sun.color.set(night ? '#9fb6ff' : '#fff1d8'); MP.hemi.intensity = night ? .5 : .5;
   MP.hemi.color.set(night ? '#5a6c9a' : '#cfe4ff'); MP.hemi.groundColor.set(night ? '#1a1a22' : '#5a4a32');
@@ -5691,6 +5733,9 @@ function mapFrame() {
   if (MP.ov.width !== W || MP.ov.height !== H) { MP.ov.width = W; MP.ov.height = H; }
   if (MP.frameN++ % 30 === 0 || !MP.vsig) { const sg = mapSig(); if (sg !== MP.vsig) { MP.vsig = sg; mapVillages(); } }
   mapLight(SC.hour != null ? (SC.hour >= 20 || SC.hour < 6) : Core.dayPhase(Date.now()).night);
+  goldenHour(MP, MP.night, 2.7);
+  if (!MP.clouds || MP.cloudsN !== C.WS()) { if (MP.clouds) MP.scene.remove(MP.clouds); const N = C.WS(); MP.clouds = cloudLayer(N + 40, (N + 40) / 34, .03); MP.clouds.position.set(N / 2, .03, N / 2); MP.cloudsN = N; MP.scene.add(MP.clouds); }
+  driftClouds(MP.clouds, MP.night);
   const sv = map.sel != null ? S.vil[map.sel] : null;
   MP.selRing.visible = !!sv; if (sv) { MP.selRing.position.set(sv.x + .5, .04, sv.y + .5); MP.selRing.material.opacity = .55 + .4 * Math.sin(performance.now() / 250); }
   try { mapTokens(); } catch (e) {}
