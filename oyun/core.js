@@ -39,7 +39,7 @@ const U = {
   okcu:       { n: 'Okçu',       b: 'kisla',   lv: 3, c: [100, 30, 60],  pop: 1,   a: 15,  di: 50,  dc: 40,  sp: 18, cr: 10, t: 120,  cls: 'inf', d: 'Piyadeye karşı sağlam savunma' },
   casus:      { n: 'Çaşıt',      b: 'ahir',    lv: 1, c: [50, 50, 20],   pop: 2,   a: 0,   di: 2,   dc: 1,   sp: 9,  cr: 0,  t: 60,   cls: 'spy', d: 'Düşman köyünü keşfeder' },
   akinci:     { n: 'Akıncı',     b: 'ahir',    lv: 1, c: [125, 100, 250],pop: 4,   a: 130, di: 30,  dc: 40,  sp: 10, cr: 80, t: 240,  cls: 'cav', d: 'Hızlı yağmacı, çok ganimet taşır' },
-  sipahi:     { n: 'Sipahi',     b: 'ahir',    lv: 5, c: [200, 150, 600],pop: 6,   a: 150, di: 200, dc: 80,  sp: 11, cr: 50, t: 400,  cls: 'cav', d: 'Ağır süvari, hem saldırır hem savunur' },
+  sipahi:     { n: 'Sipahi',     b: 'ahir',    lv: 5, c: [200, 150, 600],pop: 6,   a: 150, di: 200, dc: 160, sp: 11, cr: 50, t: 400,  cls: 'cav', d: 'Ağır süvari, hem saldırır hem savunur' },
   mancinik:   { n: 'Mancınık',   b: 'tophane', lv: 1, c: [300, 200, 200],pop: 5,   a: 2,   di: 20,  dc: 50,  sp: 30, cr: 0,  t: 500,  cls: 'inf', d: 'Her 3 mancınık suru 1 seviye düşürür' },
   sancakbeyi: { n: 'Sancakbeyi', b: 'divan',   lv: 1, c: [15000, 18000, 15000], pop: 100, a: 30, di: 100, dc: 50, sp: 35, cr: 0, t: 3000, cls: 'inf', d: 'Kazanılan her saldırıda bağlılığı 20–35 düşürür' },
 };
@@ -666,7 +666,7 @@ function battle(m, t) {
   for (const [u, n] of Object.entries(supAll)) { if (U[u].cls === 'spy') continue; Di += U[u].di * n; Dc += U[u].dc * n; }
   if (unitSum(supAll)) rep.guest = supAll;
   const Dmix = A0 > 0 ? (Di * Ai + Dc * Ac) / A0 : Di;
-  const D = (Dmix * (1 + TX(dv.owner, 'zirh')) + 20 + 40 * wallEff) * Math.pow(1.037, wallEff * (1 + TX(dv.owner, 'burc')));
+  const dvl = defValue(Dmix, wallEff, dv.owner, t), D = dvl.D; rep.bonus = { wall: +dvl.b.wall.toFixed(2), night: dvl.b.night > 1, home: HOME_BONUS };
   const luck = R() * 0.3 - 0.15; rep.luck = luck;
   const A = A0 * (1 + luck) * (1 + TX(m.owner, 'demirci'));
 
@@ -817,15 +817,22 @@ function respawn(t, name) {
 }
 
 // ---------- savaş hesaplayıcı (durumu değiştirmez; savaş formülünün aynısı) ----------
-function simulate(att, def, wall, luck, aOwner = 'P', dOwner = null) {
+// savunma çarpanları: ev sahibi avantajı, sur, gece
+const HOME_BONUS = .15, WALL_MULT = 1.05, WALL_FLAT = 60, NIGHT_BONUS = .5;
+function defBonus(wallEff, dOwner, t) {
+  const wall = Math.pow(WALL_MULT, wallEff * (1 + TX(dOwner, 'burc'))), night = (t === true || (typeof t === 'number' && dayPhase(t).night)) ? 1 + NIGHT_BONUS : 1;   // t: savaş anı ya da hesaplayıcıdan true
+  return { wall, night, home: 1 + HOME_BONUS, total: wall * night * (1 + HOME_BONUS) };
+}
+const defValue = (Dmix, wallEff, dOwner, t) => { const b = defBonus(wallEff, dOwner, t); return { D: (Dmix * (1 + TX(dOwner, 'zirh')) + 20 + WALL_FLAT * wallEff) * b.total, b }; };
+function simulate(att, def, wall, luck, aOwner = 'P', dOwner = null, t = null) {
   att = Object.assign({}, att); def = Object.assign({}, def);
   let Ai = 0, Ac = 0; for (const [u, n] of Object.entries(att)) { if (!n) continue; if (U[u].cls === 'cav') Ac += U[u].a * n; else if (U[u].cls === 'inf') Ai += U[u].a * n; }
   const A0 = Ai + Ac, rams = att.mancinik || 0, wallEff = Math.max(0, (wall || 0) - Math.floor(rams / 3));
   let Di = 0, Dc = 0; for (const [u, n] of Object.entries(def)) { if (!n || U[u].cls === 'spy') continue; Di += U[u].di * n; Dc += U[u].dc * n; }
   const Dmix = A0 > 0 ? (Di * Ai + Dc * Ac) / A0 : Di;
-  const D = (Dmix * (1 + TX(dOwner, 'zirh')) + 20 + 40 * wallEff) * Math.pow(1.037, wallEff * (1 + TX(dOwner, 'burc')));
+  const dvl = defValue(Dmix, wallEff, dOwner, t), D = dvl.D;
   const A = A0 * (1 + luck) * (1 + TX(aOwner, 'demirci'));
-  const res = { win: A0 > 0 && A > D, A: Math.round(A), D: Math.round(D), aLost: {}, dLost: {}, aLeft: {}, dLeft: {}, wall: [wall || 0, wall || 0], carry: 0 };
+  const res = { bonus: dvl.b, win: A0 > 0 && A > D, A: Math.round(A), D: Math.round(D), aLost: {}, dLost: {}, aLeft: {}, dLeft: {}, wall: [wall || 0, wall || 0], carry: 0 };
   if (res.win) {
     const r = Math.pow(D / A, 1.5);
     for (const [u, n] of Object.entries(att)) { if (!n || u === 'casus') continue; const l = Math.round(n * r); res.aLost[u] = l; res.aLeft[u] = n - l; }
@@ -1067,7 +1074,7 @@ const AI = (() => {
   function offPower(units) { let a = 0; for (const u of OFF) a += U[u].a * (units[u] || 0); return a; }
   function defPower(v) {
     let di = 0, dc = 0; for (const [u, n] of Object.entries(Object.assign({}, supUnits(v), v.units))) { if (U[u].cls === 'spy') continue; di += U[u].di * n; dc += U[u].dc * n; }
-    return ((di + dc) / 2 + 20 + 40 * v.b.sur) * Math.pow(1.037, v.b.sur);
+    return ((di + dc) / 2 + 20 + WALL_FLAT * v.b.sur) * Math.pow(WALL_MULT, v.b.sur) * (1 + HOME_BONUS);
   }
   function pickBuild(v) {
     const used = popUsed(v), pm = popMax(v), c = cap(v), full = Math.max(...v.res) / c;
@@ -1183,7 +1190,7 @@ const AI = (() => {
 
 return {
   HOUR, RES_NAMES, MINES, B, B_ORDER, U, U_ORDER, REC_B, WORLD, TECH, TECH_ORDER,
-  reqFor, simulate, sancakOf, SANCAK_MAX, dayPhase, statsOf, addSup, supUnits, recallSup, respawn, RANKS, RELS, DIPK, members, leaderOf, rankOf, canDo, cmeta, setRank, kickMember, setDesc, relOf, relEntry, relOwners, clanPts, clanName, humanDecider, declareWar, proposeRel, answerRel, cancelRel, breakRel, inviteHuman, acceptInvite, declineInvite, isHuman, protectOf, mkVillage, clanOf, sameClan, clanList, ownerPts, createClan, inviteBey, joinClan, leaveClan, playerSay, CLAN_MAX, techCost, techTime, canResearch, research, migrate, medreseMax, TL,
+  reqFor, simulate, defBonus, HOME_BONUS, NIGHT_BONUS, WALL_MULT, sancakOf, SANCAK_MAX, dayPhase, statsOf, addSup, supUnits, recallSup, respawn, RANKS, RELS, DIPK, members, leaderOf, rankOf, canDo, cmeta, setRank, kickMember, setDesc, relOf, relEntry, relOwners, clanPts, clanName, humanDecider, declareWar, proposeRel, answerRel, cancelRel, breakRel, inviteHuman, acceptInvite, declineInvite, isHuman, protectOf, mkVillage, clanOf, sameClan, clanList, ownerPts, createClan, inviteBey, joinClan, leaveClan, playerSay, CLAN_MAX, techCost, techTime, canResearch, research, migrate, medreseMax, TL,
   get S() { return S; }, set S(x) { S = x; },
   onNotify(fn) { log = fn; },
   maxAll(v, t) { syncRes(v, t); for (const b of B_ORDER) v.b[b] = B[b].max; v.bq = []; const c = cap(v); v.res = [c, c, c]; },

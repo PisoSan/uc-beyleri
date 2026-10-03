@@ -460,6 +460,9 @@ input.qty{width:74px;background:var(--bg);border:1px solid var(--line);border-ra
 (() => {
 'use strict';
 const C = Core;
+// son dokunuş: 3B sahneler kimse dokunmuyorken daha seyrek çizer (pil ve ısı)
+window.__lastAct = performance.now();
+for (const ev of ['pointerdown', 'pointermove', 'wheel', 'keydown']) document.addEventListener(ev, () => { window.__lastAct = performance.now(); }, { passive: true, capture: true });
 const $ = id => document.getElementById(id);
 const SAVE = 'ucbeyleri-save-v1';
 const store = {
@@ -1021,27 +1024,29 @@ function openRewards(sub) {
 function openSim(target) {
   const v = cur(), spy = target ? S.reports.find(r => r.to === target.id && r.spy && r.attOwner === 'P') : null;
   const att = {}, def = {}; for (const u of C.U_ORDER) { att[u] = u === 'casus' ? 0 : (v.units[u] || 0); def[u] = spy ? (spy.spy.units[u] || 0) : 0; }
-  let wall = spy ? spy.spy.b.sur : 0;
+  let wall = spy ? spy.spy.b.sur : 0, night = C.dayPhase(now()).night;
   const rows = () => C.U_ORDER.filter(u => u !== 'sancakbeyi').map(u => `<span>${C.U[u].n}</span><input class="qty num" type="number" min="0" inputmode="numeric" data-sa="${u}" value="${att[u] || ''}" placeholder="0"><input class="qty num" type="number" min="0" inputmode="numeric" data-sd="${u}" value="${def[u] || ''}" placeholder="0">`).join('');
   const result = () => {
-    const out = [-.15, 0, .15].map(l => C.simulate(att, def, wall, l, 'P', target ? target.owner : null));
+    const out = [-.15, 0, .15].map(l => C.simulate(att, def, wall, l, 'P', target ? target.owner : null, night || null));
     const lostTxt = o => Object.entries(o).filter(([, n]) => n > 0).map(([u, n]) => fmt(n) + ' ' + C.U[u].n.toLocaleLowerCase('tr')).join(', ') || 'yok';
     let h = `<div class="simres">${out.map((r, i) => `<div class="${r.win ? 'w' : 'l'}"><span class="muted">${['Kötü şans', 'Ortalama', 'İyi şans'][i]}</span><b style="color:${r.win ? 'var(--green)' : 'var(--red)'}">${r.win ? 'Zafer' : 'Yenilgi'}</b>Kaybın: ${lostTxt(r.aLost)}${r.win ? `<br>Taşıma: ${fmt(r.carry)}` : `<br>Düşman kaybı: ${lostTxt(r.dLost)}`}${r.wall[1] !== r.wall[0] ? `<br>Sur ${r.wall[0]}→${r.wall[1]}` : ''}</div>`).join('')}</div>`;
     const mid = out[1];
     if (!mid.win && Object.values(att).some(n => n > 0)) {
-      let lo = 1, hi = 64; const sc = k => { const a = {}; for (const u in att) a[u] = Math.ceil((att[u] || 0) * k); return C.simulate(a, def, wall, 0, 'P', target ? target.owner : null).win; };
+      let lo = 1, hi = 64; const sc = k => { const a = {}; for (const u in att) a[u] = Math.ceil((att[u] || 0) * k); return C.simulate(a, def, wall, 0, 'P', target ? target.owner : null, night || null).win; };
       if (sc(hi)) { for (let i = 0; i < 20; i++) { const m = (lo + hi) / 2; if (sc(m)) hi = m; else lo = m; } h += `<div class="muted small">Ortalama şansla kazanmak için ordunun yaklaşık <b>${hi.toFixed(1).replace('.', ',')} katı</b> gerekir.</div>`; }
     }
-    h += `<div class="muted small">Saldırı gücü ${fmt(mid.A)} · savunma gücü ${fmt(mid.D)}. Savaşta şans ±%15 oynar.</div>`;
+    h += `<div class="muted small">Saldırı gücü ${fmt(mid.A)} · savunma gücü ${fmt(mid.D)} (sur ×${mid.bonus.wall.toFixed(2).replace('.', ',')} · ev sahibi +%${Math.round(C.HOME_BONUS * 100)}${night ? ' · gece +%' + Math.round(C.NIGHT_BONUS * 100) : ''}). Savaşta şans ±%15 oynar.</div>`;
     return h;
   };
   sheet(`<div class="shead"><div><h3>Savaş hesaplayıcı</h3><div class="muted small">${target ? esc(target.name) + (spy ? ' · son keşif ' + clock(spy.t) : ' · keşif yok, savunmayı kendin yaz') : 'Ordunu ve rakibi yaz, sonucu gör'}</div></div><button class="x" data-close aria-label="Kapat">×</button></div>
     <div class="simgrid"><b class="small">Birlik</b><b class="small" style="text-align:center">Saldıran</b><b class="small" style="text-align:center">Savunan</b>${rows()}<span>Sur seviyesi</span><span></span><input class="qty num" type="number" min="0" max="20" inputmode="numeric" id="simWall" value="${wall || ''}" placeholder="0"></div>
+    <label class="small" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="simNight" ${night ? 'checked' : ''}> Saldırı gece varır (savunma +%${Math.round(C.NIGHT_BONUS * 100)})</label>
     <div class="chips"><button class="btn sec" id="simMine">Köyümdeki askerler</button><button class="btn sec" id="simClr">Temizle</button></div>
     <div id="simOut"></div>`, box => {
     const upd = () => { $('simOut').innerHTML = result(); };
     box.addEventListener('input', e => {
       const a = e.target.dataset.sa, d = e.target.dataset.sd; const n = Math.max(0, Math.floor(+e.target.value || 0));
+      if (e.target.id === 'simNight') { night = e.target.checked; upd(); return; }
       if (a) att[a] = n; if (d) def[d] = n; if (e.target.id === 'simWall') wall = Math.min(20, n); upd();
     });
     $('simMine').onclick = () => { for (const u of C.U_ORDER) { att[u] = u === 'casus' ? 0 : (v.units[u] || 0); const el = box.querySelector(`[data-sa="${u}"]`); if (el) el.value = att[u] || ''; } upd(); };
@@ -1347,7 +1352,7 @@ function livePop() {
 }
 
 // ---------- bina penceresi ----------
-const pctUp = l => Math.round((Math.pow(1.037, l) - 1) * 100);
+const pctUp = l => Math.round((Math.pow(C.WALL_MULT, l) - 1) * 100);
 const buildCut = l => Math.round((1 - Math.pow(.95, Math.max(0, l - 1))) * 100);
 const trainCut = l => Math.round((1 - Math.pow(.94, Math.max(0, l - 1))) * 100);
 function defense(v) {
@@ -1355,7 +1360,8 @@ function defense(v) {
   for (const [u, c] of Object.entries(v.units)) { if (!c || C.U[u].cls === 'spy') continue; di += C.U[u].di * c; dc += C.U[u].dc * c; n += c; }
   let g = 0; for (const [u, c] of Object.entries(v.guest || {})) { if (c > 0) { di += C.U[u].di * c; dc += C.U[u].dc * c; g += c; } }
   const zr = 1 + C.TL('P', 'zirh') * C.TECH.zirh.e; di *= zr; dc *= zr;
-  const m = Math.pow(1.037, v.b.sur * (1 + C.TL('P', 'burc') * C.TECH.burc.e)), base = 20 + 40 * v.b.sur;
+  const m = Math.pow(C.WALL_MULT, v.b.sur * (1 + C.TL('P', 'burc') * C.TECH.burc.e)) * (1 + C.HOME_BONUS), base = 20 + 60 * v.b.sur;
+  for (const e of v.sup || []) for (const [u, c] of Object.entries(e.units)) if (c > 0 && C.U[u].cls !== 'spy') { di += C.U[u].di * c; dc += C.U[u].dc * c; }
   return { inf: (di + base) * m, cav: (dc + base) * m, n, g };
 }
 function bStatRows(v, b) {
@@ -1366,7 +1372,7 @@ function bStatRows(v, b) {
   if (C.MINES.includes(b)) { const i = C.MINES.indexOf(b); return [[C.RES_NAMES[i] + ' / saat', fmt(C.rateH(v, i)), nx(fmt(C.rateH(fake, i)))]]; }
   if (b === 'ambar') return [['Kaynak sınırı', fmt(C.cap(v)), nx(fmt(C.cap(fake)))]];
   if (b === 'ciftlik') return [['Nüfus sınırı', fmt(C.popMax(v)), nx(fmt(C.popMax(fake)))], ['Kullanılan nüfus', fmt(C.popUsed(v)), '']];
-  if (b === 'sur') return [['Savunma bonusu', l ? '+%' + pctUp(l) : '—', nx('+%' + pctUp(nl))], ['Sur savunması', fmt(20 + 40 * l), nx(fmt(20 + 40 * nl))]];
+  if (b === 'sur') return [['Savunma bonusu', l ? '+%' + pctUp(l) : '—', nx('+%' + pctUp(nl))], ['Sur savunması', fmt(20 + 60 * l), nx(fmt(20 + 60 * nl))]];
   if (b === 'kervansaray') return [['Tüccar (1.000 taşır)', l ? C.merchantsFree(v) + ' / ' + l : '—', nx(String(nl))], ['Taşıma kapasitesi', fmt(l * C.CARRY), nx(fmt(nl * C.CARRY))]];
   if (b === 'medrese') return [['Araştırma süresi', l ? '−%' + buildCut(l) : '—', nx('−%' + buildCut(nl))]];
   if (C.REC_B.includes(b) && b !== 'divan') return [['Eğitim süresi', l ? '−%' + trainCut(l) : '—', nx('−%' + trainCut(nl))]];
@@ -1884,6 +1890,7 @@ function repDetail(r) {
   h += unitTable(r);
   if (!r.dUnits) h += `<div class="small muted">Hiçbir askerin geri dönmedi, düşman ordusunu göremedin.</div>`;
   if (r.wall[0] !== r.wall[1]) h += `<div class="small">Sur ${r.wall[0]} → ${r.wall[1]}</div>`;
+  if (r.bonus) h += `<div class="small muted">Savunma bonusu: sur ×${String(r.bonus.wall).replace('.', ',')} · ev sahibi +%${Math.round(r.bonus.home * 100)}${r.bonus.night ? ' · <b style="color:#9fb6ff">gece +%' + Math.round(C.NIGHT_BONUS * 100) + '</b>' : ''}</div>`;
   if (r.loy) h += `<div class="small">Bağlılık ${r.loy[0]} → ${r.loy[1]}${r.conquered ? ' · <b style="color:var(--gold)">köy el değiştirdi</b>' : ''}</div>`;
   if (r.type !== 'spy' && r.win) h += `<div class="chips small"><span class="muted">Ganimet:</span>${costChips(r.loot)}</div>`;
   if (r.spy) {
