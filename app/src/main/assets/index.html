@@ -5522,7 +5522,7 @@ function mapWorld() {
   const lat = (() => { const pts = []; for (let i = 0; i <= 8; i++) { const f = i / 8; pts.push(new T.Vector2(Math.sin(Math.PI * Math.pow(f, .8)) * .08 * (1 - f * .35), .05 + f * .7)); } return new T.LatheGeometry(pts, 8); })();
   mk(lat, new T.MeshStandardMaterial({ color: '#b8c8a8', roughness: .95, flatShading: true }), servi, (m4, t) => m4.compose(new T.Vector3(t[0], 0, t[1]), new T.Quaternion(), new T.Vector3(t[2], t[2], t[2])), true, true);
   const hg = new T.DodecahedronGeometry(.5, 1); { const p = hg.attributes.position; for (let i = 0; i < p.count; i++) { const y = p.getY(i); p.setY(i, Math.max(0, y)); } hg.computeVertexNormals(); }
-  { const p = hg.attributes.position, hc = []; for (let i = 0; i < p.count; i++) { const y = p.getY(i); const g = y > .3 ? [.34, .33, .27] : [.2, .3 + y * .12, .12]; hc.push(...g); } hg.setAttribute('color', new T.Float32BufferAttribute(hc, 3)); }
+  { const p = hg.attributes.position, hc = []; for (let i = 0; i < p.count; i++) { const y = p.getY(i); const g = y > .47 ? [.1, .095, .07] : [.05 + y * .03, .1 + y * .06, .022]; /* doğrusal renk: koyu çimen, tepede taş */ hc.push(...g); } hg.setAttribute('color', new T.Float32BufferAttribute(hc, 3)); }
   mk(hg, new T.MeshStandardMaterial({ vertexColors: true, roughness: 1, flatShading: true }), hills, (m4, t) => m4.compose(new T.Vector3(t[0], -.02, t[1]), new T.Quaternion().setFromAxisAngle(new T.Vector3(0, 1, 0), t[3] * 6), new T.Vector3(t[2] * 1.1, t[2] * .32, t[2] * 1)));
   mk(new T.DodecahedronGeometry(.09, 0), colMat('#9a958a', { roughness: 1, flatShading: true }), rocks, (m4, t) => m4.compose(new T.Vector3(t[0], .03, t[1]), new T.Quaternion().setFromEuler(new T.Euler(t[3] * 3, t[3] * 5, 0)), new T.Vector3(t[2], t[2] * .7, t[2])));
   // dere
@@ -5716,7 +5716,7 @@ function showcase(cv) {
 }
 
 function focusB(b) { const bx = st.boxes && st.boxes[b]; if (!bx || !st.cam) return; const c = bx.getCenter(new T.Vector3()); Object.assign(st.view, { tx: c.x, tz: c.z + .6, dist: Math.min(st.view.dist, 13) }); applyCam(); st.lk = ''; }
-return { ok: true, start, st, focusB, setView: o => { Object.assign(st.view, o); applyCam(); }, showcase, thumb, thumbKey,
+return { ok: true, gap: GAP, start, st, focusB, setView: o => { Object.assign(st.view, o); applyCam(); }, showcase, thumb, thumbKey,
   map: { start: mapStart, frame: mapFrame, center: mapCenter, proj: mapProj, zoom: f => { MP.view.dist /= f; mapCam(); }, focus: (x, z) => { MP.view.tx = x; MP.view.tz = z + .4; mapCam(); }, st: MP } };
 })();
 
