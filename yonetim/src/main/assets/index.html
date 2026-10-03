@@ -1767,6 +1767,16 @@ async function vDunya() {
     const humans = W.beys.filter(b => b.human).length, moves = W.moves.length;
     h += `<section class="card"><h2>Bilgiler</h2><div class="kv"><span>Kod</span><span>${esc(R.code)}</span><span>Hız</span><span>${W.speed}×</span><span>Oyuncu</span><span>${humans}</span><span>Bilgisayar beyi</span><span>${W.beys.length - humans}</span><span>Köy</span><span>${W.vil.length}</span><span>Terk edilmiş köy</span><span>${W.vil.filter(v => v.owner === null).length}</span><span>Yoldaki ordu</span><span>${moves}</span><span>Kuruluş</span><span>${clock(W.created)}</span><span>Kayıt sürümü</span><span>${R.version}</span></div></section>
       <section class="card"><h2>Herkese kaynak</h2><div class="muted small">Bütün oyuncuların bütün köylerine eklenir.</div><div class="chips"><button class="btn sec" data-allres="5000">+5.000</button><button class="btn sec" data-allres="50000">+50.000</button></div></section>
+      <section class="card"><h2>Bütün oyuncular · toplu işlem</h2><div class="muted small">Seçtiğin hedefteki bütün oyuncu köylerine uygulanır. Bilgisayar beyleri ve terk edilmiş köyler etkilenmez.</div>
+        <label class="f">Hangi köyler?<select id="bkT"><option value="all">Oyuncuların bütün köyleri</option><option value="main">Her oyuncunun yalnızca en büyük köyü</option></select></label>
+        <b class="small" style="margin-top:4px">Binalar</b>
+        <div class="g2"><select id="bkB"><option value="*">Bütün binalar</option>${C.B_ORDER.map(k => `<option value="${k}">${C.B[k].n} (en fazla ${C.B[k].max})</option>`).join('')}</select><input id="bkL" type="number" inputmode="numeric" placeholder="seviye (boş = son seviye)"></div>
+        <div class="chips"><button class="btn" id="bkBset">Binaları ayarla</button><button class="btn sec" id="bkBmax">Hepsi son seviye</button></div>
+        <b class="small" style="margin-top:4px">Askerler</b>
+        <div class="g2"><select id="bkU">${C.U_ORDER.map(u => `<option value="${u}">${C.U[u].n}</option>`).join('')}</select><input id="bkN" type="number" inputmode="numeric" placeholder="adet"></div>
+        <div class="chips"><button class="btn" data-bku="add">Herkese ekle</button><button class="btn sec" data-bku="set">Herkeste bu sayıya ayarla</button><button class="btn red" data-bku="clear">Herkesin askerini sil</button></div>
+        <b class="small" style="margin-top:4px">Kaynak ve bağlılık</b>
+        <div class="chips"><button class="btn sec" id="bkFill">Ambarları doldur</button><button class="btn sec" id="bkLoy">Bağlılık 100</button></div></section>
       <section class="card"><h2>Herkese koruma</h2><div class="muted small">Bütün oyuncular saldırıya kapanır (bakım, olay sonrası vb.).</div><div class="chips"><button class="btn sec" data-allprot="24">24 saat</button><button class="btn sec" data-allprot="0">Kaldır</button></div></section>
       <section class="card"><h2>Tehlikeli bölge</h2><div class="muted small">Dünya ve içindeki bütün ilerleme kalıcı olarak silinir.</div><div class="chips"><button class="btn red" id="del">Dünyayı sil</button></div></section>`;
   }
@@ -1784,6 +1794,30 @@ async function vDunya() {
     const v = e.target.closest('[data-v]'); if (v) { go({ v: 'koy', top: 'dunyalar', wid, vid: +v.dataset.v }); return; }
     if (e.target.id === 'send') { const m = $('msg').value.trim(); if (!m) return; run(() => edit(wid, (W2, t) => { W2.chat.genel.push({ id: ++W2.uid, t, from: 'SYS', text: '📢 Yönetim: ' + m.slice(0, 300) }); }), 'Duyuru gönderildi', draw); }
     const ar = e.target.closest('[data-allres]'); if (ar) { const n = +ar.dataset.allres; run(() => edit(wid, (W2, t) => { for (const vv of W2.vil) { const b = beyOf(W2, vv.owner); if (b && b.human) addRes(vv, n, t); } }), 'Kaynaklar eklendi'); }
+    // toplu işlem: oyuncu köylerini seç ve uygula
+    const bulk = (fn, msg, confirmTxt) => (async () => {
+      if (confirmTxt && !(await ask(confirmTxt, { danger: true }))) return;
+      const mode = $('bkT').value;
+      run(() => edit(wid, (W2, t) => {
+        let vs = W2.vil.filter(vv => { const b = beyOf(W2, vv.owner); return b && b.human; });
+        if (mode === 'main') { C.S = W2; const best = {}; for (const vv of vs) { const p = C.vPoints(vv); if (!best[vv.owner] || p > best[vv.owner][1]) best[vv.owner] = [vv, p]; } vs = Object.values(best).map(x => x[0]); }
+        if (!vs.length) return false;
+        C.S = W2; for (const vv of vs) { C.syncRes(vv, t); fn(vv, t); }
+      }), msg + ' (' + (mode === 'main' ? 'ana köyler' : 'bütün oyuncu köyleri') + ')');
+    })();
+    if (e.target.id === 'bkBmax') { bulk(vv => { for (const k of C.B_ORDER) vv.b[k] = C.B[k].max; vv.bq = []; }, 'Bütün binalar son seviyede', 'Bütün oyuncuların bütün binaları son seviyeye çıkarılsın mı?'); return; }
+    if (e.target.id === 'bkBset') {
+      const k = $('bkB').value, raw = $('bkL').value.trim(), lv = raw === '' ? null : Math.max(0, Math.floor(+raw));
+      bulk(vv => { for (const bk of (k === '*' ? C.B_ORDER : [k])) { vv.b[bk] = lv == null ? C.B[bk].max : Math.min(C.B[bk].max, Math.max(bk === 'konak' ? 1 : 0, lv)); vv.bq = vv.bq.filter(x => x.b !== bk); } },
+        (k === '*' ? 'Bütün binalar' : C.B[k].n) + ' ' + (lv == null ? 'son seviyede' : lv + '. seviyede'), (k === '*' ? 'Bütün binalar' : C.B[k].n) + ' herkeste ' + (lv == null ? 'son seviyeye' : lv + '. seviyeye') + ' ayarlansın mı?'); return;
+    }
+    const bu = e.target.closest('[data-bku]');
+    if (bu) { const k = bu.dataset.bku, u = $('bkU').value, n = Math.max(0, Math.floor(+($('bkN').value || 0)));
+      if (k !== 'clear' && !n && k === 'add') { toast('Adet yaz', 'bad'); return; }
+      bulk(vv => { if (k === 'clear') vv.units = {}; else vv.units[u] = k === 'add' ? (vv.units[u] || 0) + n : n; },
+        k === 'clear' ? 'Askerler silindi' : fmt(n) + ' ' + C.U[u].n + (k === 'add' ? ' eklendi' : ' ayarlandı'), k === 'clear' ? 'Bütün oyuncuların köylerindeki askerler silinsin mi?' : null); return; }
+    if (e.target.id === 'bkFill') { bulk(vv => { const c = C.cap(vv); vv.res = vv.res.map(x => Math.max(x, c)); }, 'Ambarlar dolduruldu'); return; }
+    if (e.target.id === 'bkLoy') { bulk(vv => { vv.loy = 100; }, 'Bağlılık 100'); return; }
     const ap = e.target.closest('[data-allprot]'); if (ap) { const hr = +ap.dataset.allprot; run(() => edit(wid, (W2, t) => { for (const b of W2.beys) if (b.human) b.protectUntil = hr ? t + hr * 3600000 : 0; }), hr ? 'Herkes korumada' : 'Korumalar kaldırıldı'); }
     if (e.target.id === 'del') { const typed = await ask('"' + R.name + '" dünyası ve içindeki bütün ilerleme kalıcı olarak silinecek. Onaylamak için dünya kodunu yaz: ' + R.code, { input: R.code, ok: 'Dünyayı sil', danger: true }); if (typed == null) return; if (typed.trim().toUpperCase() !== R.code.toUpperCase()) { toast('Kod tutmadı, silinmedi', 'bad'); return; } run(() => Net.admin.del(wid), 'Dünya silindi', () => { hist = []; go({ v: 'dunyalar' }, false); }); }
   };
