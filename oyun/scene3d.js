@@ -439,7 +439,7 @@ function mergeGroup(g, b) {
     for (const gr of groups) {
       const m = mats[gr.materialIndex || 0] || mats[0];
       // dokusuz, ışımasız düz renkli malzemeler köşe rengine çevrilip tek çizimde toplanır
-      const plain = m.isMeshStandardMaterial && !m.map && !m.transparent && !(m.emissiveIntensity > 0 && m.emissive && m.emissive.getHex()) && !m.onBeforeCompile.toString().includes('uTime') && (!m.vertexColors || !!geo.attributes.color);
+      const plain = m.isMeshStandardMaterial && !m.map && !m.transparent && !(m.emissive && m.emissive.getHex()) && !m.onBeforeCompile.toString().includes('uTime') && (!m.vertexColors || !!geo.attributes.color);
       const key = (plain ? 'vc|' + m.roughness + '|' + m.metalness + '|' + m.flatShading : m.uuid) + (o.castShadow ? 's' : 'n');
       let bk = buckets.get(key); if (!bk) { bk = { m: plain ? vcMat(m.roughness, m.metalness, m.flatShading) : m, plain, shadow: o.castShadow, pos: [], nor: [], uv: [], col: [] }; buckets.set(key, bk); }
       const P = geo.attributes.position.array, N = geo.attributes.normal.array, U = geo.attributes.uv ? geo.attributes.uv.array : null, CA = geo.attributes.color ? geo.attributes.color.array : null;
@@ -888,13 +888,13 @@ function walkLegs(g, t, i) { const b = g.userData.body; if (!b) return; const s 
 // ---------- ışık, gece-gündüz ----------
 function setLight(night) {
   if (st.night === night) return; st.night = night;
-  st.scene.fog = new T.Fog(night ? '#0d1626' : '#a9c7d6', 28, 70);
-  st.sun.intensity = night ? .35 : 2.8; st.sun.color.set(night ? '#8fa6ff' : '#fff1d8');
-  st.hemi.intensity = night ? .18 : .5;
+  st.scene.fog = new T.Fog(night ? '#142039' : '#a9c7d6', 28, 70);
+  st.sun.intensity = night ? .8 : 2.8; st.sun.color.set(night ? '#9fb6ff' : '#fff1d8');
+  st.hemi.intensity = night ? .5 : .5;
   if (st.atmos) st.atmos.set(night, st.sun.position.clone().sub(st.sun.target.position));
   LAMP().emissiveIntensity = night ? 3.2 : .15; st.hemi.color.set(night ? '#5a6c9a' : '#cfe4ff'); st.hemi.groundColor.set(night ? '#1a1a22' : '#5a4a32');
-  WIN().emissiveIntensity = night ? 2.2 : 0;
-  st.r.toneMappingExposure = night ? 1.2 : 1.0;
+  WIN().emissiveIntensity = night ? 2.6 : 0;
+  st.r.toneMappingExposure = night ? 1.45 : 1.0;
   st.r.shadowMap.needsUpdate = true;
 }
 
@@ -1054,19 +1054,27 @@ function frame(t) {
   }
 }
 // kare aralığı uzun süre 50 ms'yi aşarsa (20 fps altı) önce çözünürlüğü, sonra parlamayı, sonra görüntü işlemeyi kapatır
-function adapt(o, ts) {
+const IDLE = () => performance.now() - (window.__lastAct || 0) > 4000;   // 4 sn dokunulmadıysa
+const GAP = () => IDLE() ? 50 : 33;
+function adapt(o, ts, gap = 33) {
   if (o.last) { const dt = ts - o.last; if (dt < 400) o.ft = o.ft ? o.ft * .95 + dt * .05 : dt; }
-  o.adN = (o.adN || 0) + 1; if (o.adN < 90 || !(o.ft > 50)) return;
-  o.adN = 0; o.ft = 0;
-  if (o.quality > .72) o.quality = Math.round((o.quality - .14) * 100) / 100;
-  else if (o.post && o.post.bloomOn) o.post.bloomOn = false;
-  else if (o.post) o.post = null;
+  o.adN = (o.adN || 0) + 1; if (o.adN < 90 || !o.ft) return;
+  const slow = o.ft > gap * 1.5 + 5, fast = o.ft < gap * 1.15;
+  if (slow) {
+    o.adN = 0; o.ft = 0; o.downAt = ts;
+    if (o.quality > .72) o.quality = Math.round((o.quality - .14) * 100) / 100;
+    else if (o.post && o.post.bloomOn) o.post.bloomOn = false;
+    else if (o.post) o.post = null;
+  } else if (fast && o.quality < 1 && ts - (o.downAt || 0) > 20000 && o.adN > 180) {
+    o.adN = 0; o.quality = Math.min(1, Math.round((o.quality + .07) * 100) / 100);   // telefon rahatladıysa netliği geri ver
+  }
 }
 function loop(ts) {
   st.raf = 0;
   if (tab !== 'koy' || !$('scene') || $('scene') !== st.cv) return;
-  if (ts - st.last > 33) {
-    adapt(st, ts); st.last = ts; frame(ts);
+  const gap = GAP();
+  if (ts - st.last > gap) {
+    adapt(st, ts, gap); st.last = ts; frame(ts);
   }
   st.raf = requestAnimationFrame(loop);
 }
@@ -1214,6 +1222,18 @@ function castle(tier, barb) {
   const k = barb ? .72 : 1, rubble = () => { for (let i = 0; i < 7; i++) { const r = new T.Mesh(new T.DodecahedronGeometry(.025 + hash2(i, tier, 7) * .03), texMat('fort')); r.position.set((hash2(i, 1, tier) - .5) * .7, .02, (hash2(i, 2, tier) - .5) * .7); G.add(r); } };
   const tower = (x, z, r, h, roof) => { cyl(x, z, 0, h * k, r, W); if (!barb) { cyl(x, z, h, .025, r + .012, W); if (roof === 'dome') dome(x, z, h + .025, r * .9, r * .8, '', '#2fa596', '', false); else cone(x, z, h + .025, r + .02, r * 1.9, '#9b3b27', ROOF); } };
   const house = (x, z, w, d, h, rf) => { box(x - w / 2, z - d / 2, w, d, 0, h * k, barb ? 'fort' : 'plaster', null); if (!barb) hipRoof(x - w / 2, z - d / 2, w, d, h, Math.min(w, d) * .5, rf || ROOF, .02); };
+  if (tier === 0 && barb) {
+    // yıkık kulübeler: yarım duvarlar, çökmüş kirişler, sönmüş ocak
+    for (const [x, z, s] of [[-.17, -.1, 1], [.17, -.04, .85], [0, .2, .9]]) {
+      const w = .2 * s, d = .16 * s;
+      box(x - w / 2, z - d / 2, w, .03, 0, .09 * s, 'fort', null); box(x - w / 2, z - d / 2, .03, d, 0, .06 * s, 'fort', null);
+      box(x + w / 2 - .03, z - d / 2, .03, d * .6, 0, .04 * s, 'fort', null);
+      const beam = new T.Mesh(new T.BoxGeometry(w * 1.1, .018, .018), colMat('#3b2a1d')); beam.position.set(x, .05 * s, z); beam.rotation.set(0, .5, .45); G.add(beam);
+    }
+    const ash = new T.Mesh(new T.CylinderGeometry(.05, .06, .012, 8), colMat('#3a3632')); ash.position.set(.02, .006, -.02); G.add(ash);
+    const tr = new T.Mesh(new T.CylinderGeometry(.008, .014, .2, 5), colMat('#4a3b2e')); tr.position.set(-.3, .1, .26); tr.rotation.z = .2; G.add(tr);
+    rubble(); return flags;
+  }
   if (tier === 0) {
     for (const [x, z, s] of [[-.17, -.1, 1], [.17, -.06, .85], [0, .18, .9]]) { cyl(x, z, 0, .1 * s * k, .13 * s, null, barb ? '#8f897a' : '#e6dcc4'); if (!barb) { cone(x, z, .1 * s, .14 * s, .12 * s, '#a8473a'); cyl(x, z, .1 * s - .015, .02, .132 * s, null, '#b0453a'); } }
     const fire = new T.Mesh(new T.ConeGeometry(.04, .06, 6), colMat('#5e3b1f')); fire.position.set(.02, .03, -.02); G.add(fire);
@@ -1274,21 +1294,39 @@ function mapWorld() {
   const W = new T.Group(), N = C.WORLD;
   // zemin
   const ground = new T.PlaneGeometry(N + 40, N + 40, 120, 120); ground.rotateX(-Math.PI / 2);
-  const gp = ground.attributes.position, gc = [];
+  const gp = ground.attributes.position, gc = [], VC = S.vil.map(v => [v.x + .5, v.y + .5]);
+  const mixc = (a, b, t) => a.map((x, i) => x + (b[i] - x) * Math.max(0, Math.min(1, t)));
   for (let i = 0; i < gp.count; i++) {
-    const x = gp.getX(i) + N / 2, z = gp.getZ(i) + N / 2, n = fbm(x / 6 + 20, z / 6, 17), dry = fbm(x / 3.5, z / 3.5 + 40, 18);
-    const out = Math.max(0, Math.max(-x, x - N, -z, z - N)), k = (.8 + n * .36) * (out > 0 ? Math.max(.62, 1 - out * .03) : 1);
-    gc.push(k * (dry > .64 ? 1.12 : 1), k, k * (dry > .64 ? .85 : 1));
+    const x = gp.getX(i) + N / 2, z = gp.getZ(i) + N / 2, n = fbm(x / 6 + 20, z / 6, 17), dry = fbm(x / 3.5, z / 3.5 + 40, 18), lush = fbm(x / 9 + 7, z / 9 - 3, 19);
+    const out = Math.max(0, Math.max(-x, x - N, -z, z - N)), k = (.84 + n * .3) * (out > 0 ? Math.max(.62, 1 - out * .03) : 1);
+    // çayır → koyu orman tabanı → kuru ot; köylerin çevresi toprak
+    let c = mixc([1, 1, 1], [.62, .8, .6], (lush - .5) * 3.5);
+    c = mixc(c, [1.16, 1.04, .7], (dry - .6) * 5);
+    let dv = 9; for (const [vx, vz] of VC) { const d = Math.hypot(vx - x, vz - z); if (d < dv) dv = d; }
+    c = mixc(c, [1.22, 1.0, .72], (.95 - dv) * 2.2);
+    gc.push(k * c[0], k * c[1], k * c[2]);
     gp.setY(i, out > 0 ? Math.min(3, out * out * .02) * (.5 + fbm(x / 4, z / 4, 5)) : 0);
   }
   ground.setAttribute('color', new T.Float32BufferAttribute(gc, 3)); ground.computeVertexNormals();
   const gt = (MP.gt = MP.gt || grassTex()).clone(); gt.needsUpdate = true; gt.repeat.set(26, 26);
   const gm = new T.Mesh(ground, new T.MeshStandardMaterial({ map: gt, vertexColors: true, roughness: 1 })); gm.position.set(N / 2, 0, N / 2); gm.receiveShadow = true; W.add(gm);
   // ızgara ve sınır
-  const lp = []; for (let i = 0; i <= N; i += 5) { lp.push(i, .02, 0, i, .02, N, 0, .02, i, N, .02, i); }
-  W.add(new T.LineSegments(new T.BufferGeometry().setAttribute('position', new T.Float32BufferAttribute(lp, 3)), new T.LineBasicMaterial({ color: '#ffffff', transparent: true, opacity: .1 })));
   const bp = [0, .03, 0, N, .03, 0, N, .03, 0, N, .03, N, N, .03, N, 0, .03, N, 0, .03, N, 0, .03, 0];
   W.add(new T.LineSegments(new T.BufferGeometry().setAttribute('position', new T.Float32BufferAttribute(bp, 3)), new T.LineBasicMaterial({ color: '#dcaa45', transparent: true, opacity: .55 })));
+  // toprak yollar: her köy en yakın iki komşusuna bağlanır (tek çizimde birleşir)
+  { const roads = new T.Group(), seen = new Set(), rm = colMat('#a08757', { roughness: 1 }), rm2 = colMat('#8a7148', { roughness: 1 });
+    for (const a of S.vil) {
+      const near = S.vil.filter(b => b !== a).map(b => [b, Math.hypot(b.x - a.x, b.y - a.y)]).filter(([, d]) => d <= 6.5).sort((p, q) => p[1] - q[1]).slice(0, 2);
+      for (const [b] of near) {
+        const key = Math.min(a.id, b.id) + '-' + Math.max(a.id, b.id); if (seen.has(key)) continue; seen.add(key);
+        const ax = a.x + .5, az = a.y + .5, bx = b.x + .5, bz = b.y + .5, L = Math.hypot(bx - ax, bz - az), bend = (hash2(a.id, b.id, 41) - .5) * L * .35;
+        const nx = -(bz - az) / L, nz = (bx - ax) / L, pts = [];
+        for (let i = 0; i <= 16; i++) { const t = i / 16, w = Math.sin(t * Math.PI) * bend; pts.push([ax + (bx - ax) * t + nx * w, az + (bz - az) * t + nz * w]); }
+        const cut = pts.filter(([x, z]) => Math.hypot(x - ax, z - az) > .38 && Math.hypot(x - bx, z - bz) > .38);
+        if (cut.length > 2) { roads.add(ribbon(cut, .2, rm2, .011)); roads.add(ribbon(cut, .13, rm, .014)); }
+      }
+    }
+    mergeGroup(roads, null); roads.traverse(o => { o.castShadow = false; }); W.add(roads); }
   // süs: ormanlar, tepeler, kayalar (2B haritadaki dağılımla aynı)
   const occ = new Set(S.vil.map(v => v.x + ',' + v.y)), forest = [], servi = [], hills = [], rocks = [];
   const hsh = (x, y) => { let h = x * 374761393 + y * 668265263 + S.seed; h = (h ^ (h >>> 13)) * 1274126177; return ((h ^ (h >>> 16)) >>> 0); };
@@ -1299,14 +1337,15 @@ function mapWorld() {
     else if (d === 5 || d === 6) hills.push([x + .5, y + .5, .7 + (h % 5) / 10, (h % 100) / 100]);
     else if (d === 9) rocks.push([x + .6, y + .55, .8 + (h % 3) / 5, (h % 100) / 100]);
   }
-  const mk = (geo, mat, list, f, cast = true) => { const im = new T.InstancedMesh(geo, mat, Math.max(1, list.length)), m4 = new T.Matrix4(), c = new T.Color(); im.count = list.length; list.forEach((t, i) => { f(m4, t); im.setMatrixAt(i, m4); c.setHSL(.25 + (t[3] - .5) * .06, .45 + t[3] * .15, .5 + (t[3] - .5) * .18); im.setColorAt(i, c); }); im.castShadow = cast; im.receiveShadow = true; W.add(im); };
+  const mk = (geo, mat, list, f, cast = true, leaf = false) => { const im = new T.InstancedMesh(geo, mat, Math.max(1, list.length)), m4 = new T.Matrix4(), c = new T.Color(); im.count = list.length; list.forEach((t, i) => { f(m4, t); im.setMatrixAt(i, m4); if (leaf) { c.setHSL(.27 + (t[3] - .5) * .08, .5 + t[3] * .15, .3 + (t[3] - .5) * .12); im.setColorAt(i, c); } }); im.castShadow = cast; im.receiveShadow = true; W.add(im); };
   const blob = (() => { const parts = []; for (const [x, y, z, r] of [[0, .3, 0, .17], [.1, .27, .05, .13], [-.09, .29, -.04, .13], [.02, .4, -.02, .12]]) { const s2 = new T.IcosahedronGeometry(r, 0); s2.translate(x, y, z); parts.push(s2.index ? s2.toNonIndexed() : s2); } return mergeGeos(parts); })();
   mk(new T.CylinderGeometry(.022, .03, .22, 5).translate(0, .11, 0), colMat('#4a3524'), forest, (m4, t) => m4.compose(new T.Vector3(t[0], 0, t[1]), new T.Quaternion(), new T.Vector3(t[2], t[2], t[2])));
-  mk(blob, new T.MeshStandardMaterial({ color: '#ffffff', roughness: .95, flatShading: true }), forest, (m4, t) => m4.compose(new T.Vector3(t[0], 0, t[1]), new T.Quaternion().setFromAxisAngle(new T.Vector3(0, 1, 0), t[3] * 6), new T.Vector3(t[2], t[2], t[2])));
+  mk(blob, new T.MeshStandardMaterial({ color: '#ffffff', roughness: .95, flatShading: true }), forest, (m4, t) => m4.compose(new T.Vector3(t[0], 0, t[1]), new T.Quaternion().setFromAxisAngle(new T.Vector3(0, 1, 0), t[3] * 6), new T.Vector3(t[2], t[2], t[2])), true, true);
   const lat = (() => { const pts = []; for (let i = 0; i <= 8; i++) { const f = i / 8; pts.push(new T.Vector2(Math.sin(Math.PI * Math.pow(f, .8)) * .08 * (1 - f * .35), .05 + f * .7)); } return new T.LatheGeometry(pts, 8); })();
-  mk(lat, new T.MeshStandardMaterial({ color: '#ffffff', roughness: .95, flatShading: true }), servi, (m4, t) => m4.compose(new T.Vector3(t[0], 0, t[1]), new T.Quaternion(), new T.Vector3(t[2], t[2], t[2])));
+  mk(lat, new T.MeshStandardMaterial({ color: '#b8c8a8', roughness: .95, flatShading: true }), servi, (m4, t) => m4.compose(new T.Vector3(t[0], 0, t[1]), new T.Quaternion(), new T.Vector3(t[2], t[2], t[2])), true, true);
   const hg = new T.DodecahedronGeometry(.5, 1); { const p = hg.attributes.position; for (let i = 0; i < p.count; i++) { const y = p.getY(i); p.setY(i, Math.max(0, y)); } hg.computeVertexNormals(); }
-  mk(hg, texMat('rock'), hills, (m4, t) => m4.compose(new T.Vector3(t[0], -.02, t[1]), new T.Quaternion().setFromAxisAngle(new T.Vector3(0, 1, 0), t[3] * 6), new T.Vector3(t[2] * .9, t[2] * .55, t[2] * .8)));
+  { const p = hg.attributes.position, hc = []; for (let i = 0; i < p.count; i++) { const y = p.getY(i); const g = y > .3 ? [.34, .33, .27] : [.2, .3 + y * .12, .12]; hc.push(...g); } hg.setAttribute('color', new T.Float32BufferAttribute(hc, 3)); }
+  mk(hg, new T.MeshStandardMaterial({ vertexColors: true, roughness: 1, flatShading: true }), hills, (m4, t) => m4.compose(new T.Vector3(t[0], -.02, t[1]), new T.Quaternion().setFromAxisAngle(new T.Vector3(0, 1, 0), t[3] * 6), new T.Vector3(t[2] * 1.1, t[2] * .32, t[2] * 1)));
   mk(new T.DodecahedronGeometry(.09, 0), colMat('#9a958a', { roughness: 1, flatShading: true }), rocks, (m4, t) => m4.compose(new T.Vector3(t[0], .03, t[1]), new T.Quaternion().setFromEuler(new T.Euler(t[3] * 3, t[3] * 5, 0)), new T.Vector3(t[2], t[2] * .7, t[2])));
   // dere
   const rv = []; for (let z = -10; z <= N + 10; z += .4) rv.push([3.2 + Math.sin(z * .35) * 1.4 + Math.sin(z * .11) * 2, z]);
@@ -1400,10 +1439,11 @@ function mapWire(cv) {
 }
 function mapLight(night) {
   if (MP.night === night) return; MP.night = night;
-  MP.scene.fog = new T.Fog(night ? '#0d1626' : '#a9c7d6', 24, 62);
-  MP.sun.intensity = night ? .35 : 2.7; MP.sun.color.set(night ? '#8fa6ff' : '#fff1d8'); MP.hemi.intensity = night ? .18 : .5;
+  MP.scene.fog = new T.Fog(night ? '#142039' : '#a9c7d6', 24, 62);
+  MP.sun.intensity = night ? .85 : 2.7; MP.sun.color.set(night ? '#9fb6ff' : '#fff1d8'); MP.hemi.intensity = night ? .5 : .5;
+  MP.hemi.color.set(night ? '#5a6c9a' : '#cfe4ff'); MP.hemi.groundColor.set(night ? '#1a1a22' : '#5a4a32');
   MP.atmos.set(night, new T.Vector3(-8, 16, 5));
-  MP.r.toneMappingExposure = night ? 1.2 : 1; MP.r.shadowMap.needsUpdate = true;
+  MP.r.toneMappingExposure = night ? 1.45 : 1; MP.r.shadowMap.needsUpdate = true;
 }
 
 // ---------- haritada yürüyen 3B ordular ----------
@@ -1440,7 +1480,7 @@ function mapTokens() {
 }
 function mapFrame() {
   if (!MP.cv || !S) return;
-  { const nt = performance.now(); if (MP.last && nt - MP.last < 25) return; adapt(MP, nt); MP.last = nt; }
+  { const nt = performance.now(), gap = GAP(); if (MP.last && nt - MP.last < gap - 8) return; adapt(MP, nt, gap); MP.last = nt; }
   const r = MP.cv.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, QC().pr) * MP.quality; WIND.value = performance.now() / 1000;
   const W = Math.max(1, Math.round(r.width * dpr)), H = Math.max(1, Math.round(r.height * dpr));
   if (MP.cv.width !== W || MP.cv.height !== H) { MP.r.setPixelRatio(dpr); MP.r.setSize(r.width, r.height, false); MP.cam.aspect = r.width / r.height; MP.cam.updateProjectionMatrix(); mapCam(); }

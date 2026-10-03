@@ -203,6 +203,6 @@ function focusMove(id) {
 function mapLoop(ts) {
   MV.raf = 0;
   if (tab !== 'harita' || !$('map')) return;
-  if (ts - MV.last > 33) { MV.last = ts; trackArrivals(); drawMap(); liveMovePanel(); }
+  if (ts - MV.last > (performance.now() - (window.__lastAct || 0) > 4000 ? 50 : 33)) { MV.last = ts; trackArrivals(); drawMap(); liveMovePanel(); }
   MV.raf = requestAnimationFrame(mapLoop);
 }
