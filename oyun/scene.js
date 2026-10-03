@@ -1185,7 +1185,7 @@ function drawScene(t) {
   const v = cur(), cv = vi.cv, g = cv.getContext('2d'); if (!g) return;
   const W = Math.round(vi.r.width * vi.dpr), H = Math.round(vi.r.height * vi.dpr);
   if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; clampCam(); }
-  const hr = SC.hour != null ? SC.hour : new Date().getHours(), night = hr >= 20 || hr < 6;
+  const night = SC.hour != null ? (SC.hour >= 20 || SC.hour < 6) : Core.dayPhase(Date.now()).night;
   const sig = v.id + '|' + S.seed + '|' + JSON.stringify(v.b) + '|' + v.bq.map(q => q.b).join() + '|' + S.player.color;
   if (!SC.G || sig !== SC.sig) { SC.sig = sig; TILES.clear(); SC.G = buildStatic(v, vi); }
   g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = '#0c1422'; g.fillRect(0, 0, W, H);

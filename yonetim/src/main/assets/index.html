@@ -695,19 +695,31 @@ function cancelLast(v, t) {
   for (let i = 0; i < 3; i++) v.res[i] = Math.min(c, v.res[i] + q.c[i] * 0.9);
   v.bq.pop(); return 'ok';
 }
+// köyün sahip olduğu sancakbeyi: köyde, eğitimde, yolda ya da başka köyde destekte
+function sancakOf(v) {
+  let n = v.units.sancakbeyi || 0;
+  for (const q of Object.values(v.rq)) for (const it of q) if (it.u === 'sancakbeyi') n += it.n;
+  for (const m of S.moves) if (m.from === v.id && m.owner === v.owner && m.units && m.units.sancakbeyi) n += m.units.sancakbeyi;
+  for (const x of S.vil) for (const e of x.sup || []) if (e.from === v.id && e.owner === v.owner && e.units.sancakbeyi) n += e.units.sancakbeyi;
+  return n;
+}
+const SANCAK_MAX = 1;
+const DAY_MS = 60 * 60000, NIGHT_MS = 10 * 60000;
+const dayPhase = t => { const p = ((t % (DAY_MS + NIGHT_MS)) + (DAY_MS + NIGHT_MS)) % (DAY_MS + NIGHT_MS); return p < DAY_MS ? { night: false, left: DAY_MS - p } : { night: true, left: DAY_MS + NIGHT_MS - p }; };
 function unitUnlocked(v, u) { return v.b[U[u].b] >= U[u].lv; }
 function maxTrain(v, u) {
   if (!unitUnlocked(v, u)) return 0;
   const c = U[u].c; let n = Infinity;
   for (let i = 0; i < 3; i++) if (c[i]) n = Math.min(n, Math.floor(v.res[i] / c[i]));
   n = Math.min(n, Math.floor(popFree(v) / U[u].pop));
-  if (u === 'sancakbeyi') n = Math.min(n, 1);
+  if (u === 'sancakbeyi') n = Math.min(n, Math.max(0, SANCAK_MAX - sancakOf(v)));
   return Math.max(0, n);
 }
 function train(v, u, n, t) {
   syncRes(v, t);
   n = Math.floor(n); if (!(n > 0)) return 'zero';
   if (!unitUnlocked(v, u)) return 'req';
+  if (u === 'sancakbeyi' && n > SANCAK_MAX - sancakOf(v)) return 'sancak';
   if (n > maxTrain(v, u)) return afford(v, U[u].c.map(x => x * n)) ? 'pop' : 'res';
   pay(v, U[u].c, n);
   const q = v.rq[U[u].b], each = uTime(u, v.b[U[u].b], v.owner);
@@ -1226,7 +1238,7 @@ const AI = (() => {
         else reserve = c;
       }
     }
-    if (v.b.divan >= 1 && !(v.units.sancakbeyi > 0)) {
+    if (v.b.divan >= 1 && sancakOf(v) < SANCAK_MAX) {
       // fetih için biriktir: sancakbeyi alınana kadar askere daha az harca
       if (afford(v, U.sancakbeyi.c) && popFree(v) >= 100) { pay(v, U.sancakbeyi.c); v.units.sancakbeyi = 1; }
       else reserve = reserve.map((x, i) => Math.max(x, U.sancakbeyi.c[i]));
@@ -1287,7 +1299,7 @@ const AI = (() => {
 
 return {
   HOUR, RES_NAMES, MINES, B, B_ORDER, U, U_ORDER, REC_B, WORLD, TECH, TECH_ORDER,
-  reqFor, simulate, statsOf, addSup, supUnits, recallSup, respawn, RANKS, RELS, DIPK, members, leaderOf, rankOf, canDo, cmeta, setRank, kickMember, setDesc, relOf, relEntry, relOwners, clanPts, clanName, humanDecider, declareWar, proposeRel, answerRel, cancelRel, breakRel, inviteHuman, acceptInvite, declineInvite, isHuman, protectOf, mkVillage, clanOf, sameClan, clanList, ownerPts, createClan, inviteBey, joinClan, leaveClan, playerSay, CLAN_MAX, techCost, techTime, canResearch, research, migrate, medreseMax, TL,
+  reqFor, simulate, sancakOf, SANCAK_MAX, dayPhase, statsOf, addSup, supUnits, recallSup, respawn, RANKS, RELS, DIPK, members, leaderOf, rankOf, canDo, cmeta, setRank, kickMember, setDesc, relOf, relEntry, relOwners, clanPts, clanName, humanDecider, declareWar, proposeRel, answerRel, cancelRel, breakRel, inviteHuman, acceptInvite, declineInvite, isHuman, protectOf, mkVillage, clanOf, sameClan, clanList, ownerPts, createClan, inviteBey, joinClan, leaveClan, playerSay, CLAN_MAX, techCost, techTime, canResearch, research, migrate, medreseMax, TL,
   get S() { return S; }, set S(x) { S = x; },
   onNotify(fn) { log = fn; },
   maxAll(v, t) { syncRes(v, t); for (const b of B_ORDER) v.b[b] = B[b].max; v.bq = []; const c = cap(v); v.res = [c, c, c]; },
@@ -1312,7 +1324,7 @@ const Net = (() => {
 const URL = 'https://tgiqiybqfbikmdoblwba.supabase.co';
 const KEY = 'sb_publishable__r4MnoM3ecwE4T5RQR-2zw_7W046pR4';
 // oyun kurallarını değiştiren her sürümde artır; sunucu daha eski sürümlerin kaydını reddeder
-const CLIENT_VER = 23;
+const CLIENT_VER = 24;
 const AUTH_K = (typeof window !== 'undefined' && window.UB_AUTH_KEY) || 'ub-auth';   // yönetim uygulaması ayrı oturum tutar
 const ls = { get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }, del(k) { try { localStorage.removeItem(k); } catch (e) {} } };
 

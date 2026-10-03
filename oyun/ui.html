@@ -362,6 +362,7 @@ input.qty{width:74px;background:var(--bg);border:1px solid var(--line);border-ra
 .speeds input{grid-row:span 2;accent-color:var(--gold)}
 .speeds b{font-size:15px}
 .speeds span{font-size:12.5px;color:var(--muted)}
+.saveban{position:absolute;left:8px;right:8px;top:calc(env(safe-area-inset-top,0px) + 96px);z-index:24;background:#b0392b;color:#fff;border:0;border-radius:10px;padding:8px 12px;font:inherit;font-weight:800;font-size:13.5px;text-align:left;box-shadow:0 6px 18px rgba(0,0,0,.45)}
 .homebtns{display:grid;gap:10px;justify-items:stretch;max-width:320px;width:100%;justify-self:center}
 .homebtns .bigbtn{justify-self:stretch}
 .homebtns .btn{padding:12px 16px;font-size:16px}
@@ -463,7 +464,7 @@ const $ = id => document.getElementById(id);
 const SAVE = 'ucbeyleri-save-v1';
 const store = {
   get() { try { return localStorage.getItem(SAVE); } catch (e) { return null; } },
-  set(v) { try { localStorage.setItem(SAVE, v); } catch (e) {} },
+  set(v) { try { localStorage.setItem(SAVE, v); } catch (e) { if (!store.warned) { store.warned = 1; setTimeout(() => toast('⚠ Oyun bu cihaza kaydedilemedi (depolama dolu ya da kapalı)', 'bad'), 0); } } },
   del() { try { localStorage.removeItem(SAVE); } catch (e) {} },
 };
 const now = () => Date.now() + (typeof MPX !== 'undefined' && MPX ? Net.offset : 0);
@@ -588,6 +589,13 @@ function showUpdate() {
   });
   const ov = $('ov'); ov.classList.add('center'); ov.dataset.lock = '1'; ov.dataset.upd = '1';
 }
+// kayıt sürekli başarısızsa ekranda kalan uyarı şeridi
+function saveBanner(txt) {
+  let b = $('saveBan');
+  if (!txt) { if (b) b.remove(); return; }
+  if (!b) { b = document.createElement('button'); b.id = 'saveBan'; b.className = 'saveban'; b.onclick = () => { const s2 = $('setBtn'); if (s2) s2.click(); }; $('app').appendChild(b); }
+  b.textContent = txt + ' · dokun';
+}
 async function pushNow() {
   if (!MPX || MPX.pushing) return;
   const M = MPX; M.pushing = true; setNet('sync');
@@ -605,8 +613,9 @@ async function pushNow() {
       for (const fn of fns) { try { fn(); } catch (e) {} }
       save();
     }
-    setNet('ok'); M.fails = 0;
-  } catch (e) { if (isOld(e)) { M.pending = []; M.retryAt = Infinity; setNet('off'); showUpdate(); return; } M.fails = (M.fails || 0) + 1; M.retryAt = now() + Math.min(30000, 3000 * M.fails); setNet('off'); }
+    setNet('ok'); M.fails = 0; M.lastErr = null; saveBanner(null);
+  } catch (e) { if (isOld(e)) { M.pending = []; M.retryAt = Infinity; setNet('off'); showUpdate(); return; } M.fails = (M.fails || 0) + 1; M.retryAt = now() + Math.min(30000, 3000 * M.fails); setNet('off'); M.lastErr = netErr(e);
+    if (M.fails >= 2) saveBanner('⚠ İlerlemen kaydedilemiyor: ' + M.lastErr); }
   finally { M.pushing = false; }
 }
 async function poll() {
@@ -663,6 +672,7 @@ async function mpOpen(info, me) {
   save(); tab = 'koy'; map.ox = null; overShown = false; showGame(); setNet(M.net || 'ok');
 }
 function leaveToMenu() {
+  saveBanner(null);
   save(); MPX = null; S = null; C.S = null; LS.set('ub-mode', { sp: true }); closeSheet(); setNet(); showStart();
 }
 
@@ -783,7 +793,7 @@ function showStart(err, step) {
       ${hasSp ? '<div class="muted small" style="text-align:center">Yeni oyun kurarsan kayıtlı tek kişilik oyunun silinir.</div>' : ''}
       <button class="bigbtn" id="stGo">${hasSp ? 'Yeni oyun kur' : 'Beyliği kur'}</button></section>`;
   }
-  el.innerHTML = `<div class="box">${body}</div>`;
+  el.innerHTML = `<div class="box">${body}<div class="muted small" style="text-align:center;opacity:.7">Sürüm ${Net.CLIENT_VER}</div></div>`;
   $('app').appendChild(el);
   if (use3D()) { const bg = document.createElement('canvas'); bg.className = 'startbg'; el.prepend(bg); el.classList.add('has3d'); try { V3.showcase(bg); } catch (e) { bg.remove(); el.classList.remove('has3d'); } }
   const goStep = st => showStart(null, st);
@@ -1170,13 +1180,15 @@ $('setBtn').onclick = () => {
   sheet(`<div class="shead"><h3>Ayarlar</h3><button class="x" data-close aria-label="Kapat">×</button></div>
     <div class="card small"><div><b>Beylik:</b> <b data-pc="P" style="text-decoration:underline dotted">${esc(S.player.name)}</b> <span class="muted">(profil)</span></div><div><b>Dünya hızı:</b> ${S.speed}×</div>
     <div><b>Başlangıç:</b> ${clock(S.created)}</div>
-    <div><b>Acemi koruması:</b> ${now() < S.protectUntil ? dur(S.protectUntil - now()) + ' kaldı' : 'bitti'}</div></div>
+    <div><b>Acemi koruması:</b> ${now() < S.protectUntil ? dur(S.protectUntil - now()) + ' kaldı' : 'bitti'}</div>
+    <div><b>Dünya saati:</b> ${(() => { const d = C.dayPhase(now()); return d.night ? 'gece · ' + dur(d.left) + ' sonra sabah' : 'gündüz · ' + dur(d.left) + ' sonra gece'; })()}</div>
+    <div class="muted">Oyun sürümü ${Net.CLIENT_VER}</div></div>
     <section class="card"><b>Grafik kalitesi</b><div class="muted small">Yüksek: gerçek gölgeler, parlama, rüzgârda çimen. Telefon ısınır ya da takılırsa bir alt seviyeye geç.</div><div class="chips">${[['high', '3B Yüksek'], ['med', '3B Orta'], ['low', '3B Düşük'], ['2d', '2B']].map(([k, n]) => `<button class="btn ${gq() === k ? 'firuze' : 'sec'}" data-gq="${k}">${n}</button>`).join('')}</div></section>
     <section class="card"><b>Ses</b><div class="chips"><button class="btn ${Sfx.fx ? 'firuze' : 'sec'}" id="sfxT">Efektler: ${Sfx.fx ? 'Açık' : 'Kapalı'}</button><button class="btn ${Sfx.music ? 'firuze' : 'sec'}" id="muT">Müzik: ${Sfx.music ? 'Açık' : 'Kapalı'}</button></div></section>
     ${NB() ? `<section class="card"><b>Bildirimler</b><div class="muted small">İnşaat, eğitim, ordu dönüşü, günlük sandık${MPX ? ' ve diğer oyuncuların saldırıları' : ''}.</div><div class="chips"><button class="btn ${notifOn() && UB.notifState() === 'granted' ? 'firuze' : 'sec'}" id="nfT">Bildirimler: ${notifOn() && UB.notifState() === 'granted' ? 'Açık' : 'Kapalı'}</button></div></section>` : ''}
     ${MPX ? `<section class="card"><b>Çok oyunculu dünya</b><div class="bigcode" style="font-size:26px">${esc(MPX.code)}</div>
       <div class="small">${S.beys.filter(b => b.human).length + 1} oyuncu: <b style="color:${S.player.color}">${esc(S.player.name)}</b>${S.beys.filter(b => b.human).map(b => `, <b style="color:${b.color}">${esc(b.name)}</b>`).join('')}</div>
-      <div class="small muted">Bağlantı: ${{ ok: 'senkron', sync: 'kaydediliyor…', off: 'internet yok, tekrar deneniyor' }[MPX.net || 'ok']}</div>
+      <div class="small muted">Bağlantı: ${{ ok: 'senkron', sync: 'kaydediliyor…', off: 'kaydedilemiyor, tekrar deneniyor' }[MPX.net || 'ok']}</div>${MPX.lastErr ? `<div class="mperr" style="text-align:left">Kayıt hatası: ${esc(MPX.lastErr)}</div>` : ''}
       <div class="chips"><button class="btn firuze" id="mpShare">Kodu paylaş</button><button class="btn sec" id="mpMenu">Ana menü</button></div></section>
       <section class="card" id="accBox2">${accHTML()}</section>
       <button class="btn red" id="mpLeave">Bu dünyadan ayrıl</button>` : `
@@ -1499,7 +1511,7 @@ function openBuilding(b) {
       if (tb) {
         const u = tb.dataset.strain, inp = $('sq-' + u), n = +inp.value, r = act(() => C.train(cur(), u, n, now()));
         if (r === 'ok') { Sfx.play('train'); toast(`${n} ${C.U[u].n} eğitime alındı`, 'info'); inp.value = ''; drafts[u] = ''; save(); liveBSheet(); renderTop(); }
-        else toast(r === 'pop' ? 'Nüfus yetmiyor, Çiftliği yükselt' : r === 'res' ? 'Kaynaklar yetmiyor' : 'Eğitim başlatılamadı', 'bad');
+        else toast(r === 'sancak' ? SANCAK_TXT : r === 'pop' ? 'Nüfus yetmiyor, Çiftliği yükselt' : r === 'res' ? 'Kaynaklar yetmiyor' : 'Eğitim başlatılamadı', 'bad');
       }
     });
     box.addEventListener('input', e => { if (e.target.id && e.target.id.startsWith('sq-')) { drafts[e.target.id.slice(3)] = e.target.value; liveBSheet(); } if (e.target.id === 'mkGn') mkDraft.gn = e.target.value; if (e.target.id === 'mkWn') mkDraft.wn = e.target.value; if (e.target.id === 'mkGn' || e.target.id === 'mkWn') liveMarket(box.parentNode, cur()); });
@@ -1550,6 +1562,7 @@ function unitStats(u) {
   const U = C.U[u];
   return `Sal ${U.a} · Sav ${U.di}/${U.dc} · ${(U.sp / S.speed).toFixed(U.sp / S.speed < 10 ? 1 : 0).replace('.', ',')} dk/kare${U.cr ? ' · Taşır ' + U.cr : ''}`;
 }
+const SANCAK_TXT = 'Bir köyde en fazla 1 sancakbeyi olabilir. Fetihte kullanılınca ya da savaşta düşünce yenisi eğitilebilir.';
 const uList = u => C.U_ORDER.filter(k => u[k] > 0).map(k => `${fmt(u[k])} ${C.U[k].n}`).join(', ');
 function supHTML() {
   const out = [], inc = [];
@@ -1586,7 +1599,7 @@ function renderOrdu() {
       html += `<div class="urow${un ? '' : ' locked'}"><div>${uIcon(u)}<div class="nm">${U.n}</div><div class="st num">${U.d}. ${unitStats(u)}</div></div>
         <div class="num small muted" style="text-align:right">${CLOCK_I.replace('<svg', '<svg style="width:13px;height:13px;vertical-align:-2px"')} ${dur(C.uTime(u, lvl, 'P'))}<br>nüfus ${U.pop}</div>
         <div class="ctl"><div class="chips">${costChips(U.c)}</div>
-        ${un ? `<input class="qty num" type="number" min="0" inputmode="numeric" id="q-${u}" value="${drafts[u] || ''}" placeholder="0" aria-label="${U.n} sayısı">
+        ${u === 'sancakbeyi' && un && C.sancakOf(v) >= C.SANCAK_MAX ? `<span class="muted small">Bu köyün sancakbeyi var (köyde, yolda ya da eğitimde). Köy başına 1.</span>` : un ? `<input class="qty num" type="number" min="0" inputmode="numeric" id="q-${u}" value="${drafts[u] || ''}" placeholder="0" aria-label="${U.n} sayısı">
         <button class="maxb num" data-max="${u}">maks 0</button><button class="btn" data-train="${u}">Eğit</button>` : `<span class="muted small">${B.n} ${U.lv}. seviye gerekli</span>`}</div></div>`;
     }
     html += `</section>`;
@@ -1649,7 +1662,7 @@ $('view').addEventListener('click', e => {
     const u = tb.dataset.train, inp = $('q-' + u), n = +inp.value;
     const r = act(() => C.train(cur(), u, n, now()));
     if (r === 'ok') { Sfx.play('train'); toast(`${n} ${C.U[u].n} eğitime alındı`, 'info'); inp.value = ''; drafts[u] = ''; save(); liveOrdu(); renderTop(); }
-    else toast(r === 'pop' ? 'Nüfus yetmiyor, Çiftliği yükselt' : r === 'res' ? 'Kaynaklar yetmiyor' : 'Eğitim başlatılamadı', 'bad');
+    else toast(r === 'sancak' ? SANCAK_TXT : r === 'pop' ? 'Nüfus yetmiyor, Çiftliği yükselt' : r === 'res' ? 'Kaynaklar yetmiyor' : 'Eğitim başlatılamadı', 'bad');
   }
 });
 

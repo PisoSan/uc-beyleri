@@ -1040,7 +1040,7 @@ function frame(t) {
   if (st.ov.width !== W || st.ov.height !== H) { st.ov.width = W; st.ov.height = H; }
   const sig = v.id + '|' + JSON.stringify(v.b) + '|' + v.bq.map(q => q.b).join() + '|' + PCOL();
   if (sig !== st.sig) { st.sig = sig; buildVillage(v); }
-  const hr = SC.hour != null ? SC.hour : new Date().getHours(); setLight(hr >= 20 || hr < 6);
+  setLight(SC.hour != null ? (SC.hour >= 20 || SC.hour < 6) : Core.dayPhase(Date.now()).night);
   animate(t);
   ringFor(SC.sel); if (selRing && selRing.visible) selRing.material.opacity = .6 + .35 * Math.sin(t / 250);
   draw3(st, W, H);
@@ -1446,7 +1446,7 @@ function mapFrame() {
   if (MP.cv.width !== W || MP.cv.height !== H) { MP.r.setPixelRatio(dpr); MP.r.setSize(r.width, r.height, false); MP.cam.aspect = r.width / r.height; MP.cam.updateProjectionMatrix(); mapCam(); }
   if (MP.ov.width !== W || MP.ov.height !== H) { MP.ov.width = W; MP.ov.height = H; }
   if (MP.frameN++ % 30 === 0 || !MP.vsig) { const sg = mapSig(); if (sg !== MP.vsig) { MP.vsig = sg; mapVillages(); } }
-  const hr = SC.hour != null ? SC.hour : new Date().getHours(); mapLight(hr >= 20 || hr < 6);
+  mapLight(SC.hour != null ? (SC.hour >= 20 || SC.hour < 6) : Core.dayPhase(Date.now()).night);
   const sv = map.sel != null ? S.vil[map.sel] : null;
   MP.selRing.visible = !!sv; if (sv) { MP.selRing.position.set(sv.x + .5, .04, sv.y + .5); MP.selRing.material.opacity = .55 + .4 * Math.sin(performance.now() / 250); }
   try { mapTokens(); } catch (e) {}

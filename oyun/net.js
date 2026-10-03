@@ -9,7 +9,7 @@ const Net = (() => {
 const URL = 'https://tgiqiybqfbikmdoblwba.supabase.co';
 const KEY = 'sb_publishable__r4MnoM3ecwE4T5RQR-2zw_7W046pR4';
 // oyun kurallarını değiştiren her sürümde artır; sunucu daha eski sürümlerin kaydını reddeder
-const CLIENT_VER = 23;
+const CLIENT_VER = 24;
 const AUTH_K = (typeof window !== 'undefined' && window.UB_AUTH_KEY) || 'ub-auth';   // yönetim uygulaması ayrı oturum tutar
 const ls = { get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }, del(k) { try { localStorage.removeItem(k); } catch (e) {} } };
 
