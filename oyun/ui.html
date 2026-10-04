@@ -49,7 +49,7 @@ button:focus-visible,input:focus-visible,.tabbtn:focus-visible{outline:2px solid
 @keyframes pulse{50%{opacity:.25}}
 
 /* ---------- body ---------- */
-main{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;background:radial-gradient(120% 60% at 50% 0%,rgba(220,170,69,.06),transparent 60%),url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='56' viewBox='0 0 56 56'%3E%3Cg fill='none' stroke='%23dcaa45' stroke-opacity='.05' stroke-width='1'%3E%3Crect x='18' y='18' width='20' height='20'/%3E%3Crect x='18' y='18' width='20' height='20' transform='rotate(45 28 28)'/%3E%3Cpath d='M0 28h8M48 28h8M28 0v8M28 48v8'/%3E%3C/g%3E%3C/svg%3E") repeat}
+main{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;background:radial-gradient(120% 60% at 50% 0%,rgba(220,170,69,.06),transparent 60%),url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='56' viewBox='0 0 56 56'%3E%3Cg fill='none' stroke='%23dcaa45' stroke-opacity='.035' stroke-width='1'%3E%3Crect x='18' y='18' width='20' height='20'/%3E%3Crect x='18' y='18' width='20' height='20' transform='rotate(45 28 28)'/%3E%3Cpath d='M0 28h8M48 28h8M28 0v8M28 48v8'/%3E%3C/g%3E%3C/svg%3E") repeat}
 main.flush{overflow:hidden;display:flex;flex-direction:column}
 .pad{padding:12px 12px 20px;display:grid;gap:12px}
 h2.sec{font-family:var(--display);font-size:17px;font-weight:700;margin:4px 0 0;color:var(--gold);letter-spacing:.03em}
@@ -322,6 +322,15 @@ input.qty{width:74px;background:var(--bg);border:1px solid var(--line);border-ra
 /* ranking */
 .rank td,.rank th{padding:7px 6px}
 .rank tr.me td{color:var(--gold);font-weight:800}
+.rban{position:relative;text-align:center;padding:9px 0 8px;border-radius:10px;font-family:var(--display);font-weight:700;letter-spacing:.12em;font-size:18px;overflow:hidden}
+.rban.win{color:#2a1a04;background:linear-gradient(90deg,transparent,#e8bf5c 18%,#f6dc8e 50%,#e8bf5c 82%,transparent)}
+.rban.lose{color:#fde7e2;background:linear-gradient(90deg,transparent,#8e2f24 18%,#b8473a 50%,#8e2f24 82%,transparent)}
+.rban span::before,.rban span::after{content:'✦';margin:0 10px;opacity:.7;font-size:12px;vertical-align:2px}
+.rbar{display:grid;grid-template-columns:minmax(0,1fr) 42% auto;gap:8px;align-items:center;font-size:13px}
+.rbar span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted)}
+.rbar i{height:8px;border-radius:5px;background:rgba(214,92,72,.55);overflow:hidden}
+.rbar i b{display:block;height:100%;background:linear-gradient(90deg,#3fb9a4,#6fd8c0);border-radius:5px}
+.rbar em{font-style:normal;color:var(--muted);font-size:12px;min-width:62px;text-align:right}
 .medal{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;font-size:12px;font-weight:800;color:#1b1406;box-shadow:inset 0 -2px 0 rgba(0,0,0,.25),0 1px 3px rgba(0,0,0,.4)}
 .medal.m1{background:linear-gradient(#ffe08a,#d39b2a)}.medal.m2{background:linear-gradient(#f1f3f6,#9aa3ad)}.medal.m3{background:linear-gradient(#f0b78a,#a8642f)}
 .ucell{position:relative}
@@ -1895,8 +1904,15 @@ function unitTable(r) {
   const rows = us.map(u => `<tr><td>${C.U[u].n}</td><td>${r.aUnits[u] ? fmt(r.aUnits[u]) : '–'}${r.aLost[u] ? ` <span class="loss">−${fmt(r.aLost[u])}</span>` : ''}</td><td>${r.dUnits ? (r.dUnits[u] ? fmt(r.dUnits[u]) : '–') + (r.dLost[u] ? ` <span class="loss">−${fmt(r.dLost[u])}</span>` : '') : '?'}</td></tr>`).join('');
   return `<div class="tblwrap"><table class="tbl num"><thead><tr><th>Birlik</th><th>${esc(r.attName)}</th><th>${esc(r.defName)}</th></tr></thead><tbody>${rows || '<tr><td colspan="3" class="muted">Savunmada kimse yoktu.</td></tr>'}</tbody></table></div>`;
 }
+function repBanner(r) {
+  if (r.type === 'spy' || !r.aUnits || (r.attOwner !== 'P' && r.defOwner !== 'P')) return '';
+  const mine = r.attOwner === 'P' ? r.win : !r.win, sum = o => Object.values(o || {}).reduce((a, b) => a + (b || 0), 0);
+  const bar = (name, tot, lost) => { const p = tot ? Math.round(lost / tot * 100) : 0; return `<div class="rbar"><span>${esc(name)}</span><i><b style="width:${100 - p}%"></b></i><em class="num">kayıp %${p}</em></div>`; };
+  return `<div class="rban ${mine ? 'win' : 'lose'}"><span>${r.conquered && r.attOwner === 'P' ? 'Köy fethedildi' : mine ? 'Zafer' : 'Yenilgi'}</span></div>`
+    + bar(r.attName, sum(r.aUnits), sum(r.aLost)) + (r.dUnits ? bar(r.defName, sum(r.dUnits), sum(r.dLost)) : '');
+}
 function repDetail(r) {
-  let h = `<div class="rdet">`;
+  let h = `<div class="rdet">` + repBanner(r);
   h += `<div class="small muted">${esc(C.ownerName(r.attOwner))} → ${esc(C.ownerName(r.defOwner))}${r.type !== 'spy' ? ` · şans ${r.luck >= 0 ? '+' : ''}${Math.round(r.luck * 100)}%` : ''}</div>`;
   h += unitTable(r);
   if (!r.dUnits) h += `<div class="small muted">Hiçbir askerin geri dönmedi, düşman ordusunu göremedin.</div>`;
