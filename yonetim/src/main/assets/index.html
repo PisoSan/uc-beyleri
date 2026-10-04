@@ -1679,12 +1679,12 @@ async function vOzet() {
         <div class="tile"><b>${fmt(o.accounts)}</b><span>kayıtlı hesap</span></div>
         <div class="tile${o.bans ? ' warn' : ''}"><b>${fmt(o.bans)}</b><span>yasaklı</span></div>
         <div class="tile"><b>${fmt(o.push)}</b><span>bildirim açık cihaz</span></div></div>
-      <section class="card"><h2>Zorunlu güncelleme</h2><div class="muted small">Oyun kuralları değişince eski sürümler dünyayı bozmasın diye, bu sürümden eski uygulamaların kayıt yapması engellenir ve oyuncuya "Yeni sürüm gerekli" ekranı çıkar. Şu anki en düşük sürüm: <b id="minv">…</b></div>
-        <div class="g2" style="grid-template-columns:1fr auto"><input id="minIn" type="number" inputmode="numeric" placeholder="sürüm no (örn. 23)"><button class="btn sec" id="minSet">Kaydet</button></div></section>
+      <section class="card"><h2>Zorunlu güncelleme</h2><div class="muted small">Oyun kuralları değişince eski sürümler dünyayı bozmasın diye, bu sürümden eski uygulamaların kayıt yapması engellenir ve oyuncuya "Yeni sürüm gerekli" ekranı çıkar. Buraya APK numarasını değil, oyunun giriş ekranının altında yazan <b>uyumluluk</b> sayısını yaz (şu anki oyun: <b>${Net.CLIENT_VER}</b>). Şu anki en düşük: <b id="minv">…</b></div>
+        <div class="g2" style="grid-template-columns:1fr auto"><input id="minIn" type="number" inputmode="numeric" placeholder="uyumluluk no (örn. 25)"><button class="btn sec" id="minSet">Kaydet</button></div></section>
       <section class="card"><h2>Son hareket eden dünyalar</h2>${worldRows(ws.slice(0, 6))}</section>`;
     c.onclick = worldClick;
     Net.minClient().then(v => { if ($('minv')) $('minv').textContent = v; }).catch(() => { if ($('minv')) $('minv').textContent = 'kurulu değil'; });
-    $('minSet').onclick = async () => { const v = Math.floor(+$('minIn').value); if (!(v >= 0)) return; if (!(await ask('En düşük oyun sürümü ' + v + ' yapılsın mı? Daha eski uygulamalar dünyalara kayıt yapamaz.'))) return; run(() => Net.admin.setMinClient(v), 'Zorunlu sürüm ' + v, draw); };
+    $('minSet').onclick = async () => { const v = Math.floor(+$('minIn').value); if (!(v >= 0)) return; if (v > Net.CLIENT_VER && !(await ask('DİKKAT: ' + v + ', şu anki oyunun uyumluluk numarasından (' + Net.CLIENT_VER + ') büyük. Bunu yaparsan HERKES oyundan kilitlenir. Yine de yapılsın mı?'))) return; if (!(await ask('En düşük oyun sürümü ' + v + ' yapılsın mı? Daha eski uygulamalar dünyalara kayıt yapamaz.'))) return; run(() => Net.admin.setMinClient(v), 'Zorunlu sürüm ' + v, draw); };
   } catch (e) { fail(c, e); }
 }
 const worldRows = ws => ws.length ? ws.map(w => `<button class="row" data-w="${w.id}"><span><b>${esc(w.name)}</b> <span class="tag code">${esc(w.code)}</span><div class="muted small num">${w.players} oyuncu · ${w.speed}× · ${clock(Date.parse(w.updated_at))}</div></span><span class="chev">›</span></button>`).join('') : '<div class="empty">Henüz dünya yok.</div>';

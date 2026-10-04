@@ -2458,7 +2458,7 @@ function showStart(err, step) {
       ${hasSp ? '<div class="muted small" style="text-align:center">Yeni oyun kurarsan kayıtlı tek kişilik oyunun silinir.</div>' : ''}
       <button class="bigbtn" id="stGo">${hasSp ? 'Yeni oyun kur' : 'Beyliği kur'}</button></section>`;
   }
-  el.innerHTML = `<div class="box">${body}<div class="muted small" style="text-align:center;opacity:.7">Sürüm ${Net.CLIENT_VER}</div></div>`;
+  el.innerHTML = `<div class="box">${body}<div class="muted small" style="text-align:center;opacity:.7">${window.UB_BUILD === 'web' ? 'Web sürümü · ' : window.UB_BUILD ? 'Sürüm ' + window.UB_BUILD + ' · ' : ''}uyumluluk ${Net.CLIENT_VER}</div></div>`;
   $('app').appendChild(el);
   if (use3D()) { const bg = document.createElement('canvas'); bg.className = 'startbg'; el.prepend(bg); el.classList.add('has3d'); try { V3.showcase(bg); } catch (e) { bg.remove(); el.classList.remove('has3d'); } }
   const goStep = st => showStart(null, st);

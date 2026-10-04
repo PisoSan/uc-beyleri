@@ -20,6 +20,8 @@ jobs:
 
       - name: Oyun dosyasını birleştir
         run: node tools/build.js
+        env:
+          UB_BUILD: ${{ github.run_number }}
 
       - uses: actions/setup-java@v4
         with:
