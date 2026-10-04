@@ -1342,7 +1342,7 @@ function mapWorld() {
     const x = gp.getX(i) + N / 2, z = gp.getZ(i) + N / 2, n = fbm(x / 6 + 20, z / 6, 17), dry = fbm(x / 3.5, z / 3.5 + 40, 18), lush = fbm(x / 9 + 7, z / 9 - 3, 19);
     const out = Math.max(0, Math.max(-x, x - N, -z, z - N)), k = (.84 + n * .3) * (out > 0 ? Math.max(.62, 1 - out * .03) : 1);
     // çayır → koyu orman tabanı → kuru ot; köylerin çevresi toprak
-    let c = mixc([1, 1, 1], [.62, .8, .6], (lush - .5) * 3.5);
+    let c = mixc([.96, .9, .8], [.6, .76, .58], (lush - .5) * 3.5);
     c = mixc(c, [1.16, 1.04, .7], (dry - .6) * 5);
     let dv = 9; for (const [vx, vz] of VC) { const d = Math.hypot(vx - x, vz - z); if (d < dv) dv = d; }
     c = mixc(c, [1.22, 1.0, .72], (.95 - dv) * 2.2);
@@ -1356,6 +1356,7 @@ function mapWorld() {
   const bp = [0, .03, 0, N, .03, 0, N, .03, 0, N, .03, N, N, .03, N, 0, .03, N, 0, .03, N, 0, .03, 0];
   W.add(new T.LineSegments(new T.BufferGeometry().setAttribute('position', new T.Float32BufferAttribute(bp, 3)), new T.LineBasicMaterial({ color: '#dcaa45', transparent: true, opacity: .55 })));
   // toprak yollar: her köy en yakın iki komşusuna bağlanır (tek çizimde birleşir)
+  const RP = [];
   { const roads = new T.Group(), seen = new Set(), rm = colMat('#a08757', { roughness: 1 }), rm2 = colMat('#8a7148', { roughness: 1 });
     for (const a of S.vil) {
       const near = S.vil.filter(b => b !== a).map(b => [b, Math.hypot(b.x - a.x, b.y - a.y)]).filter(([, d]) => d <= 6.5).sort((p, q) => p[1] - q[1]).slice(0, 2);
@@ -1365,29 +1366,55 @@ function mapWorld() {
         const nx = -(bz - az) / L, nz = (bx - ax) / L, pts = [];
         for (let i = 0; i <= 16; i++) { const t = i / 16, w = Math.sin(t * Math.PI) * bend; pts.push([ax + (bx - ax) * t + nx * w, az + (bz - az) * t + nz * w]); }
         const cut = pts.filter(([x, z]) => Math.hypot(x - ax, z - az) > .38 && Math.hypot(x - bx, z - bz) > .38);
-        if (cut.length > 2) { roads.add(ribbon(cut, .2, rm2, .011)); roads.add(ribbon(cut, .13, rm, .014)); }
+        if (cut.length > 2) { for (const q of cut) RP.push(q); roads.add(ribbon(cut, .2, rm2, .011)); roads.add(ribbon(cut, .13, rm, .014)); }
       }
     }
     mergeGroup(roads, null); roads.traverse(o => { o.castShadow = false; }); W.add(roads); }
   // süs: ormanlar, tepeler, kayalar (2B haritadaki dağılımla aynı)
-  const occ = new Set(S.vil.map(v => v.x + ',' + v.y)), forest = [], servi = [], hills = [], rocks = [];
+  const occ = new Set(S.vil.map(v => v.x + ',' + v.y)), forest = [], servi = [], hills = [], rocks = [], fields = [], lakes = [];
   const hsh = (x, y) => { let h = x * 374761393 + y * 668265263 + S.seed; h = (h ^ (h >>> 13)) * 1274126177; return ((h ^ (h >>> 16)) >>> 0); };
+  const nearV = (x, y) => { for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) if (occ.has((x + i) + ',' + (y + j))) return true; return false; };
   for (let y = -6; y < N + 6; y++) for (let x = -6; x < N + 6; x++) {
     if (occ.has(x + ',' + y)) continue;
-    const h = hsh(x, y), d = h % 23, inside = x >= 0 && y >= 0 && x < N && y < N;
+    const h = hsh(x, y), d = h % 23, inside = x >= 0 && y >= 0 && x < N && y < N, nv = inside && nearV(x, y);
+    // köylerin hemen yanında ekili tarlalar
+    if (nv && d >= 10 && d < 17) { const n = 1 + (h >> 5) % 2; for (let i = 0; i < n; i++) fields.push([x + .3 + i * .42 * ((h >> 8) % 2 ? 1 : 0), y + .32 + i * .38 * ((h >> 8) % 2 ? 0 : 1), ((h >> (i * 3 + 9)) % 4) * Math.PI / 2 + ((h >> 3) % 7 - 3) * .06, (h >> (i * 2 + 11)) % 4]); continue; }
     if (d < 3 || (!inside && d < 6)) for (let i = 0; i < QC().forest; i++) { const tx = x + .2 + ((h >> (i * 3)) % 7) / 10, tz = y + .2 + ((h >> (i * 4 + 1)) % 7) / 10, s = .55 + ((h >> (i * 2 + 5)) % 5) / 10; ((h >> i) % 4 === 0 ? servi : forest).push([tx, tz, s, ((h >> (i + 7)) % 100) / 100]); }
-    else if (d === 5 || d === 6) hills.push([x + .5, y + .5, .7 + (h % 5) / 10, (h % 100) / 100]);
+    else if ((d === 5 || d === 6) && !nv) hills.push([x + .5, y + .5, .7 + (h % 5) / 10, (h % 100) / 100]);
     else if (d === 9) rocks.push([x + .6, y + .55, .8 + (h % 3) / 5, (h % 100) / 100]);
+    else if (d >= 18 && d <= 20) { const s = .5 + ((h >> 4) % 4) / 10; (d === 20 && (h >> 7) % 2 ? servi : forest).push([x + .25 + ((h >> 9) % 5) / 10, y + .25 + ((h >> 12) % 5) / 10, s, ((h >> 15) % 100) / 100]); }
+    else if (d === 12 && !nv && (h >> 6) % 3 === 0) lakes.push([x + .5, y + .5, .55 + ((h >> 9) % 4) / 10, (h % 100) / 100]);
   }
-  const mk = (geo, mat, list, f, cast = true, leaf = false) => { const im = new T.InstancedMesh(geo, mat, Math.max(1, list.length)), m4 = new T.Matrix4(), c = new T.Color(); im.count = list.length; list.forEach((t, i) => { f(m4, t); im.setMatrixAt(i, m4); if (leaf) { c.setHSL(.27 + (t[3] - .5) * .08, .5 + t[3] * .15, .3 + (t[3] - .5) * .12); im.setColorAt(i, c); } }); im.castShadow = cast; im.receiveShadow = true; W.add(im); };
+  const mk = (geo, mat, list, f, cast = true, leaf = false) => { const im = new T.InstancedMesh(geo, mat, Math.max(1, list.length)), m4 = new T.Matrix4(), c = new T.Color(); im.count = list.length; list.forEach((t, i) => { f(m4, t); im.setMatrixAt(i, m4); if (leaf) { c.setHSL(.27 + (t[3] - .5) * .06, .5 + t[3] * .1, .27 + (t[3] - .5) * .08); im.setColorAt(i, c); } }); im.castShadow = cast; im.receiveShadow = true; W.add(im); };
   const blob = (() => { const parts = []; for (const [x, y, z, r] of [[0, .3, 0, .17], [.1, .27, .05, .13], [-.09, .29, -.04, .13], [.02, .4, -.02, .12]]) { const s2 = new T.IcosahedronGeometry(r, 0); s2.translate(x, y, z); parts.push(s2.index ? s2.toNonIndexed() : s2); } return mergeGeos(parts); })();
   mk(new T.CylinderGeometry(.022, .03, .22, 5).translate(0, .11, 0), colMat('#4a3524'), forest, (m4, t) => m4.compose(new T.Vector3(t[0], 0, t[1]), new T.Quaternion(), new T.Vector3(t[2], t[2], t[2])));
   mk(blob, new T.MeshStandardMaterial({ color: '#ffffff', roughness: .95, flatShading: true }), forest, (m4, t) => m4.compose(new T.Vector3(t[0], 0, t[1]), new T.Quaternion().setFromAxisAngle(new T.Vector3(0, 1, 0), t[3] * 6), new T.Vector3(t[2], t[2], t[2])), true, true);
   const lat = (() => { const pts = []; for (let i = 0; i <= 8; i++) { const f = i / 8; pts.push(new T.Vector2(Math.sin(Math.PI * Math.pow(f, .8)) * .08 * (1 - f * .35), .05 + f * .7)); } return new T.LatheGeometry(pts, 8); })();
   mk(lat, new T.MeshStandardMaterial({ color: '#b8c8a8', roughness: .95, flatShading: true }), servi, (m4, t) => m4.compose(new T.Vector3(t[0], 0, t[1]), new T.Quaternion(), new T.Vector3(t[2], t[2], t[2])), true, true);
   const hg = new T.DodecahedronGeometry(.5, 1); { const p = hg.attributes.position; for (let i = 0; i < p.count; i++) { const y = p.getY(i); p.setY(i, Math.max(0, y)); } hg.computeVertexNormals(); }
-  { const p = hg.attributes.position, hc = []; for (let i = 0; i < p.count; i++) { const y = p.getY(i); const g = y > .47 ? [.1, .095, .07] : [.05 + y * .03, .1 + y * .06, .022]; /* doğrusal renk: koyu çimen, tepede taş */ hc.push(...g); } hg.setAttribute('color', new T.Float32BufferAttribute(hc, 3)); }
-  mk(hg, new T.MeshStandardMaterial({ vertexColors: true, roughness: 1, flatShading: true }), hills, (m4, t) => m4.compose(new T.Vector3(t[0], -.02, t[1]), new T.Quaternion().setFromAxisAngle(new T.Vector3(0, 1, 0), t[3] * 6), new T.Vector3(t[2] * 1.1, t[2] * .32, t[2] * 1)));
+  { const p = hg.attributes.position, hc = [];
+    for (let i = 0; i < p.count; i++) { const y = p.getY(i), w = hash2(Math.round(p.getX(i) * 50), Math.round(p.getZ(i) * 50), 3);
+      // doğrusal renk: eteklerde çimen, yamaçta kuru ot, tepede kaya
+      const g = y > .44 ? [.16 + w * .04, .145 + w * .03, .1] : y > .27 ? [.1 + w * .03, .12 + w * .03, .035] : [.055 + w * .02, .11 + w * .03, .025];
+      hc.push(...g); }
+    hg.setAttribute('color', new T.Float32BufferAttribute(hc, 3)); }
+  mk(hg, new T.MeshStandardMaterial({ vertexColors: true, roughness: 1, flatShading: true }), hills, (m4, t) => m4.compose(new T.Vector3(t[0], -.02, t[1]), new T.Quaternion().setFromAxisAngle(new T.Vector3(0, 1, 0), t[3] * 6), new T.Vector3(t[2] * 1.2, t[2] * .46, t[2] * 1.05)));
+  // tarlalar: sıra sıra ekin (buğday, yeşil ekin, sürülmüş toprak, ayçiçeği)
+  if (fields.length) {
+    const ft = MP.fieldTex || (MP.fieldTex = (() => { const c = document.createElement('canvas'); c.width = 64; c.height = 64; const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, 64, 64); for (let i = 0; i < 64; i += 8) { g.fillStyle = 'rgba(0,0,0,.22)'; g.fillRect(0, i, 64, 3); g.fillStyle = 'rgba(255,255,255,.5)'; g.fillRect(0, i + 4, 64, 1); } g.strokeStyle = 'rgba(60,40,20,.45)'; g.lineWidth = 3; g.strokeRect(1, 1, 62, 62); const t = new T.CanvasTexture(c); t.colorSpace = T.SRGBColorSpace; t.anisotropy = 4; return t; })());
+    const fg = new T.PlaneGeometry(.4, .34).rotateX(-Math.PI / 2), im = new T.InstancedMesh(fg, new T.MeshStandardMaterial({ map: ft, roughness: 1 }), fields.length), m4 = new T.Matrix4(), c = new T.Color();
+    const FC = ['#d8b85a', '#8fae4a', '#9a7350', '#c9a23c'];
+    fields.forEach((f, i) => { m4.compose(new T.Vector3(f[0], .007, f[1]), new T.Quaternion().setFromAxisAngle(new T.Vector3(0, 1, 0), f[2]), new T.Vector3(1, 1, 1)); im.setMatrixAt(i, m4); im.setColorAt(i, c.set(FC[f[3]])); });
+    im.receiveShadow = true; W.add(im);
+  }
+  // göller: kumlu kıyı ve parlak su
+  for (let i = lakes.length - 1; i >= 0; i--) { const l = lakes[i], R = l[2] * .8 + .25; if (RP.some(([x, z]) => Math.abs(x - l[0]) < R && Math.abs(z - l[1]) < R)) lakes.splice(i, 1); }
+  if (lakes.length) {
+    const lg = new T.CircleGeometry(.5, 22).rotateX(-Math.PI / 2); { const p = lg.attributes.position; for (let i = 1; i < p.count; i++) { const a = Math.atan2(p.getZ(i), p.getX(i)), r = 1 + Math.sin(a * 3) * .12 + Math.cos(a * 5) * .07; p.setX(i, p.getX(i) * r); p.setZ(i, p.getZ(i) * r); } }
+    const put = (mat, y, s) => { const im = new T.InstancedMesh(lg, mat, lakes.length), m4 = new T.Matrix4(); lakes.forEach((l, i) => { m4.compose(new T.Vector3(l[0], y, l[1]), new T.Quaternion().setFromAxisAngle(new T.Vector3(0, 1, 0), l[3] * 6), new T.Vector3(l[2] * s * 1.3, 1, l[2] * s)); im.setMatrixAt(i, m4); }); im.receiveShadow = true; W.add(im); };
+    put(colMat('#b9a576', { roughness: 1 }), .006, 1.18); put(colMat('#7d8e5a', { roughness: 1 }), .009, 1.06);
+    put(new T.MeshStandardMaterial({ color: '#2e7486', roughness: .12, metalness: .3, emissive: '#0c2a33', emissiveIntensity: .4 }), .013, 1);
+  }
   mk(new T.DodecahedronGeometry(.09, 0), colMat('#9a958a', { roughness: 1, flatShading: true }), rocks, (m4, t) => m4.compose(new T.Vector3(t[0], .03, t[1]), new T.Quaternion().setFromEuler(new T.Euler(t[3] * 3, t[3] * 5, 0)), new T.Vector3(t[2], t[2] * .7, t[2])));
   // dere
   const rv = []; for (let z = -10; z <= N + 10; z += .4) rv.push([3.2 + Math.sin(z * .35) * 1.4 + Math.sin(z * .11) * 2, z]);
@@ -1409,6 +1436,14 @@ function mapVillages() {
     cg.add(c);
   }
   for (const cg of chunks.values()) { mergeGroup(cg, null); g.add(cg); }
+  // gece: sahipli köylerin çevresinde ocak ve kandil ışığı halesi
+  { const lit = S.vil.filter(v => v.owner !== null);
+    if (lit.length) {
+      const gt = MP.glowTex || (MP.glowTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d'), gr = x.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,190,110,.42)'); gr.addColorStop(.4, 'rgba(255,150,60,.14)'); gr.addColorStop(1, 'rgba(255,120,40,0)'); x.fillStyle = gr; x.fillRect(0, 0, 64, 64); const t = new T.CanvasTexture(c); t.colorSpace = T.SRGBColorSpace; return t; })());
+      const im = new T.InstancedMesh(new T.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), new T.MeshBasicMaterial({ map: gt, transparent: true, depthWrite: false, blending: T.AdditiveBlending, toneMapped: false }), lit.length), m4 = new T.Matrix4();
+      lit.forEach((v, i) => { const s = 1.1 + MP.tiers[v.id] * .12; m4.compose(new T.Vector3(v.x + .5, .05, v.y + .5), new T.Quaternion(), new T.Vector3(s, 1, s)); im.setMatrixAt(i, m4); });
+      im.castShadow = im.receiveShadow = false; im.renderOrder = 2; im.visible = !!MP.night; MP.glow = im; g.add(im);
+    } else MP.glow = null; }
   // kendi köylerin altında altın halka
   const ringG = new T.RingGeometry(.44, .5, 40), mine = new T.MeshBasicMaterial({ color: '#dcaa45', transparent: true, opacity: .8, depthWrite: false });
   for (const v of S.vil.filter(v => v.owner === 'P')) { const r = new T.Mesh(ringG, mine); r.rotation.x = -Math.PI / 2; r.position.set(v.x + .5, .035, v.y + .5); g.add(r); }
@@ -1486,6 +1521,7 @@ function mapWire(cv) {
   cv.addEventListener('wheel', e => { e.preventDefault(); if (e.shiftKey) MP.view.yaw += e.deltaY * .003; else MP.view.dist *= Math.exp(e.deltaY * .0015); mapCam(); }, { passive: false });
 }
 function mapLight(night) {
+  if (MP.glow) MP.glow.visible = !!night;
   if (MP.night === night) return; MP.night = night; MP.dusk = -1;
   MP.scene.fog = new T.Fog(night ? '#142039' : '#a9c7d6', 24, 62);
   MP.sun.intensity = night ? .85 : 2.7; MP.sun.color.set(night ? '#9fb6ff' : '#fff1d8'); MP.hemi.intensity = night ? .5 : .5;
